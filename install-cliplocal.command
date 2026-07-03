@@ -213,6 +213,7 @@ class DropZone: NSImageView {
         let clean = Process()
         clean.launchPath = "/usr/bin/xattr"
         clean.arguments = ["-dr", "com.apple.quarantine", dest.path]
+        clean.standardError = FileHandle.nullDevice
         try? clean.run(); clean.waitUntilExit()
 
         NSSound(named: "Glass")?.play()
