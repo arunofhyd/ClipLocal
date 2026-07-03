@@ -51,7 +51,7 @@ enum PrivacyMode: String {
 }
 
 // MARK: - The app
-class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFieldDelegate {
+class AppDelegate: NSObject, NSApplicationDelegate {
     var statusItem: NSStatusItem!
     var timer: Timer?
     var lastChangeCount = NSPasteboard.general.changeCount
@@ -59,11 +59,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
     let key = KeyStore.loadOrCreateKey()
     let defaults = UserDefaults.standard
     var previewWindow: NSWindow?
-
-    var searchQuery = ""
-    var historyMenuItems: [NSMenuItem] = []
-    var noResultsItem: NSMenuItem?
-    var searchField: NSSearchField!
 
     var mode: PrivacyMode {
         get { PrivacyMode(rawValue: defaults.string(forKey: "mode") ?? "session") ?? .session }
@@ -364,7 +359,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
 
     func rebuildMenu() {
         let menu = NSMenu()
-        menu.delegate = self
         let header = NSMenuItem(title: "ClipLocal — History (\(history.count))", action: nil, keyEquivalent: "")
         header.image = icon("doc.on.clipboard")
         // Hover the header to choose how many items to keep.
@@ -382,21 +376,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
         }
         header.submenu = sizeSub
         menu.addItem(header)
-
-        let searchContainer = NSView(frame: NSRect(x: 0, y: 0, width: 300, height: 32))
-        searchField = NSSearchField(frame: NSRect(x: 16, y: 5, width: 268, height: 22))
-        searchField.delegate = self
-        searchField.stringValue = searchQuery
-        searchField.focusRingType = .none
-        searchContainer.addSubview(searchField)
-
-        let searchMenuItem = NSMenuItem()
-        searchMenuItem.view = searchContainer
-        menu.addItem(searchMenuItem)
-
         menu.addItem(.separator())
 
-        historyMenuItems.removeAll()
         if history.isEmpty {
             let empty = NSMenuItem(title: "— empty —", action: nil, keyEquivalent: "")
             empty.isEnabled = false
@@ -416,7 +397,25 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
                 mi.image = icon(item.pinned ? "pin.fill" : iconName(for: item.text))
                 mi.target = self; mi.tag = i
 
-                // Let applySearchFilter handle the shortcuts and attributed strings
+                // Because items have submenus, macOS hides the keyEquivalent.
+                // So we paint "⌘N" into the title, right-aligned before the arrow.
+                if i < 9 {
+                    let para = NSMutableParagraphStyle()
+                    para.tabStops = [NSTextTab(textAlignment: .right, location: 300)]
+                    para.lineBreakMode = .byTruncatingTail
+                    let title = NSMutableAttributedString(
+                        string: snippet,
+                        attributes: [.font: NSFont.menuFont(ofSize: 0)])
+                    title.append(NSAttributedString(
+                        string: "\t⌘\(i + 1)",
+                        attributes: [
+                            .font: NSFont.menuFont(ofSize: 0),
+                            .foregroundColor: NSColor.tertiaryLabelColor,
+                            .paragraphStyle: para
+                        ]))
+                    mi.attributedTitle = title
+                }
+
                 let sub = NSMenu()
                 let copyA = NSMenuItem(title: "Copy", action: #selector(copyItem(_:)), keyEquivalent: "")
                 copyA.image = icon("doc.on.doc")
@@ -431,19 +430,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
                 sub.addItem(copyA); sub.addItem(pinA); sub.addItem(.separator()); sub.addItem(delA)
                 mi.submenu = sub
                 menu.addItem(mi)
-                historyMenuItems.append(mi)
             }
         }
-
-        let nrItem = NSMenuItem(title: "No results found", action: nil, keyEquivalent: "")
-        nrItem.isEnabled = false
-        nrItem.isHidden = true
-        self.noResultsItem = nrItem
-        menu.addItem(nrItem)
-
         menu.addItem(.separator())
-
-        applySearchFilter()
 
         let privacy = NSMenuItem(title: "Storage History", action: nil, keyEquivalent: "")
         privacy.image = icon("lock.shield")
@@ -498,69 +487,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
         menu.addItem(quit)
 
         statusItem.menu = menu
-    }
-
-    // MARK: - Search Filtering
-    func controlTextDidChange(_ obj: Notification) {
-        if let field = obj.object as? NSSearchField {
-            searchQuery = field.stringValue
-            applySearchFilter()
-        }
-    }
-
-    func applySearchFilter() {
-        var visibleCount = 0
-        let query = searchQuery.lowercased()
-
-        for mi in historyMenuItems {
-            guard mi.tag < history.count else { continue }
-            let itemText = history[mi.tag].text.lowercased()
-            let isMatch = query.isEmpty || itemText.contains(query)
-
-            mi.isHidden = !isMatch
-
-            if isMatch {
-                if visibleCount < 9 {
-                    mi.keyEquivalent = "\(visibleCount + 1)"
-                    let para = NSMutableParagraphStyle()
-                    para.tabStops = [NSTextTab(textAlignment: .right, location: 300)]
-                    para.lineBreakMode = .byTruncatingTail
-                    let title = NSMutableAttributedString(
-                        string: mi.title,
-                        attributes: [.font: NSFont.menuFont(ofSize: 0)])
-                    title.append(NSAttributedString(
-                        string: "\t⌘\(visibleCount + 1)",
-                        attributes: [
-                            .font: NSFont.menuFont(ofSize: 0),
-                            .foregroundColor: NSColor.tertiaryLabelColor,
-                            .paragraphStyle: para
-                        ]))
-                    mi.attributedTitle = title
-                } else {
-                    mi.keyEquivalent = ""
-                    mi.attributedTitle = nil
-                }
-                visibleCount += 1
-            } else {
-                mi.keyEquivalent = ""
-                mi.attributedTitle = nil
-            }
-        }
-
-        noResultsItem?.isHidden = visibleCount > 0 || history.isEmpty
-    }
-
-    func menuWillOpen(_ menu: NSMenu) {
-        // Dispatch async to ensure the menu window is fully realized before focusing
-        DispatchQueue.main.async {
-            self.searchField?.window?.makeFirstResponder(self.searchField)
-        }
-    }
-
-    func menuDidClose(_ menu: NSMenu) {
-        searchQuery = ""
-        searchField?.stringValue = ""
-        applySearchFilter()
     }
 
     // MARK: - Menu actions
