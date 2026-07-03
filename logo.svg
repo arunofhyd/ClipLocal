@@ -1,0 +1,18 @@
+<svg width="120" height="120" viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2A8CFF"/>
+      <stop offset="1" stop-color="#0066F2"/>
+    </linearGradient>
+  </defs>
+  <rect x="0" y="0" width="120" height="120" rx="27" ry="27" fill="url(#bg)"/>
+  <!-- Document with folded corner -->
+  <path d="M42 28 h24 l14 14 v34 a4 4 0 0 1 -4 4 H42 a4 4 0 0 1 -4 -4 V32 a4 4 0 0 1 4 -4 z"
+        fill="#ffffff"/>
+  <path d="M66 28 v14 h14 z" fill="#cfe3ff"/>
+  <!-- Lock body -->
+  <rect x="49" y="58" width="22" height="17" rx="3" fill="#0066F2"/>
+  <!-- Lock shackle -->
+  <path d="M53 58 v-4 a7 7 0 0 1 14 0 v4"
+        fill="none" stroke="#0066F2" stroke-width="4" stroke-linecap="round"/>
+</svg>
