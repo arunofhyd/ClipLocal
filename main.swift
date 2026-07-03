@@ -62,12 +62,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
 
     var searchQuery = ""
     var historyMenuItems: [NSMenuItem] = []
-    var noResultsItem: NSMenuItem = {
-        let mi = NSMenuItem(title: "No results found", action: nil, keyEquivalent: "")
-        mi.isEnabled = false
-        mi.isHidden = true
-        return mi
-    }()
+    var noResultsItem: NSMenuItem?
     var searchField: NSSearchField!
 
     var mode: PrivacyMode {
@@ -440,7 +435,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
             }
         }
 
-        menu.addItem(noResultsItem)
+        let nrItem = NSMenuItem(title: "No results found", action: nil, keyEquivalent: "")
+        nrItem.isEnabled = false
+        nrItem.isHidden = true
+        self.noResultsItem = nrItem
+        menu.addItem(nrItem)
+
         menu.addItem(.separator())
 
         applySearchFilter()
@@ -502,7 +502,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
 
     // MARK: - Search Filtering
     func controlTextDidChange(_ obj: Notification) {
-        if let field = obj.object as? NSSearchField, field == searchField {
+        if let field = obj.object as? NSSearchField {
             searchQuery = field.stringValue
             applySearchFilter()
         }
@@ -547,15 +547,20 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
             }
         }
 
-        noResultsItem.isHidden = visibleCount > 0 || history.isEmpty
+        noResultsItem?.isHidden = visibleCount > 0 || history.isEmpty
+    }
+
+    func menuWillOpen(_ menu: NSMenu) {
+        // Dispatch async to ensure the menu window is fully realized before focusing
+        DispatchQueue.main.async {
+            self.searchField?.window?.makeFirstResponder(self.searchField)
+        }
     }
 
     func menuDidClose(_ menu: NSMenu) {
-        if menu == statusItem.menu {
-            searchQuery = ""
-            searchField?.stringValue = ""
-            applySearchFilter()
-        }
+        searchQuery = ""
+        searchField?.stringValue = ""
+        applySearchFilter()
     }
 
     // MARK: - Menu actions
