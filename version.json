@@ -1,7 +1,16 @@
 {
-  "version": "1.1",
+  "version": "1.2",
   "downloadURL": "https://cliplocal.vercel.app/#install",
   "changelog": [
+    {
+      "version": "1.2",
+      "date": "July 2026",
+      "changes": [
+        "Reliable \u23181\u2013\u23189 shortcuts to copy history items from the menu",
+        "Refined menu icons and layout",
+        "Update downloads now open the ClipLocal website"
+      ]
+    },
     {
       "version": "1.1",
       "date": "July 2026",
