@@ -155,6 +155,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         🛡️  Copies from password managers are skipped by default, and you can clear everything instantly anytime.
 
         ⌘  Open the menu and press ⌘1–⌘9 to instantly copy any of your recent items.
+
+        🏷️  Each item shows a relevant icon — 🔗 links, ✉️ emails, #️⃣ numbers, 📄 notes — so your history is easy to scan.
         """
         let para = NSMutableParagraphStyle()
         para.lineSpacing = 3
@@ -359,7 +361,20 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let menu = NSMenu()
         let header = NSMenuItem(title: "ClipLocal — History (\(history.count))", action: nil, keyEquivalent: "")
         header.image = icon("doc.on.clipboard")
-        header.isEnabled = false
+        // Hover the header to choose how many items to keep.
+        let sizeSub = NSMenu()
+        let sizeTitle = NSMenuItem(title: "Keep up to…", action: nil, keyEquivalent: "")
+        sizeTitle.isEnabled = false
+        sizeSub.addItem(sizeTitle)
+        sizeSub.addItem(.separator())
+        for n in [10, 25, 50, 100, 200] {
+            let opt = NSMenuItem(title: "\(n) items", action: #selector(setHistorySize(_:)), keyEquivalent: "")
+            opt.target = self
+            opt.tag = n
+            opt.state = maxItems == n ? .on : .off
+            sizeSub.addItem(opt)
+        }
+        header.submenu = sizeSub
         menu.addItem(header)
         menu.addItem(.separator())
 
@@ -419,7 +434,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
         menu.addItem(.separator())
 
-        let privacy = NSMenuItem(title: "Privacy Mode", action: nil, keyEquivalent: "")
+        let privacy = NSMenuItem(title: "Storage History", action: nil, keyEquivalent: "")
         privacy.image = icon("lock.shield")
         let psub = NSMenu()
         let sessionItem = NSMenuItem(title: "Session-only (wiped on quit)",
@@ -427,7 +442,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         sessionItem.image = icon("lock")
         sessionItem.target = self
         sessionItem.state = mode == .session ? .on : .off
-        let persistItem = NSMenuItem(title: "Persistent (encrypted)",
+        let persistItem = NSMenuItem(title: "Persistent (keep history)",
                                      action: #selector(setPersistent), keyEquivalent: "")
         persistItem.image = icon("externaldrive.fill")
         persistItem.target = self
@@ -509,6 +524,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     @objc func setSession() { mode = .session; deleteStore() }
     @objc func setPersistent() { mode = .persistent; saveHistory() }
     @objc func toggleSkip() { skipConcealed.toggle() }
+
+    @objc func setHistorySize(_ sender: NSMenuItem) {
+        maxItems = sender.tag          // trims + rebuilds via the setter
+        trimHistory()
+        persistIfNeeded()
+        rebuildMenu()
+    }
 
     // MARK: - Launch at Login
     var launchAtLoginEnabled: Bool {
