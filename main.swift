@@ -98,7 +98,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         if onLaunch && defaults.bool(forKey: "hideAbout") { return }
 
         aboutWindow?.close()
-        let width: CGFloat = 460, height: CGFloat = 560
+        let width: CGFloat = 460, height: CGFloat = 700
         let win = NSWindow(contentRect: NSRect(x: 0, y: 0, width: width, height: height),
                            styleMask: [.titled, .closable, .fullSizeContentView],
                            backing: .buffered, defer: false)
@@ -116,7 +116,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         bg.wantsLayer = true
 
         // App glyph
-        let icon = NSImageView(frame: NSRect(x: (width - 72)/2, y: height - 128, width: 72, height: 72))
+        let icon = NSImageView(frame: NSRect(x: (width - 72)/2, y: height - 120, width: 72, height: 72))
         let cfg = NSImage.SymbolConfiguration(pointSize: 60, weight: .regular)
         icon.image = NSImage(systemSymbolName: "lock.doc.fill", accessibilityDescription: nil)?
             .withSymbolConfiguration(cfg)
@@ -124,31 +124,27 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         bg.addSubview(icon)
 
         let name = NSTextField(labelWithString: "ClipLocal")
-        name.frame = NSRect(x: 0, y: height - 172, width: width, height: 32)
+        name.frame = NSRect(x: 0, y: height - 164, width: width, height: 32)
         name.alignment = .center
         name.font = NSFont.systemFont(ofSize: 26, weight: .bold)
         bg.addSubview(name)
 
         let version = NSTextField(labelWithString: "Version \(appVersion)")
-        version.frame = NSRect(x: 0, y: height - 194, width: width, height: 16)
+        version.frame = NSRect(x: 0, y: height - 186, width: width, height: 16)
         version.alignment = .center
         version.font = NSFont.systemFont(ofSize: 11, weight: .medium)
         version.textColor = .tertiaryLabelColor
         bg.addSubview(version)
 
         let tagline = NSTextField(labelWithString: "Your clipboard. Yours alone.")
-        tagline.frame = NSRect(x: 0, y: height - 214, width: width, height: 18)
+        tagline.frame = NSRect(x: 0, y: height - 210, width: width, height: 18)
         tagline.alignment = .center
         tagline.font = NSFont.systemFont(ofSize: 13, weight: .medium)
         tagline.textColor = .secondaryLabelColor
         bg.addSubview(tagline)
 
-        // Privacy body
-        let privacy = NSTextView(frame: NSRect(x: 40, y: 118, width: width - 80, height: 210))
-        privacy.isEditable = false
-        privacy.isSelectable = false
-        privacy.drawsBackground = false
-        privacy.textContainerInset = NSSize(width: 0, height: 0)
+        // Privacy body — a wrapping label that MEASURES its own height,
+        // so nothing above or below can ever overlap it.
         let bodyText = """
         🔒  100% on-device. Your clipboard data NEVER leaves your Mac — no cloud, no servers, no accounts, no analytics, no third parties. Ever.
 
@@ -162,17 +158,29 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         """
         let para = NSMutableParagraphStyle()
         para.lineSpacing = 3
-        let attr = NSMutableAttributedString(string: bodyText, attributes: [
+        let attr = NSAttributedString(string: bodyText, attributes: [
             .font: NSFont.systemFont(ofSize: 12.5),
             .foregroundColor: NSColor.labelColor,
             .paragraphStyle: para
         ])
-        privacy.textStorage?.setAttributedString(attr)
+        let bodyWidth = width - 80
+        // Measure the REAL wrapped height reliably (sizeToFit under-measures).
+        let measured = attr.boundingRect(
+            with: NSSize(width: bodyWidth, height: .greatestFiniteMagnitude),
+            options: [.usesLineFragmentOrigin, .usesFontLeading])
+        let textHeight = ceil(measured.height) + 8
+        let privacy = NSTextField(labelWithAttributedString: attr)
+        privacy.lineBreakMode = .byWordWrapping
+        privacy.maximumNumberOfLines = 0
+        privacy.preferredMaxLayoutWidth = bodyWidth
+        // Top of the text sits 24px below the tagline.
+        let textTop = (height - 210) - 24
+        privacy.frame = NSRect(x: 40, y: textTop - textHeight, width: bodyWidth, height: textHeight)
         bg.addSubview(privacy)
 
-        // Credit
+        // Credit — placed 28px below the measured text, so it can never collide.
         let credit = NSTextField(labelWithString: "Built by Arun Thomas")
-        credit.frame = NSRect(x: 0, y: 104, width: width, height: 18)
+        credit.frame = NSRect(x: 0, y: (textTop - textHeight) - 34, width: width, height: 18)
         credit.alignment = .center
         credit.font = NSFont.systemFont(ofSize: 12, weight: .semibold)
         credit.textColor = .secondaryLabelColor
@@ -184,17 +192,17 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         dontShow.font = NSFont.systemFont(ofSize: 11)
         dontShow.sizeToFit()
         let dsW = dontShow.frame.width
-        dontShow.frame = NSRect(x: (width - dsW)/2, y: 72, width: dsW, height: 20)
+        dontShow.frame = NSRect(x: (width - dsW)/2, y: 74, width: dsW, height: 20)
         dontShow.state = defaults.bool(forKey: "hideAbout") ? .on : .off
         bg.addSubview(dontShow)
 
         let contact = NSButton(title: "Contact", target: self, action: #selector(contactDeveloper))
-        contact.frame = NSRect(x: 40, y: 24, width: 100, height: 32)
+        contact.frame = NSRect(x: 40, y: 26, width: 100, height: 32)
         contact.bezelStyle = .rounded
         bg.addSubview(contact)
 
         let close = NSButton(title: "Get Started", target: self, action: #selector(closeAbout))
-        close.frame = NSRect(x: width - 160, y: 24, width: 120, height: 32)
+        close.frame = NSRect(x: width - 160, y: 26, width: 120, height: 32)
         close.bezelStyle = .rounded
         close.keyEquivalent = "\r"
         close.bezelColor = NSColor.controlAccentColor
@@ -344,7 +352,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         if t.contains("\n") || t.count > 60 {
             return "doc.plaintext"
         }
-        return "textformat"
+        return "text.alignleft"
     }
 
     func rebuildMenu() {
@@ -361,7 +369,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             menu.addItem(empty)
         } else {
             for (i, item) in history.enumerated() {
-                let snippet = String(item.text.prefix(50)).replacingOccurrences(of: "\n", with: " ")
+                // Keep snippets short so the row never wraps to a second line.
+                let oneLine = item.text
+                    .replacingOccurrences(of: "\n", with: " ")
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                let snippet = oneLine.count > 34 ? String(oneLine.prefix(34)) + "…" : oneLine
                 // First 9 items get a ⌘1–⌘9 shortcut: press to copy.
                 let shortcut = i < 9 ? "\(i + 1)" : ""
                 let mi = NSMenuItem(title: snippet,
@@ -371,10 +383,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 mi.target = self; mi.tag = i
 
                 // Because items have submenus, macOS hides the keyEquivalent.
-                // So we paint "⌘1" into the title, right-aligned before the arrow.
+                // So we paint "⌘N" into the title, right-aligned before the arrow.
                 if i < 9 {
                     let para = NSMutableParagraphStyle()
-                    para.tabStops = [NSTextTab(textAlignment: .right, location: 260)]
+                    para.tabStops = [NSTextTab(textAlignment: .right, location: 300)]
+                    para.lineBreakMode = .byTruncatingTail
                     let title = NSMutableAttributedString(
                         string: snippet,
                         attributes: [.font: NSFont.menuFont(ofSize: 0)])

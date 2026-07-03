@@ -39,6 +39,8 @@ Built specifically for people who handle **sensitive text** and don't want their
 *   **Skips Secrets**: 🛡️ Copies from password managers (marked "concealed") are ignored by default, so passwords never land in your history.
 *   **Copy Preview**: 🔔 A subtle "✓ Copied" panel slides into the bottom-right and fades away.
 *   **Full Control**: 📌 Pin, delete, and re-copy any item straight from the menu bar.
+*   **Quick Shortcuts**: ⌨️ Open the menu and press **⌘1–⌘9** to instantly copy any of your recent items.
+*   **Smart Icons**: 🏷️ Each item shows a relevant icon — links, emails, numbers, notes — so your history is easy to scan.
 *   **Panic Wipe**: 🧹 One-click "Clear History Now" clears everything instantly.
 *   **Launch at Login**: 🚀 Optional — start ClipLocal automatically when you log in.
 *   **Menu-Bar Native**: Runs quietly with no Dock icon. Built with Swift for zero dependencies.
