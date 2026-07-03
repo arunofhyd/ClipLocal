@@ -1,7 +1,18 @@
 {
-  "version": "1.0",
+  "version": "1.1",
   "downloadURL": "https://github.com/arunofhyd/ClipLocal",
   "changelog": [
+    {
+      "version": "1.1",
+      "date": "July 2026",
+      "changes": [
+        "Number shortcuts (1\u20139) to quickly copy history items",
+        "Relevant icons for each item and menu action",
+        "\u2318\u232B shortcut to clear history",
+        "\u201cDon\u2019t show again\u201d option for the welcome screen",
+        "Cleaner menu layout"
+      ]
+    },
     {
       "version": "1.0",
       "date": "July 2026",

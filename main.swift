@@ -6,7 +6,7 @@ import ServiceManagement
 //  ClipLocal — 100% on-device clipboard history, no third parties
 // ============================================================
 
-let appVersion = "1.0"
+let appVersion = "1.1"
 // The update check reads this small file from your GitHub. It's the ONLY
 // network request the app ever makes. Nothing else leaves the Mac.
 let updateCheckURL = "https://raw.githubusercontent.com/arunofhyd/ClipLocal/main/version.json"
@@ -320,9 +320,35 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     // MARK: - The menu
+    func icon(_ name: String) -> NSImage? {
+        let cfg = NSImage.SymbolConfiguration(pointSize: 13, weight: .regular)
+        return NSImage(systemSymbolName: name, accessibilityDescription: nil)?
+            .withSymbolConfiguration(cfg)
+    }
+
+    // Pick a relevant SF Symbol based on what the copied text looks like.
+    func iconName(for text: String) -> String {
+        let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let lower = t.lowercased()
+        if lower.hasPrefix("http://") || lower.hasPrefix("https://") || lower.hasPrefix("www.") {
+            return "link"
+        }
+        if t.contains("@"), t.contains("."), !t.contains(" "), t.count < 60 {
+            return "envelope"
+        }
+        if t.range(of: "^[0-9 +().-]{5,}$", options: .regularExpression) != nil {
+            return "number"
+        }
+        if t.contains("\n") || t.count > 60 {
+            return "doc.plaintext"
+        }
+        return "textformat"
+    }
+
     func rebuildMenu() {
         let menu = NSMenu()
         let header = NSMenuItem(title: "ClipLocal — History (\(history.count))", action: nil, keyEquivalent: "")
+        header.image = icon("doc.on.clipboard")
         header.isEnabled = false
         menu.addItem(header)
         menu.addItem(.separator())
@@ -334,17 +360,24 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         } else {
             for (i, item) in history.enumerated() {
                 let snippet = String(item.text.prefix(50)).replacingOccurrences(of: "\n", with: " ")
-                let mi = NSMenuItem(title: (item.pinned ? "📌 " : "") + snippet,
-                                    action: #selector(copyItem(_:)), keyEquivalent: "")
+                // First 9 items get a 1–9 shortcut: press the number to copy.
+                let shortcut = i < 9 ? "\(i + 1)" : ""
+                let mi = NSMenuItem(title: snippet,
+                                    action: #selector(copyItem(_:)), keyEquivalent: shortcut)
+                mi.image = icon(item.pinned ? "pin.fill" : iconName(for: item.text))
+                mi.keyEquivalentModifierMask = []   // just the number, no ⌘
                 mi.target = self; mi.tag = i
 
                 let sub = NSMenu()
                 let copyA = NSMenuItem(title: "Copy", action: #selector(copyItem(_:)), keyEquivalent: "")
+                copyA.image = icon("doc.on.doc")
                 copyA.target = self; copyA.tag = i
                 let pinA = NSMenuItem(title: item.pinned ? "Unpin" : "Pin",
                                       action: #selector(togglePin(_:)), keyEquivalent: "")
+                pinA.image = icon(item.pinned ? "pin.slash" : "pin")
                 pinA.target = self; pinA.tag = i
                 let delA = NSMenuItem(title: "Delete", action: #selector(deleteItem(_:)), keyEquivalent: "")
+                delA.image = icon("trash")
                 delA.target = self; delA.tag = i
                 sub.addItem(copyA); sub.addItem(pinA); sub.addItem(.separator()); sub.addItem(delA)
                 mi.submenu = sub
@@ -354,13 +387,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(.separator())
 
         let privacy = NSMenuItem(title: "Privacy Mode", action: nil, keyEquivalent: "")
+        privacy.image = icon("lock.shield")
         let psub = NSMenu()
-        let sessionItem = NSMenuItem(title: "🔒 Session-only (wiped on quit)",
+        let sessionItem = NSMenuItem(title: "Session-only (wiped on quit)",
                                      action: #selector(setSession), keyEquivalent: "")
+        sessionItem.image = icon("lock")
         sessionItem.target = self
         sessionItem.state = mode == .session ? .on : .off
-        let persistItem = NSMenuItem(title: "💾 Persistent (encrypted)",
+        let persistItem = NSMenuItem(title: "Persistent (encrypted)",
                                      action: #selector(setPersistent), keyEquivalent: "")
+        persistItem.image = icon("externaldrive.fill")
         persistItem.target = self
         persistItem.state = mode == .persistent ? .on : .off
         psub.addItem(sessionItem); psub.addItem(persistItem)
@@ -369,29 +405,36 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         let skip = NSMenuItem(title: "Skip password-manager copies",
                               action: #selector(toggleSkip), keyEquivalent: "")
+        skip.image = icon("key.fill")
         skip.target = self
         skip.state = skipConcealed ? .on : .off
         menu.addItem(skip)
 
         let launch = NSMenuItem(title: "Launch at Login",
                                 action: #selector(toggleLaunchAtLogin), keyEquivalent: "")
+        launch.image = icon("power")
         launch.target = self
         launch.state = launchAtLoginEnabled ? .on : .off
         menu.addItem(launch)
 
         menu.addItem(.separator())
-        let clear = NSMenuItem(title: "🧹 Clear History Now", action: #selector(clearNow), keyEquivalent: "")
+        let clear = NSMenuItem(title: "Clear History Now", action: #selector(clearNow), keyEquivalent: "\u{8}")
+        clear.image = icon("trash.fill")
+        clear.keyEquivalentModifierMask = [.command]
         clear.target = self
         menu.addItem(clear)
 
         menu.addItem(.separator())
         let updates = NSMenuItem(title: "Check for Updates…", action: #selector(checkForUpdatesMenu), keyEquivalent: "")
+        updates.image = icon("arrow.triangle.2.circlepath")
         updates.target = self
         menu.addItem(updates)
         let about = NSMenuItem(title: "About ClipLocal", action: #selector(showAboutMenu), keyEquivalent: "")
+        about.image = icon("info.circle")
         about.target = self
         menu.addItem(about)
         let quit = NSMenuItem(title: "Quit", action: #selector(quitApp), keyEquivalent: "q")
+        quit.image = icon("xmark.circle")
         quit.target = self
         menu.addItem(quit)
 
