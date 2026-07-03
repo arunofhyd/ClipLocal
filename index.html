@@ -32,7 +32,7 @@
       "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
       "description": "A privacy-first clipboard history for macOS. 100% on-device.",
       "author": { "@type": "Person", "name": "Arun Thomas" },
-      "softwareVersion": "1.2"
+      "softwareVersion": "1.3"
     }
     </script>
 
@@ -99,7 +99,7 @@
             </div>
             <div class="hidden md:flex gap-8 text-sm font-medium text-gray-400">
                 <a href="#features" class="hover:text-brand-blue transition-colors">Features</a>
-                <a href="#launch" class="hover:text-brand-blue transition-colors">v1.2</a>
+                <a href="#launch" class="hover:text-brand-blue transition-colors">v1.3</a>
                 <a href="#how-it-works" class="hover:text-brand-blue transition-colors">How it Works</a>
                 <a href="#install" class="hover:text-brand-blue transition-colors">Install</a>
                 <a href="#changelog" class="hover:text-brand-blue transition-colors">Changelog</a>
@@ -200,6 +200,11 @@
                     <p class="text-gray-400">Pin, delete, and re-copy any item from the menu bar. One-click "Clear History Now" panic wipe.</p>
                 </div>
                 <div class="p-6 rounded-2xl bg-white/5 border border-white/10 hover:border-brand-blue/50 transition-colors">
+                    <div class="w-12 h-12 bg-brand-blue/10 rounded-lg flex items-center justify-center mb-4 text-2xl">📚</div>
+                    <h3 class="text-xl font-bold mb-2">Up to 200 History Items</h3>
+                    <p class="text-gray-400">Store up to 200 items in your clipboard history, ensuring you never lose track of what you copied recently.</p>
+                </div>
+                <div class="p-6 rounded-2xl bg-white/5 border border-white/10 hover:border-brand-blue/50 transition-colors">
                     <div class="w-12 h-12 bg-brand-blue/10 rounded-lg flex items-center justify-center mb-4 text-2xl">⌨️</div>
                     <h3 class="text-xl font-bold mb-2">Quick Shortcuts</h3>
                     <p class="text-gray-400">Open the menu and press <span class="font-mono text-white">⌘1</span>–<span class="font-mono text-white">⌘9</span> to instantly copy any of your recent items.</p>
@@ -252,7 +257,7 @@
     <section id="launch" class="py-20 px-6 border-y border-white/5 bg-gradient-to-b from-brand-blue/5 to-transparent">
         <div class="max-w-4xl mx-auto">
             <div class="text-center mb-12">
-                <span class="inline-block px-3 py-1 mb-4 rounded-full bg-brand-blue/10 border border-brand-blue/30 text-brand-blue text-xs font-mono">🎉 Now on v1.2</span>
+                <span class="inline-block px-3 py-1 mb-4 rounded-full bg-brand-blue/10 border border-brand-blue/30 text-brand-blue text-xs font-mono">🎉 Now on v1.3</span>
                 <h2 class="text-3xl font-bold mb-4">Say hello to ClipLocal</h2>
                 <p class="text-gray-400 max-w-2xl mx-auto leading-relaxed">
                     Most clipboard managers quietly log everything you copy — and many sync it to the cloud. That's fine, until you're copying passwords, tokens, private notes, or client data. ClipLocal was built on a single principle: <span class="text-white font-semibold">your clipboard is yours, and it should never leave your Mac.</span>
@@ -363,7 +368,14 @@
         document.addEventListener('DOMContentLoaded', function() {
             const el = document.getElementById('typing-text');
             if (!el) return;
-            const phrases = ["Yours alone.", "Never in the cloud.", "On your Mac only."];
+            const phrases = [
+                "Yours alone.",
+                "Never in the cloud.",
+                "On your Mac only.",
+                "Skips password managers.",
+                "Store up to 200 items.",
+                "Session-only or Persistent."
+            ];
             let pi = 0, ci = 0, deleting = false, speed = 100;
             function type() {
                 const cur = phrases[pi];

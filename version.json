@@ -1,7 +1,16 @@
 {
-  "version": "1.2",
+  "version": "1.3",
   "downloadURL": "https://cliplocal.vercel.app/#install",
   "changelog": [
+    {
+      "version": "1.3",
+      "date": "July 2026",
+      "changes": [
+        "Store up to 200 items in history so you never lose recently copied data",
+        "Improved persistent and session-only storage handling for history changes",
+        "Refined history viewing and selection mechanics"
+      ]
+    },
     {
       "version": "1.2",
       "date": "July 2026",
