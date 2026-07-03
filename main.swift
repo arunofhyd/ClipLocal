@@ -10,7 +10,7 @@ let appVersion = "1.1"
 // The update check reads this small file from your GitHub. It's the ONLY
 // network request the app ever makes. Nothing else leaves the Mac.
 let updateCheckURL = "https://raw.githubusercontent.com/arunofhyd/ClipLocal/main/version.json"
-let downloadPageURL = "https://arunofhyd.github.io/ClipLocal/#install"
+let downloadPageURL = "https://cliplocal.vercel.app/#install"
 
 // MARK: - Encryption key (stored in a protected local file, NOT the Keychain,
 //         so macOS never shows a scary Keychain-access prompt).
