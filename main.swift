@@ -176,8 +176,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         credit.textColor = .secondaryLabelColor
         bg.addSubview(credit)
 
-        // "Don't show on launch" toggle — sized to content and centered.
-        let dontShow = NSButton(checkboxWithTitle: "Don't show this on launch",
+        // "Don't show again" toggle — sized to content and centered.
+        let dontShow = NSButton(checkboxWithTitle: "Don't show again",
                                 target: self, action: #selector(toggleHideAbout(_:)))
         dontShow.font = NSFont.systemFont(ofSize: 11)
         dontShow.sizeToFit()
