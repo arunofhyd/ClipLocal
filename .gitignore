@@ -1,0 +1,8 @@
+# macOS clutter
+.DS_Store
+
+# The built app (the installer rebuilds this on each user's Mac)
+ClipLocal.app/
+
+# Local-only testing build script (not used by the installer)
+build.sh
