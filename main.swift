@@ -144,7 +144,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         bg.addSubview(tagline)
 
         // Privacy body
-        let privacy = NSTextView(frame: NSRect(x: 40, y: 125, width: width - 80, height: 200))
+        let privacy = NSTextView(frame: NSRect(x: 40, y: 118, width: width - 80, height: 210))
         privacy.isEditable = false
         privacy.isSelectable = false
         privacy.drawsBackground = false
@@ -157,6 +157,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         🔑  Session-only mode keeps everything in memory and wipes it the moment you quit.
 
         🛡️  Copies from password managers are skipped by default, and you can clear everything instantly anytime.
+
+        ⌘  Open the menu and press ⌘1–⌘9 to instantly copy any of your recent items.
         """
         let para = NSMutableParagraphStyle()
         para.lineSpacing = 3
@@ -367,6 +369,24 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 mi.keyEquivalentModifierMask = [.command]
                 mi.image = icon(item.pinned ? "pin.fill" : iconName(for: item.text))
                 mi.target = self; mi.tag = i
+
+                // Because items have submenus, macOS hides the keyEquivalent.
+                // So we paint "⌘1" into the title, right-aligned before the arrow.
+                if i < 9 {
+                    let para = NSMutableParagraphStyle()
+                    para.tabStops = [NSTextTab(textAlignment: .right, location: 260)]
+                    let title = NSMutableAttributedString(
+                        string: snippet,
+                        attributes: [.font: NSFont.menuFont(ofSize: 0)])
+                    title.append(NSAttributedString(
+                        string: "\t⌘\(i + 1)",
+                        attributes: [
+                            .font: NSFont.menuFont(ofSize: 0),
+                            .foregroundColor: NSColor.tertiaryLabelColor,
+                            .paragraphStyle: para
+                        ]))
+                    mi.attributedTitle = title
+                }
 
                 let sub = NSMenu()
                 let copyA = NSMenuItem(title: "Copy", action: #selector(copyItem(_:)), keyEquivalent: "")
