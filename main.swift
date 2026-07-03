@@ -360,12 +360,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         } else {
             for (i, item) in history.enumerated() {
                 let snippet = String(item.text.prefix(50)).replacingOccurrences(of: "\n", with: " ")
-                // First 9 items get a 1–9 shortcut: press the number to copy.
+                // First 9 items get a ⌘1–⌘9 shortcut: press to copy.
                 let shortcut = i < 9 ? "\(i + 1)" : ""
                 let mi = NSMenuItem(title: snippet,
                                     action: #selector(copyItem(_:)), keyEquivalent: shortcut)
+                mi.keyEquivalentModifierMask = [.command]
                 mi.image = icon(item.pinned ? "pin.fill" : iconName(for: item.text))
-                mi.keyEquivalentModifierMask = []   // just the number, no ⌘
                 mi.target = self; mi.tag = i
 
                 let sub = NSMenu()
