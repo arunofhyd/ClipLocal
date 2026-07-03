@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <!-- SEO Meta Tags -->
+    <title>ClipLocal | Private Clipboard History for macOS</title>
+    <meta name="description" content="ClipLocal is a free, privacy-first clipboard history for macOS. 100% on-device — nothing ever leaves your Mac. No cloud, no accounts, no tracking.">
+    <meta name="keywords" content="clipboard manager mac, clipboard history macOS, private clipboard, secure clipboard, on-device clipboard, free mac utility, menu bar app">
+    <meta name="author" content="Arun Thomas">
+    <meta name="robots" content="index, follow">
+
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="ClipLocal | Private Clipboard History for macOS">
+    <meta property="og:description" content="A privacy-first clipboard history for macOS. 100% on-device — your data never leaves your Mac.">
+
+    <!-- Twitter -->
+    <meta property="twitter:card" content="summary_large_image">
+    <meta property="twitter:title" content="ClipLocal | Private Clipboard History for macOS">
+    <meta property="twitter:description" content="A privacy-first clipboard history for macOS. 100% on-device.">
+
+    <!-- JSON-LD Structured Data -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      "name": "ClipLocal",
+      "operatingSystem": "macOS",
+      "applicationCategory": "UtilitiesApplication",
+      "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+      "description": "A privacy-first clipboard history for macOS. 100% on-device.",
+      "author": { "@type": "Person", "name": "Arun Thomas" },
+      "softwareVersion": "1.0"
+    }
+    </script>
+
+    <link rel="icon" href="logo.svg" type="image/svg+xml">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        if (history.scrollRestoration) { history.scrollRestoration = 'manual'; }
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            blue: '#0A84FF',
+                            deep: '#0066F2',
+                            ink: '#0b0d10',
+                            panel: '#15181d'
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'system-ui', 'sans-serif'],
+                        mono: ['Fira Code', 'monospace']
+                    }
+                }
+            }
+        }
+        function copyEmail(btn) {
+            navigator.clipboard.writeText('arunthomas04042001@gmail.com').then(() => {
+                const original = "Contact Developer";
+                btn.innerText = 'Email Copied!';
+                btn.classList.add('text-brand-blue');
+                setTimeout(() => { btn.innerText = original; btn.classList.remove('text-brand-blue'); }, 2000);
+            });
+        }
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;600&display=swap');
+        body { background-color: #0b0d10; color: #e6e8eb; }
+        .gradient-text {
+            background: linear-gradient(90deg, #2A8CFF, #7EB8FF);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+        }
+        .typing-cursor::after {
+            content: '|'; margin-left: 2px; animation: blink 1s step-end infinite;
+            color: #2A8CFF; -webkit-text-fill-color: #2A8CFF;
+        }
+        @keyframes blink { 0%,100%{opacity:1;} 50%{opacity:0;} }
+        .pill { animation: pulse-glow 3s infinite ease-in-out; }
+        @keyframes pulse-glow {
+            0%,100% { box-shadow: 0 0 5px rgba(10,132,255,0.2); border-color: rgba(10,132,255,0.3); }
+            50% { box-shadow: 0 0 20px rgba(10,132,255,0.55); border-color: rgba(10,132,255,0.8); }
+        }
+        .copied-toast { transition: opacity .3s, transform .3s; }
+    </style>
+</head>
+<body class="antialiased selection:bg-brand-blue selection:text-white">
+
+    <!-- Navbar -->
+    <nav class="fixed w-full z-50 bg-brand-ink/90 backdrop-blur-md border-b border-white/10">
+        <div class="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <img src="logo.svg" alt="ClipLocal Logo" width="28" height="28">
+                <span class="font-bold text-xl tracking-tight text-white">ClipLocal</span>
+            </div>
+            <div class="hidden md:flex gap-8 text-sm font-medium text-gray-400">
+                <a href="#features" class="hover:text-brand-blue transition-colors">Features</a>
+                <a href="#launch" class="hover:text-brand-blue transition-colors">v1.0</a>
+                <a href="#how-it-works" class="hover:text-brand-blue transition-colors">How it Works</a>
+                <a href="#install" class="hover:text-brand-blue transition-colors">Install</a>
+                <a href="#changelog" class="hover:text-brand-blue transition-colors">Changelog</a>
+            </div>
+            <a href="install-cliplocal.command" download
+               class="bg-brand-blue text-white px-4 py-1.5 rounded-md text-sm font-semibold hover:bg-brand-deep transition-all shadow-[0_0_10px_rgba(10,132,255,0.35)]">
+               Download
+            </a>
+        </div>
+    </nav>
+
+    <!-- Hero -->
+    <section class="pt-28 pb-16 px-6 max-w-7xl mx-auto text-center">
+        <div id="version-pill" class="pill inline-block px-3 py-1 mb-6 rounded-full bg-brand-blue/10 border border-brand-blue/30 text-brand-blue text-xs font-mono">
+            Latest Version
+        </div>
+
+        <h1 class="text-5xl md:text-7xl font-bold mb-6 tracking-tight">
+            Your clipboard.<br>
+            <span id="typing-text" class="gradient-text typing-cursor">Yours alone.</span>
+        </h1>
+        <p class="text-xl text-gray-400 mb-4 max-w-2xl mx-auto leading-relaxed">
+            A private clipboard history for macOS. Every copy is saved locally, previewed instantly, and always under your control.
+        </p>
+        <p class="text-xl font-bold text-gray-300 mb-6 max-w-2xl mx-auto">
+            100% on-device. Nothing ever leaves your Mac.
+        </p>
+        <p class="text-sm font-semibold text-brand-blue mb-10 tracking-widest flex items-center justify-center gap-2">
+            MADE FOR
+            <svg class="w-4 h-4 fill-current" viewBox="0 0 24 24"><path d="M12.152 6.896c-.948 0-2.415-1.078-3.96-1.04-2.04.027-3.91 1.183-4.961 3.014-2.127 3.675-.552 9.127 1.519 12.09 1.013 1.454 2.208 3.09 3.792 3.039 1.52-.065 2.09-.987 3.935-.987 1.831 0 2.35.987 3.96.948 1.637-.026 2.676-1.48 3.676-2.948 1.156-1.688 1.636-3.325 1.662-3.415-.039-.013-3.182-1.221-3.22-4.857-.026-3.04 2.48-4.494 2.597-4.559-1.429-2.09-3.623-2.324-4.39-2.376-2-.156-3.675 1.09-4.61 1.09zM15.53 3.83c.843-1.012 1.4-2.427 1.245-3.83-1.207.052-2.662.805-3.532 1.818-.78.896-1.454 2.338-1.273 3.714 1.338.104 2.715-.688 3.559-1.701"/></svg>
+            macOS
+        </p>
+        <div class="flex flex-col sm:flex-row gap-4 justify-center items-center">
+            <a href="install-cliplocal.command" download class="bg-brand-blue text-white px-8 py-3 rounded-lg font-bold hover:bg-brand-deep transition-all shadow-[0_0_20px_rgba(10,132,255,0.4)]">
+                Download Installer
+            </a>
+            <a href="#how-it-works" class="text-gray-400 hover:text-white px-6 py-3 transition-colors flex items-center gap-2">
+                <span>See how it works</span>
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+            </a>
+        </div>
+
+        <!-- Live preview mockup -->
+        <div class="mt-16 relative group max-w-3xl mx-auto">
+            <div class="absolute -inset-1 bg-gradient-to-r from-brand-blue to-brand-deep rounded-xl blur opacity-25 group-hover:opacity-50 transition duration-1000"></div>
+            <div class="relative bg-brand-panel rounded-xl border border-white/10 p-6 shadow-2xl text-left">
+                <div class="flex items-center gap-1.5 mb-5">
+                    <div class="w-3 h-3 rounded-full bg-[#ff5f56]"></div>
+                    <div class="w-3 h-3 rounded-full bg-[#ffbd2e]"></div>
+                    <div class="w-3 h-3 rounded-full bg-[#27c93f]"></div>
+                    <span class="ml-3 text-xs text-gray-500 font-mono">ClipLocal — History</span>
+                </div>
+                <ul class="space-y-2 font-mono text-sm">
+                    <li class="flex items-center gap-2 px-3 py-2 rounded bg-white/5 border border-white/5"><span>📌</span><span class="text-gray-300">github.com/arunofhyd/ClipLocal</span></li>
+                    <li class="flex items-center gap-2 px-3 py-2 rounded bg-white/5 border border-white/5"><span class="text-gray-500">•</span><span class="text-gray-300">Meeting notes — Q3 roadmap…</span></li>
+                    <li class="flex items-center gap-2 px-3 py-2 rounded bg-white/5 border border-white/5"><span class="text-gray-500">•</span><span class="text-gray-300">npm run build</span></li>
+                    <li class="flex items-center gap-2 px-3 py-2 rounded bg-white/5 border border-white/5"><span class="text-gray-500">•</span><span class="text-gray-500 italic">🛡️ (password skipped — not stored)</span></li>
+                </ul>
+                <!-- copied toast -->
+                <div class="mt-5 flex justify-end">
+                    <div class="copied-toast inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-black/60 border border-white/10 text-sm">
+                        <span class="text-brand-blue font-bold">✓ Copied</span>
+                        <span class="text-gray-400">Meeting notes — Q3 roadmap…</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Features -->
+    <section id="features" class="py-20 bg-black/20">
+        <div class="max-w-6xl mx-auto px-6">
+            <h2 class="text-3xl font-bold mb-12 text-center">Why use ClipLocal?</h2>
+            <div class="grid md:grid-cols-3 gap-8">
+                <div class="p-6 rounded-2xl bg-white/5 border border-white/10 hover:border-brand-blue/50 transition-colors">
+                    <div class="w-12 h-12 bg-brand-blue/10 rounded-lg flex items-center justify-center mb-4 text-2xl">🔒</div>
+                    <h3 class="text-xl font-bold mb-2">100% On-Device</h3>
+                    <p class="text-gray-400">Your clipboard data never leaves your Mac. No cloud, no servers, no accounts, no analytics, no third parties.</p>
+                </div>
+                <div class="p-6 rounded-2xl bg-white/5 border border-white/10 hover:border-brand-blue/50 transition-colors">
+                    <div class="w-12 h-12 bg-brand-blue/10 rounded-lg flex items-center justify-center mb-4 text-2xl">🛡️</div>
+                    <h3 class="text-xl font-bold mb-2">Skips Secrets</h3>
+                    <p class="text-gray-400">Copies from password managers are ignored by default, so passwords never land in your history.</p>
+                </div>
+                <div class="p-6 rounded-2xl bg-white/5 border border-white/10 hover:border-brand-blue/50 transition-colors">
+                    <div class="w-12 h-12 bg-brand-blue/10 rounded-lg flex items-center justify-center mb-4 text-2xl">💾</div>
+                    <h3 class="text-xl font-bold mb-2">Your Choice of Storage</h3>
+                    <p class="text-gray-400">Session-only (wiped on quit) or Persistent — encrypted and readable only by your macOS account.</p>
+                </div>
+                <div class="p-6 rounded-2xl bg-white/5 border border-white/10 hover:border-brand-blue/50 transition-colors">
+                    <div class="w-12 h-12 bg-brand-blue/10 rounded-lg flex items-center justify-center mb-4 text-2xl">🔔</div>
+                    <h3 class="text-xl font-bold mb-2">Instant Preview</h3>
+                    <p class="text-gray-400">A subtle "✓ Copied" panel slides into the bottom-right and quietly fades away.</p>
+                </div>
+                <div class="p-6 rounded-2xl bg-white/5 border border-white/10 hover:border-brand-blue/50 transition-colors">
+                    <div class="w-12 h-12 bg-brand-blue/10 rounded-lg flex items-center justify-center mb-4 text-2xl">📌</div>
+                    <h3 class="text-xl font-bold mb-2">Full Control</h3>
+                    <p class="text-gray-400">Pin, delete, and re-copy any item from the menu bar. One-click "Clear History Now" panic wipe.</p>
+                </div>
+                <div class="p-6 rounded-2xl bg-white/5 border border-white/10 hover:border-brand-blue/50 transition-colors">
+                    <div class="w-12 h-12 bg-brand-blue/10 rounded-lg flex items-center justify-center mb-4 text-2xl">🚀</div>
+                    <h3 class="text-xl font-bold mb-2">Menu-Bar Native</h3>
+                    <p class="text-gray-400">Runs quietly with no Dock icon. Optional Launch at Login. Built with Swift — zero dependencies.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- How it works -->
+    <section id="how-it-works" class="py-20 px-6">
+        <div class="max-w-4xl mx-auto">
+            <h2 class="text-3xl font-bold mb-16 text-center">How it works</h2>
+            <div class="space-y-12">
+                <div class="flex gap-6">
+                    <div class="flex-shrink-0 w-12 h-12 rounded-full bg-brand-ink border border-white/20 flex items-center justify-center font-bold text-lg">1</div>
+                    <div>
+                        <h3 class="text-xl font-bold mb-2">Copy anything</h3>
+                        <p class="text-gray-400">Use ⌘C like always. ClipLocal quietly captures it and flashes a "✓ Copied" preview in the corner.</p>
+                    </div>
+                </div>
+                <div class="flex gap-6">
+                    <div class="flex-shrink-0 w-12 h-12 rounded-full bg-brand-blue text-white flex items-center justify-center font-bold text-lg">2</div>
+                    <div>
+                        <h3 class="text-xl font-bold mb-2 text-brand-blue">Open your history</h3>
+                        <p class="text-gray-400">Click the clipboard icon in your menu bar to see everything you've copied — pin, delete, or re-copy in one click.</p>
+                    </div>
+                </div>
+                <div class="flex gap-6">
+                    <div class="flex-shrink-0 w-12 h-12 rounded-full bg-brand-ink border border-white/20 flex items-center justify-center font-bold text-lg">3</div>
+                    <div>
+                        <h3 class="text-xl font-bold mb-2">Choose your privacy</h3>
+                        <p class="text-gray-400">Switch between Session-only and encrypted Persistent mode anytime. Wipe everything instantly whenever you like.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Launch Notes -->
+    <section id="launch" class="py-20 px-6 border-y border-white/5 bg-gradient-to-b from-brand-blue/5 to-transparent">
+        <div class="max-w-4xl mx-auto">
+            <div class="text-center mb-12">
+                <span class="inline-block px-3 py-1 mb-4 rounded-full bg-brand-blue/10 border border-brand-blue/30 text-brand-blue text-xs font-mono">🎉 Introducing v1.0</span>
+                <h2 class="text-3xl font-bold mb-4">Say hello to ClipLocal</h2>
+                <p class="text-gray-400 max-w-2xl mx-auto leading-relaxed">
+                    Most clipboard managers quietly log everything you copy — and many sync it to the cloud. That's fine, until you're copying passwords, tokens, private notes, or client data. ClipLocal was built on a single principle: <span class="text-white font-semibold">your clipboard is yours, and it should never leave your Mac.</span>
+                </p>
+            </div>
+            <div class="grid md:grid-cols-2 gap-6">
+                <div class="bg-white/5 border border-white/10 rounded-xl p-6">
+                    <div class="text-2xl mb-3">🔐</div>
+                    <h3 class="font-bold text-lg mb-2">Private by design, not as a setting</h3>
+                    <p class="text-gray-400 text-sm leading-relaxed">There's no account to create and no server to trust — because there isn't one. The only time ClipLocal touches the network is a quick version check for updates. Everything else stays on your machine.</p>
+                </div>
+                <div class="bg-white/5 border border-white/10 rounded-xl p-6">
+                    <div class="text-2xl mb-3">🎚️</div>
+                    <h3 class="font-bold text-lg mb-2">You decide how much it remembers</h3>
+                    <p class="text-gray-400 text-sm leading-relaxed">Flip to Session-only for sensitive work and history vanishes when you quit. Prefer convenience? Persistent mode keeps your history across restarts — encrypted, and readable only by your macOS account.</p>
+                </div>
+                <div class="bg-white/5 border border-white/10 rounded-xl p-6">
+                    <div class="text-2xl mb-3">🛡️</div>
+                    <h3 class="font-bold text-lg mb-2">Passwords stay out of it</h3>
+                    <p class="text-gray-400 text-sm leading-relaxed">Copies marked "concealed" by password managers are skipped automatically, so your secrets never end up in a history list. And a one-click panic wipe is always a click away.</p>
+                </div>
+                <div class="bg-white/5 border border-white/10 rounded-xl p-6">
+                    <div class="text-2xl mb-3">🪶</div>
+                    <h3 class="font-bold text-lg mb-2">Light, quiet, and out of your way</h3>
+                    <p class="text-gray-400 text-sm leading-relaxed">ClipLocal lives in your menu bar with no Dock clutter, built natively in Swift with zero dependencies. Turn on Launch at Login and forget it's even there — until you need it.</p>
+                </div>
+            </div>
+            <p class="text-center text-gray-500 text-sm mt-10">This is just v1.0 — the foundation. Have an idea? <button onclick="copyEmail(this)" class="text-brand-blue hover:underline bg-transparent border-none cursor-pointer p-0">Contact Developer</button>.</p>
+        </div>
+    </section>
+
+    <!-- Install -->
+    <section id="install" class="py-20 bg-white/5 border-y border-white/5">
+        <div class="max-w-6xl mx-auto px-6">
+            <h2 class="text-3xl font-bold mb-12 text-center">Installation</h2>
+            <div class="max-w-2xl mx-auto">
+                <div class="bg-black/40 border border-white/10 rounded-2xl p-8">
+                    <h3 class="text-lg font-bold mb-4 text-white">Install via Terminal</h3>
+                    <ol class="space-y-3 text-gray-300 list-decimal list-inside text-sm">
+                        <li><span class="font-semibold text-white">Download</span> the installer using the button above.</li>
+                        <li><span class="font-semibold text-white">Open Terminal</span> (⌘+Space, type "Terminal", press Enter).</li>
+                        <li>Type <span class="text-brand-blue font-mono">sh </span> — that's <span class="font-semibold text-white">s</span>, <span class="font-semibold text-white">h</span>, then a <span class="font-semibold text-white">space</span>.</li>
+                        <li><span class="font-semibold text-white">Drag and drop</span> the downloaded file into the Terminal window (its path fills in automatically).</li>
+                        <li>Press <span class="font-semibold text-white">Enter</span> and follow the on-screen prompts, then drag ClipLocal onto Applications.</li>
+                    </ol>
+                </div>
+            </div>
+            <div class="mt-6 p-4 bg-black rounded border border-white/10 text-xs text-gray-500 font-mono break-all whitespace-pre-wrap max-w-2xl mx-auto"><span class="text-green-400">user@macbook ~ %</span> sh ~/Downloads/install-cliplocal.command<br><span class="text-brand-blue">▸</span> Checking for build tools…</div>
+            <p class="text-center text-gray-500 text-sm mt-6 max-w-2xl mx-auto">First time only: the installer may ask to install Apple's Command Line Tools (a small official Apple download). This lets your Mac build the app locally — which is why macOS trusts it, with no "damaged app" warnings.</p>
+        </div>
+    </section>
+
+    <!-- Changelog -->
+    <section id="changelog" class="py-12 bg-black/40 border-b border-white/5">
+        <div class="max-w-6xl mx-auto px-6">
+            <h2 class="text-2xl font-bold mb-8 text-center text-gray-200">Release Notes</h2>
+            <div id="changelog-container" class="space-y-6 max-w-3xl mx-auto">
+                <div class="text-center text-gray-500 animate-pulse">Loading updates…</div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="py-6 border-t border-white/10 text-center">
+        <div class="flex flex-col md:flex-row justify-center items-center gap-4 md:gap-8 text-xs text-gray-500">
+            <div>Built by <span class="text-white">Arun Thomas</span></div>
+            <button onclick="copyEmail(this)" class="hover:text-brand-blue transition-colors bg-transparent border-none cursor-pointer">Contact Developer</button>
+            <div class="text-gray-700">&copy; 2026 ClipLocal.</div>
+        </div>
+    </footer>
+
+    <script>
+        // Version pill from version.json
+        fetch('version.json').then(r => r.json()).then(data => {
+            if (data.version) {
+                const pill = document.getElementById('version-pill');
+                if (pill) pill.textContent = `v${data.version} Now Available`;
+            }
+            // Changelog
+            const container = document.getElementById('changelog-container');
+            if (container && Array.isArray(data.changelog)) {
+                container.innerHTML = '';
+                data.changelog.forEach(release => {
+                    const div = document.createElement('div');
+                    div.className = 'bg-white/5 border border-white/10 rounded-xl p-6 hover:border-brand-blue/30 transition-colors';
+                    const header = `<div class="flex items-center gap-3 mb-4">
+                        <span class="text-brand-blue font-mono font-bold text-lg">v${release.version}</span>
+                        ${release.date ? `<span class="text-gray-500 text-xs px-2 py-0.5 rounded bg-white/5 border border-white/5">${release.date}</span>` : ''}
+                    </div>`;
+                    const list = document.createElement('ul');
+                    list.className = 'space-y-2 text-gray-400 text-sm list-disc list-inside';
+                    (release.changes || []).forEach(change => {
+                        const li = document.createElement('li');
+                        li.textContent = change;
+                        list.appendChild(li);
+                    });
+                    div.innerHTML = header;
+                    div.appendChild(list);
+                    container.appendChild(div);
+                });
+            }
+        }).catch(() => {
+            const c = document.getElementById('changelog-container');
+            if (c) c.innerHTML = '<div class="text-red-500 text-center text-sm">Failed to load updates.</div>';
+        });
+
+        // Typing effect
+        document.addEventListener('DOMContentLoaded', function() {
+            const el = document.getElementById('typing-text');
+            if (!el) return;
+            const phrases = ["Yours alone.", "Never in the cloud.", "On your Mac only."];
+            let pi = 0, ci = 0, deleting = false, speed = 100;
+            function type() {
+                const cur = phrases[pi];
+                if (deleting) { el.textContent = cur.substring(0, ci - 1); ci--; speed = 50; }
+                else { el.textContent = cur.substring(0, ci + 1); ci++; speed = 100; }
+                if (!deleting && ci === cur.length) { deleting = true; speed = 2000; }
+                else if (deleting && ci === 0) { deleting = false; pi = (pi + 1) % phrases.length; speed = 500; }
+                setTimeout(type, speed);
+            }
+            el.textContent = '';
+            setTimeout(type, 500);
+        });
+    </script>
+</body>
+</html>

@@ -4,13 +4,15 @@
   "changelog": [
     {
       "version": "1.0",
+      "date": "July 2026",
       "changes": [
         "First release of ClipLocal",
         "100% on-device clipboard history — nothing ever leaves your Mac",
         "Bottom-right \u201cCopied\u201d preview",
         "Session-only and encrypted Persistent privacy modes",
         "Skips password-manager copies by default",
-        "Pin, delete, and re-copy items from the menu bar"
+        "Pin, delete, and re-copy items from the menu bar",
+        "Optional Launch at Login"
       ]
     }
   ]

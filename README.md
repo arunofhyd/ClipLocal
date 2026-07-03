@@ -45,21 +45,13 @@ Built specifically for people who handle **sensitive text** and don't want their
 
 ## 📦 Install
 
-### Easy way (double-click)
+Install by running the installer in **Terminal**:
 
 1. **Download** [`install-cliplocal.command`](install-cliplocal.command) (open the file, then click **Download raw file**).
-2. **Double-click** the downloaded file.
-3. If macOS blocks it, **right-click the file → Open → Open**.
-4. Follow the on-screen prompts, then **drag ClipLocal onto the Applications folder**.
-
-### Reliable fallback (Terminal)
-
-If the double-click doesn't work:
-
-1. Open **Terminal** (`⌘ + Space`, type `Terminal`, press Enter).
-2. Type `sh ` — that's **s**, **h**, then a **space**.
-3. **Drag** the downloaded `install-cliplocal.command` into the Terminal window.
-4. Press **Enter** and follow the prompts.
+2. Open **Terminal** (`⌘ + Space`, type `Terminal`, press Enter).
+3. Type `sh ` — that's **s**, **h**, then a **space**.
+4. **Drag** the downloaded `install-cliplocal.command` into the Terminal window (its path fills in automatically).
+5. Press **Enter**, follow the prompts, then **drag ClipLocal onto the Applications folder**.
 
 > **First time only:** The installer may ask to install Apple's Command Line Tools (a small, official Apple download). Click **Install**, wait, then continue. This lets your Mac build the app locally — which is why macOS trusts it and never shows a "damaged app" warning.
 
