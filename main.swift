@@ -95,7 +95,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     @objc func showAboutMenu() { showAbout(onLaunch: false) }
 
     func showAbout(onLaunch: Bool) {
-        if onLaunch && defaults.bool(forKey: "hideAboutOnLaunch") { return }
+        if onLaunch && defaults.bool(forKey: "hideAbout") { return }
 
         aboutWindow?.close()
         let width: CGFloat = 460, height: CGFloat = 560
@@ -183,7 +183,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         dontShow.sizeToFit()
         let dsW = dontShow.frame.width
         dontShow.frame = NSRect(x: (width - dsW)/2, y: 72, width: dsW, height: 20)
-        dontShow.state = defaults.bool(forKey: "hideAboutOnLaunch") ? .on : .off
+        dontShow.state = defaults.bool(forKey: "hideAbout") ? .on : .off
         bg.addSubview(dontShow)
 
         let contact = NSButton(title: "Contact", target: self, action: #selector(contactDeveloper))
@@ -217,7 +217,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc func toggleHideAbout(_ sender: NSButton) {
-        defaults.set(sender.state == .on, forKey: "hideAboutOnLaunch")
+        defaults.set(sender.state == .on, forKey: "hideAbout")
     }
 
     @objc func closeAbout() { aboutWindow?.close(); aboutWindow = nil }
