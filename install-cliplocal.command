@@ -211,9 +211,8 @@ class DropZone: NSImageView {
         }
         try? (dest as NSURL).setResourceValue(false, forKey: .isExcludedFromBackupKey)
         let clean = Process()
-        clean.launchPath = "/usr/bin/xattr"
-        clean.arguments = ["-dr", "com.apple.quarantine", dest.path]
-        clean.standardError = FileHandle.nullDevice
+        clean.launchPath = "/bin/sh"
+        clean.arguments = ["-c", "/usr/bin/xattr -dr com.apple.quarantine '\(dest.path)' 2>/dev/null"]
         try? clean.run(); clean.waitUntilExit()
 
         NSSound(named: "Glass")?.play()
