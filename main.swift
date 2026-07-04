@@ -6,7 +6,7 @@ import ServiceManagement
 //  ClipLocal — 100% on-device clipboard history, no third parties
 // ============================================================
 
-let appVersion = "1.2"
+let appVersion = "1.4"
 // The update check reads this small file from your GitHub. It's the ONLY
 // network request the app ever makes. Nothing else leaves the Mac.
 let updateCheckURL = "https://raw.githubusercontent.com/arunofhyd/ClipLocal/main/version.json"
@@ -442,7 +442,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         sessionItem.image = icon("lock")
         sessionItem.target = self
         sessionItem.state = mode == .session ? .on : .off
-        let persistItem = NSMenuItem(title: "Persistent (keep history)",
+        let persistItem = NSMenuItem(title: "Persistent (keep on quit)",
                                      action: #selector(setPersistent), keyEquivalent: "")
         persistItem.image = icon("externaldrive.fill")
         persistItem.target = self
@@ -555,8 +555,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc func clearNow() {
-        history.removeAll()
-        deleteStore()
+        // Keep pinned items; clear everything else.
+        history = history.filter { $0.pinned }
+        if history.isEmpty {
+            deleteStore()
+        } else {
+            persistIfNeeded()
+        }
         rebuildMenu()
     }
 
