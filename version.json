@@ -1,7 +1,14 @@
 {
-  "version": "1.4",
+  "version": "1.5",
   "downloadURL": "https://cliplocal.vercel.app/#install",
   "changelog": [
+    {
+      "version": "1.5",
+      "date": "July 2026",
+      "changes": [
+        "Aligned \"Clear History Now\" and \"Quit\" shortcuts beautifully alongside history items."
+      ]
+    },
     {
       "version": "1.4",
       "date": "July 2026",
