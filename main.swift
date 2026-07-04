@@ -6,7 +6,7 @@ import ServiceManagement
 //  ClipLocal — 100% on-device clipboard history, no third parties
 // ============================================================
 
-let appVersion = "1.4"
+let appVersion = "1.5"
 // The update check reads this small file from your GitHub. It's the ONLY
 // network request the app ever makes. Nothing else leaves the Mac.
 let updateCheckURL = "https://raw.githubusercontent.com/arunofhyd/ClipLocal/main/version.json"
@@ -357,6 +357,23 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         return "text.alignleft"
     }
 
+    func paintedTitle(for text: String, shortcut: String) -> NSAttributedString {
+        let para = NSMutableParagraphStyle()
+        para.tabStops = [NSTextTab(textAlignment: .right, location: 300)]
+        para.lineBreakMode = .byTruncatingTail
+        let title = NSMutableAttributedString(
+            string: text,
+            attributes: [.font: NSFont.menuFont(ofSize: 0)])
+        title.append(NSAttributedString(
+            string: "\t\(shortcut)",
+            attributes: [
+                .font: NSFont.menuFont(ofSize: 0),
+                .foregroundColor: NSColor.tertiaryLabelColor,
+                .paragraphStyle: para
+            ]))
+        return title
+    }
+
     func rebuildMenu() {
         let menu = NSMenu()
         let header = NSMenuItem(title: "ClipLocal — History (\(history.count))", action: nil, keyEquivalent: "")
@@ -400,20 +417,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 // Because items have submenus, macOS hides the keyEquivalent.
                 // So we paint "⌘N" into the title, right-aligned before the arrow.
                 if i < 9 {
-                    let para = NSMutableParagraphStyle()
-                    para.tabStops = [NSTextTab(textAlignment: .right, location: 300)]
-                    para.lineBreakMode = .byTruncatingTail
-                    let title = NSMutableAttributedString(
-                        string: snippet,
-                        attributes: [.font: NSFont.menuFont(ofSize: 0)])
-                    title.append(NSAttributedString(
-                        string: "\t⌘\(i + 1)",
-                        attributes: [
-                            .font: NSFont.menuFont(ofSize: 0),
-                            .foregroundColor: NSColor.tertiaryLabelColor,
-                            .paragraphStyle: para
-                        ]))
-                    mi.attributedTitle = title
+                    mi.attributedTitle = paintedTitle(for: snippet, shortcut: "⌘\(i + 1)")
                 }
 
                 let sub = NSMenu()
@@ -466,11 +470,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(launch)
 
         menu.addItem(.separator())
-        let clear = NSMenuItem(title: "Clear History Now", action: #selector(clearNow), keyEquivalent: "\u{8}")
+        let clear = NSMenuItem(title: "Clear History Now", action: #selector(clearNow), keyEquivalent: "")
+        clear.attributedTitle = paintedTitle(for: "Clear History Now", shortcut: "⌘⌫")
         clear.image = icon("trash.fill")
-        clear.keyEquivalentModifierMask = [.command]
         clear.target = self
         menu.addItem(clear)
+        let hiddenClear = NSMenuItem(title: "", action: #selector(clearNow), keyEquivalent: "\u{8}")
+        hiddenClear.keyEquivalentModifierMask = [.command]
+        hiddenClear.target = self
+        hiddenClear.isHidden = true
+        menu.addItem(hiddenClear)
 
         menu.addItem(.separator())
         let updates = NSMenuItem(title: "Check for Updates…", action: #selector(checkForUpdatesMenu), keyEquivalent: "")
@@ -481,10 +490,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         about.image = icon("info.circle")
         about.target = self
         menu.addItem(about)
-        let quit = NSMenuItem(title: "Quit", action: #selector(quitApp), keyEquivalent: "q")
+        let quit = NSMenuItem(title: "Quit", action: #selector(quitApp), keyEquivalent: "")
+        quit.attributedTitle = paintedTitle(for: "Quit", shortcut: "⌘Q")
         quit.image = icon("xmark.circle")
         quit.target = self
         menu.addItem(quit)
+        let hiddenQuit = NSMenuItem(title: "", action: #selector(quitApp), keyEquivalent: "q")
+        hiddenQuit.keyEquivalentModifierMask = [.command]
+        hiddenQuit.target = self
+        hiddenQuit.isHidden = true
+        menu.addItem(hiddenQuit)
 
         statusItem.menu = menu
     }
