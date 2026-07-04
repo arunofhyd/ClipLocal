@@ -132,8 +132,8 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 <dict>
   <key>CFBundleName</key><string>$APP_NAME</string>
   <key>CFBundleIdentifier</key><string>com.local.cliplocal</string>
-  <key>CFBundleVersion</key><string>1.0</string>
-  <key>CFBundleShortVersionString</key><string>1.0</string>
+  <key>CFBundleVersion</key><string>1.3</string>
+  <key>CFBundleShortVersionString</key><string>1.3</string>
   <key>CFBundleExecutable</key><string>$APP_NAME</string>
   <key>CFBundleIconFile</key><string>AppIcon</string>
   <key>CFBundlePackageType</key><string>APPL</string>
@@ -211,8 +211,8 @@ class DropZone: NSImageView {
         }
         try? (dest as NSURL).setResourceValue(false, forKey: .isExcludedFromBackupKey)
         let clean = Process()
-        clean.launchPath = "/usr/bin/xattr"
-        clean.arguments = ["-dr", "com.apple.quarantine", dest.path]
+        clean.launchPath = "/bin/sh"
+        clean.arguments = ["-c", "/usr/bin/xattr -dr com.apple.quarantine '\(dest.path)' 2>/dev/null"]
         try? clean.run(); clean.waitUntilExit()
 
         NSSound(named: "Glass")?.play()
