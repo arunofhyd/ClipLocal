@@ -438,7 +438,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
         menu.addItem(.separator())
 
-        let privacy = NSMenuItem(title: "Storage History", action: nil, keyEquivalent: "")
+        let privacy = NSMenuItem(title: "History Storage", action: nil, keyEquivalent: "")
         privacy.image = icon("lock.shield")
         let psub = NSMenu()
         let sessionItem = NSMenuItem(title: "Session-only (wiped on quit)",
@@ -446,7 +446,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         sessionItem.image = icon("lock")
         sessionItem.target = self
         sessionItem.state = mode == .session ? .on : .off
-        let persistItem = NSMenuItem(title: "Persistent (keep on quit)",
+        let persistItem = NSMenuItem(title: "Persistent (kept on quit)",
                                      action: #selector(setPersistent), keyEquivalent: "")
         persistItem.image = icon("externaldrive.fill")
         persistItem.target = self
