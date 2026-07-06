@@ -22,6 +22,9 @@
     <meta property="twitter:description" content="A privacy-first clipboard history for macOS. 100% on-device.">
 
     <!-- JSON-LD Structured Data -->
+    <script>
+      const APP_VERSION = "1.6";
+    </script>
     <script type="application/ld+json">
     {
       "@context": "https://schema.org",
@@ -32,7 +35,7 @@
       "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
       "description": "A privacy-first clipboard history for macOS. 100% on-device.",
       "author": { "@type": "Person", "name": "Arun Thomas" },
-      "softwareVersion": "1.6"
+      "softwareVersion": "1.5"
     }
     </script>
 
@@ -99,7 +102,7 @@
             </div>
             <div class="hidden md:flex gap-8 text-sm font-medium text-gray-400">
                 <a href="#features" class="hover:text-brand-blue transition-colors">Features</a>
-                <a href="#launch" class="hover:text-brand-blue transition-colors">v1.6</a>
+                <a href="#launch" class="version-label hover:text-brand-blue transition-colors">v1.5</a>
                 <a href="#how-it-works" class="hover:text-brand-blue transition-colors">How it Works</a>
                 <a href="#install" class="hover:text-brand-blue transition-colors">Install</a>
                 <a href="#changelog" class="hover:text-brand-blue transition-colors">Changelog</a>
@@ -252,7 +255,7 @@
     <section id="launch" class="py-20 px-6 border-y border-white/5 bg-gradient-to-b from-brand-blue/5 to-transparent">
         <div class="max-w-4xl mx-auto">
             <div class="text-center mb-12">
-                <span class="inline-block px-3 py-1 mb-4 rounded-full bg-brand-blue/10 border border-brand-blue/30 text-brand-blue text-xs font-mono">🎉 Now on v1.6</span>
+                <span class="version-badge inline-block px-3 py-1 mb-4 rounded-full bg-brand-blue/10 border border-brand-blue/30 text-brand-blue text-xs font-mono">🎉 Now on v1.5</span>
                 <h2 class="text-3xl font-bold mb-4">Say hello to ClipLocal</h2>
                 <p class="text-gray-400 max-w-2xl mx-auto leading-relaxed">
                     Most clipboard managers quietly log everything you copy — and many sync it to the cloud. That's fine, until you're copying passwords, tokens, private notes, or client data. ClipLocal was built on a single principle: <span class="text-white font-semibold">your clipboard is yours, and it should never leave your Mac.</span>
@@ -357,6 +360,19 @@
         }).catch(() => {
             const c = document.getElementById('changelog-container');
             if (c) c.innerHTML = '<div class="text-red-500 text-center text-sm">Failed to load updates.</div>';
+        });
+
+        // Inject version dynamically
+        document.addEventListener('DOMContentLoaded', function() {
+            document.querySelectorAll('.version-label').forEach(el => el.textContent = 'v' + APP_VERSION);
+            document.querySelectorAll('.version-badge').forEach(el => el.textContent = '🎉 Now on v' + APP_VERSION);
+
+            const schema = document.querySelector('script[type="application/ld+json"]');
+            if (schema) {
+                let json = JSON.parse(schema.textContent);
+                json.softwareVersion = APP_VERSION;
+                schema.textContent = JSON.stringify(json);
+            }
         });
 
         // Typing effect
