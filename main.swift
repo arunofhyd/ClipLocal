@@ -438,6 +438,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
         menu.addItem(.separator())
 
+        let prefs = NSMenuItem(title: "Preferences…", action: nil, keyEquivalent: ",")
+        prefs.image = icon("gearshape")
+        let prefsSub = NSMenu()
+
         let privacy = NSMenuItem(title: "History Storage", action: nil, keyEquivalent: "")
         privacy.image = icon("lock.shield")
         let psub = NSMenu()
@@ -453,21 +457,26 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         persistItem.state = mode == .persistent ? .on : .off
         psub.addItem(sessionItem); psub.addItem(persistItem)
         privacy.submenu = psub
-        menu.addItem(privacy)
+        prefsSub.addItem(privacy)
+
+        prefsSub.addItem(.separator())
 
         let skip = NSMenuItem(title: "Skip password-manager copies",
                               action: #selector(toggleSkip), keyEquivalent: "")
         skip.image = icon("key.fill")
         skip.target = self
         skip.state = skipConcealed ? .on : .off
-        menu.addItem(skip)
+        prefsSub.addItem(skip)
 
         let launch = NSMenuItem(title: "Launch at Login",
                                 action: #selector(toggleLaunchAtLogin), keyEquivalent: "")
         launch.image = icon("power")
         launch.target = self
         launch.state = launchAtLoginEnabled ? .on : .off
-        menu.addItem(launch)
+        prefsSub.addItem(launch)
+
+        prefs.submenu = prefsSub
+        menu.addItem(prefs)
 
         menu.addItem(.separator())
         let clear = NSMenuItem(title: "Clear History Now", action: #selector(clearNow), keyEquivalent: "")
