@@ -73,6 +73,16 @@ let px: CGFloat = 1024
 let img = NSImage(size: NSSize(width: px, height: px))
 img.lockFocus()
 
+guard let ctx = NSGraphicsContext.current?.cgContext else { fatalError() }
+
+// macOS icon padding: bounding box is typically ~824x824 inside a 1024 canvas
+let padding: CGFloat = 100
+let size = px - 2 * padding
+// Transform context to center the 824x824 icon
+ctx.translateBy(x: padding, y: padding)
+let scale = size / px
+ctx.scaleBy(x: scale, y: scale)
+
 // Apple-blue rounded-rect background with a subtle vertical gradient.
 let bg = NSBezierPath(roundedRect: NSRect(x: 0, y: 0, width: px, height: px),
                       xRadius: 230, yRadius: 230)
@@ -80,6 +90,22 @@ bg.addClip()
 let top = NSColor(calibratedRed: 0.16, green: 0.55, blue: 1.00, alpha: 1.0)
 let bot = NSColor(calibratedRed: 0.00, green: 0.40, blue: 0.95, alpha: 1.0)
 NSGradient(starting: top, ending: bot)?.draw(in: NSRect(x: 0, y: 0, width: px, height: px), angle: -90)
+
+// Inner shine gradient
+NSGraphicsContext.saveGraphicsState()
+let shinePadding: CGFloat = 8
+let rect = CGRect(x: shinePadding, y: shinePadding, width: px - 2 * shinePadding, height: px - 2 * shinePadding)
+let shinePath = CGPath(roundedRect: rect, cornerWidth: 230 - shinePadding, cornerHeight: 230 - shinePadding, transform: nil)
+ctx.addPath(shinePath)
+ctx.setLineWidth(16)
+ctx.replacePathWithStrokedPath()
+ctx.clip()
+let shine0 = NSColor(white: 1.0, alpha: 0.6)
+let shine1 = NSColor(white: 1.0, alpha: 0.0)
+if let shineGrad = NSGradient(colors: [shine0, shine1, shine1, shine0], atLocations: [0.0, 0.3, 0.7, 1.0], colorSpace: .sRGB) {
+    shineGrad.draw(from: NSPoint(x: 0, y: px), to: NSPoint(x: px, y: 0), options: [])
+}
+NSGraphicsContext.restoreGraphicsState()
 
 // White lock-on-document glyph, centered.
 let cfg = NSImage.SymbolConfiguration(pointSize: 560, weight: .regular)
