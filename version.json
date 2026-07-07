@@ -1,7 +1,15 @@
 {
-  "version": "1.5",
+  "version": "1.6",
   "downloadURL": "https://cliplocal.vercel.app/#install",
   "changelog": [
+    {
+      "version": "1.6",
+      "date": "July 2026",
+      "changes": [
+        "Moved Launch at Login, Skip password-manager copies, and History Storage into a new Preferences submenu",
+        "Added ⌘, shortcut for accessing Preferences"
+      ]
+    },
     {
       "version": "1.5",
       "date": "July 2026",

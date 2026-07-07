@@ -438,7 +438,21 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
         menu.addItem(.separator())
 
-        let prefs = NSMenuItem(title: "Preferences…", action: nil, keyEquivalent: ",")
+        let clear = NSMenuItem(title: "Clear History Now", action: #selector(clearNow), keyEquivalent: "")
+        clear.attributedTitle = paintedTitle(for: "Clear History Now", shortcut: "⌘⌫")
+        clear.image = icon("trash.fill")
+        clear.target = self
+        menu.addItem(clear)
+        let hiddenClear = NSMenuItem(title: "", action: #selector(clearNow), keyEquivalent: "\u{8}")
+        hiddenClear.keyEquivalentModifierMask = [.command]
+        hiddenClear.target = self
+        hiddenClear.isHidden = true
+        menu.addItem(hiddenClear)
+
+        menu.addItem(.separator())
+
+        let prefs = NSMenuItem(title: "Preferences…", action: nil, keyEquivalent: "")
+        prefs.attributedTitle = paintedTitle(for: "Preferences…", shortcut: "⌘,")
         prefs.image = icon("gearshape")
         let prefsSub = NSMenu()
 
@@ -459,8 +473,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         privacy.submenu = psub
         prefsSub.addItem(privacy)
 
-        prefsSub.addItem(.separator())
-
         let skip = NSMenuItem(title: "Skip password-manager copies",
                               action: #selector(toggleSkip), keyEquivalent: "")
         skip.image = icon("key.fill")
@@ -478,17 +490,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         prefs.submenu = prefsSub
         menu.addItem(prefs)
 
-        menu.addItem(.separator())
-        let clear = NSMenuItem(title: "Clear History Now", action: #selector(clearNow), keyEquivalent: "")
-        clear.attributedTitle = paintedTitle(for: "Clear History Now", shortcut: "⌘⌫")
-        clear.image = icon("trash.fill")
-        clear.target = self
-        menu.addItem(clear)
-        let hiddenClear = NSMenuItem(title: "", action: #selector(clearNow), keyEquivalent: "\u{8}")
-        hiddenClear.keyEquivalentModifierMask = [.command]
-        hiddenClear.target = self
-        hiddenClear.isHidden = true
-        menu.addItem(hiddenClear)
+        let hiddenPrefs = NSMenuItem(title: "", action: nil, keyEquivalent: ",")
+        hiddenPrefs.keyEquivalentModifierMask = [.command]
+        hiddenPrefs.target = self
+        hiddenPrefs.isHidden = true
+        menu.addItem(hiddenPrefs)
 
         menu.addItem(.separator())
         let updates = NSMenuItem(title: "Check for Updates…", action: #selector(checkForUpdatesMenu), keyEquivalent: "")
