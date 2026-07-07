@@ -51,7 +51,7 @@ enum PrivacyMode: String {
 }
 
 // MARK: - The app
-class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFieldDelegate {
+class AppDelegate: NSObject, NSApplicationDelegate {
     var statusItem: NSStatusItem!
     var timer: Timer?
     var lastChangeCount = NSPasteboard.general.changeCount
@@ -59,7 +59,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
     let key = KeyStore.loadOrCreateKey()
     let defaults = UserDefaults.standard
     var previewWindow: NSWindow?
-    var searchField: NSSearchField?
 
     var mode: PrivacyMode {
         get { PrivacyMode(rawValue: defaults.string(forKey: "mode") ?? "session") ?? .session }
@@ -361,7 +360,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
     func paintedTitle(for text: String, shortcut: String, isSubmenu: Bool = false) -> NSAttributedString {
         let para = NSMutableParagraphStyle()
         // Submenu items need a slightly smaller tab stop to align correctly with the macOS ">" arrow space taking up the right edge
-        let tabLocation: CGFloat = isSubmenu ? 295.5 : 300
+        let tabLocation: CGFloat = isSubmenu ? 295.25 : 300
         para.tabStops = [NSTextTab(textAlignment: .right, location: tabLocation)]
         para.lineBreakMode = .byTruncatingTail
         let title = NSMutableAttributedString(
@@ -379,7 +378,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
 
     func rebuildMenu() {
         let menu = NSMenu()
-        menu.delegate = self
         let header = NSMenuItem(title: "ClipLocal — History (\(history.count))", action: nil, keyEquivalent: "")
         header.image = icon("doc.on.clipboard")
         // Hover the header to choose how many items to keep.
@@ -398,21 +396,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
         header.submenu = sizeSub
         menu.addItem(header)
         menu.addItem(.separator())
-
-        if !history.isEmpty {
-            let searchItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
-            let searchContainer = NSView(frame: NSRect(x: 0, y: 0, width: 320, height: 32))
-            let sf = NSSearchField(frame: NSRect(x: 10, y: 5, width: 300, height: 22))
-            sf.placeholderString = "Search history..."
-            sf.delegate = self
-            searchField = sf
-            searchContainer.addSubview(sf)
-            searchItem.view = searchContainer
-            menu.addItem(searchItem)
-            menu.addItem(.separator())
-        } else {
-            searchField = nil
-        }
 
         if history.isEmpty {
             let empty = NSMenuItem(title: "— empty —", action: nil, keyEquivalent: "")
@@ -729,42 +712,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
     }
 
     func deleteStore() { try? FileManager.default.removeItem(at: storeURL) }
-
-    // MARK: - Search & Menu Delegates
-    func menuWillOpen(_ menu: NSMenu) {
-        searchField?.stringValue = ""
-        controlTextDidChange(Notification(name: NSControl.textDidChangeNotification, object: searchField))
-
-        // Use asyncAfter to ensure the menu window is completely rendered and visible
-        // before requesting focus, preventing the "missing cursor" AppKit bug.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-            if let sf = self.searchField, let window = sf.window {
-                window.makeFirstResponder(sf)
-                // Forcing the cell to select text ensures the field editor engages.
-                sf.currentEditor()?.moveToEndOfLine(nil)
-            }
-        }
-    }
-
-    func controlTextDidChange(_ obj: Notification) {
-        guard let sf = obj.object as? NSSearchField, let menu = statusItem.menu else { return }
-        let query = sf.stringValue.lowercased()
-
-        for item in menu.items {
-            // Only filter the actual history items.
-            // We identify them because their action is copyItem(_:)
-            if item.action == #selector(copyItem(_:)) {
-                if query.isEmpty {
-                    item.isHidden = false
-                } else {
-                    let i = item.tag
-                    if i >= 0 && i < history.count {
-                        item.isHidden = !history[i].text.lowercased().contains(query)
-                    }
-                }
-            }
-        }
-    }
 }
 
 // MARK: - Launch
