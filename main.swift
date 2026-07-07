@@ -359,8 +359,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     func paintedTitle(for text: String, shortcut: String, isSubmenu: Bool = false) -> NSAttributedString {
         let para = NSMutableParagraphStyle()
-        // Submenu items need a slightly larger tab stop to compensate for the macOS ">" arrow space
-        let tabLocation: CGFloat = isSubmenu ? 312 : 300
+        // Submenu items need a slightly smaller tab stop to align correctly with the macOS ">" arrow space taking up the right edge
+        let tabLocation: CGFloat = isSubmenu ? 286 : 300
         para.tabStops = [NSTextTab(textAlignment: .right, location: tabLocation)]
         para.lineBreakMode = .byTruncatingTail
         let title = NSMutableAttributedString(
