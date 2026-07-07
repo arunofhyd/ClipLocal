@@ -357,9 +357,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         return "text.alignleft"
     }
 
-    func paintedTitle(for text: String, shortcut: String) -> NSAttributedString {
+    func paintedTitle(for text: String, shortcut: String, isSubmenu: Bool = false) -> NSAttributedString {
         let para = NSMutableParagraphStyle()
-        para.tabStops = [NSTextTab(textAlignment: .right, location: 300)]
+        // Submenu items need a slightly larger tab stop to compensate for the macOS ">" arrow space
+        let tabLocation: CGFloat = isSubmenu ? 312 : 300
+        para.tabStops = [NSTextTab(textAlignment: .right, location: tabLocation)]
         para.lineBreakMode = .byTruncatingTail
         let title = NSMutableAttributedString(
             string: text,
@@ -452,7 +454,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(.separator())
 
         let prefs = NSMenuItem(title: "Preferences…", action: nil, keyEquivalent: "")
-        prefs.attributedTitle = paintedTitle(for: "Preferences…", shortcut: "⌘,")
+        prefs.attributedTitle = paintedTitle(for: "Preferences…", shortcut: "⌘,", isSubmenu: true)
         prefs.image = icon("gearshape")
         let prefsSub = NSMenu()
 
