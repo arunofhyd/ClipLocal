@@ -361,7 +361,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
     func paintedTitle(for text: String, shortcut: String, isSubmenu: Bool = false) -> NSAttributedString {
         let para = NSMutableParagraphStyle()
         // Submenu items need a slightly smaller tab stop to align correctly with the macOS ">" arrow space taking up the right edge
-        let tabLocation: CGFloat = isSubmenu ? 295.25 : 300
+        let tabLocation: CGFloat = isSubmenu ? 295.5 : 300
         para.tabStops = [NSTextTab(textAlignment: .right, location: tabLocation)]
         para.lineBreakMode = .byTruncatingTail
         let title = NSMutableAttributedString(
@@ -402,7 +402,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
         if !history.isEmpty {
             let searchItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
             let searchContainer = NSView(frame: NSRect(x: 0, y: 0, width: 320, height: 32))
-            let sf = NSSearchField(frame: NSRect(x: 16, y: 5, width: 288, height: 22))
+            let sf = NSSearchField(frame: NSRect(x: 10, y: 5, width: 300, height: 22))
             sf.placeholderString = "Search history..."
             sf.delegate = self
             searchField = sf
@@ -735,9 +735,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
         searchField?.stringValue = ""
         controlTextDidChange(Notification(name: NSControl.textDidChangeNotification, object: searchField))
 
-        DispatchQueue.main.async {
+        // Use asyncAfter to ensure the menu window is completely rendered and visible
+        // before requesting focus, preventing the "missing cursor" AppKit bug.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
             if let sf = self.searchField, let window = sf.window {
                 window.makeFirstResponder(sf)
+                // Forcing the cell to select text ensures the field editor engages.
+                sf.currentEditor()?.moveToEndOfLine(nil)
             }
         }
     }
