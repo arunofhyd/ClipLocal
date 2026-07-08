@@ -6,7 +6,7 @@ import ServiceManagement
 //  ClipLocal — 100% on-device clipboard history, no third parties
 // ============================================================
 
-let appVersion = "1.6"
+let appVersion = "1.7"
 // The update check reads this small file from your GitHub. It's the ONLY
 // network request the app ever makes. Nothing else leaves the Mac.
 let updateCheckURL = "https://raw.githubusercontent.com/arunofhyd/ClipLocal/main/version.json"
@@ -251,8 +251,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         var textToStore = ""
         var imageToStore: Data? = nil
 
-        if let images = pb.readObjects(forClasses: [NSImage.self], options: nil) as? [NSImage],
-           let img = images.first,
+        if let img = NSImage(pasteboard: pb),
            let tiff = img.tiffRepresentation,
            let bitmap = NSBitmapImageRep(data: tiff),
            let pngData = bitmap.representation(using: .png, properties: [:]) {
@@ -380,15 +379,40 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         return "text.alignleft"
     }
 
-    func paintedTitle(for text: String, shortcut: String, isSubmenu: Bool = false) -> NSAttributedString {
+    func paintedTitle(for text: String, shortcut: String, isSubmenu: Bool = false, image: NSImage? = nil) -> NSAttributedString {
         let para = NSMutableParagraphStyle()
         // Submenu items need a slightly smaller tab stop to align correctly with the macOS ">" arrow space taking up the right edge
         let tabLocation: CGFloat = isSubmenu ? 295.25 : 300
         para.tabStops = [NSTextTab(textAlignment: .right, location: tabLocation)]
         para.lineBreakMode = .byTruncatingTail
-        let title = NSMutableAttributedString(
-            string: text,
-            attributes: [.font: NSFont.menuFont(ofSize: 0)])
+
+        let title = NSMutableAttributedString()
+
+        if let img = image {
+            // Scale the image down to exactly match the standard menu line height (~14px)
+            // so we get a tiny inline preview without expanding the menu row vertically.
+            let targetHeight: CGFloat = 14.0
+            let ratio = img.size.width / img.size.height
+            // Restrict maximum width so extremely wide panoramas don't break the layout
+            let targetWidth = min(targetHeight * ratio, 250.0)
+
+            let scaledImage = NSImage(size: NSSize(width: targetWidth, height: targetHeight))
+            scaledImage.lockFocus()
+            img.draw(in: NSRect(x: 0, y: 0, width: targetWidth, height: targetHeight))
+            scaledImage.unlockFocus()
+
+            let attachment = NSTextAttachment()
+            attachment.image = scaledImage
+            // Slight baseline offset to align perfectly with the surrounding text/icons
+            attachment.bounds = NSRect(x: 0, y: -2, width: targetWidth, height: targetHeight)
+
+            title.append(NSAttributedString(attachment: attachment))
+        } else {
+            title.append(NSAttributedString(
+                string: text,
+                attributes: [.font: NSFont.menuFont(ofSize: 0)]))
+        }
+
         title.append(NSAttributedString(
             string: "\t\(shortcut)",
             attributes: [
@@ -441,8 +465,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
                 // Because items have submenus, macOS hides the keyEquivalent.
                 // So we paint "⌘N" into the title, right-aligned before the arrow.
-                if i < 9 {
-                    mi.attributedTitle = paintedTitle(for: snippet, shortcut: "⌘\(i + 1)")
+                var previewImage: NSImage? = nil
+                if let data = item.imageData, let loaded = NSImage(data: data) {
+                    previewImage = loaded
+                }
+
+                // If it's an image, or it has a shortcut, we must use paintedTitle
+                // to either render the inline image attachment, or paint the hidden shortcut, or both.
+                if i < 9 || previewImage != nil {
+                    let shortcutToPaint = i < 9 ? "⌘\(i + 1)" : ""
+                    mi.attributedTitle = paintedTitle(for: snippet, shortcut: shortcutToPaint, isSubmenu: true, image: previewImage)
                 }
 
                 let sub = NSMenu()
@@ -553,7 +585,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         pb.clearContents()
 
         if let data = item.imageData, let img = NSImage(data: data) {
-            pb.writeObjects([img])
+            // Write standard PNG data for broad compatibility
+            pb.setData(data, forType: .png)
+            if let tiff = img.tiffRepresentation {
+                pb.setData(tiff, forType: .tiff)
+            }
         } else {
             pb.setString(item.text, forType: .string)
         }
