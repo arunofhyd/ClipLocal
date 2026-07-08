@@ -43,6 +43,7 @@ struct ClipItem: Codable {
     let text: String
     let date: Date
     var pinned: Bool = false
+    var imageData: Data?
 }
 
 enum PrivacyMode: String {
@@ -247,19 +248,38 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             if types.contains(concealed) || types.contains(transient) { return }
         }
 
-        guard let text = pb.string(forType: .string),
-              !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        var textToStore = ""
+        var imageToStore: Data? = nil
+
+        if let images = pb.readObjects(forClasses: [NSImage.self], options: nil) as? [NSImage],
+           let img = images.first,
+           let tiff = img.tiffRepresentation,
+           let bitmap = NSBitmapImageRep(data: tiff),
+           let pngData = bitmap.representation(using: .png, properties: [:]) {
+            imageToStore = pngData
+            textToStore = "[Image: \(Int(img.size.width))x\(Int(img.size.height))]"
+        } else if let text = pb.string(forType: .string),
+                  !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            textToStore = text
+        } else {
+            return
+        }
 
         var pinned = false
-        if let idx = history.firstIndex(where: { $0.text == text }) {
+        if let idx = history.firstIndex(where: {
+            if let img1 = $0.imageData, let img2 = imageToStore {
+                return img1 == img2
+            }
+            return $0.imageData == nil && imageToStore == nil && $0.text == textToStore
+        }) {
             pinned = history[idx].pinned
             history.remove(at: idx)
         }
-        history.insert(ClipItem(text: text, date: Date(), pinned: pinned), at: 0)
+        history.insert(ClipItem(text: textToStore, date: Date(), pinned: pinned, imageData: imageToStore), at: 0)
         trimHistory()
         persistIfNeeded()
         rebuildMenu()
-        showPreview(text)
+        showPreview(textToStore)
     }
 
     func trimHistory() {
@@ -340,6 +360,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     // Pick a relevant SF Symbol based on what the copied text looks like.
     func iconName(for text: String) -> String {
+        if text.hasPrefix("[Image:") {
+            return "photo"
+        }
         let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
         let lower = t.lowercased()
         if lower.hasPrefix("http://") || lower.hasPrefix("https://") || lower.hasPrefix("www.") {
@@ -525,14 +548,20 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     @objc func copyItem(_ sender: NSMenuItem) {
         let i = sender.tag
         guard i < history.count else { return }
-        let text = history[i].text
+        let item = history[i]
         let pb = NSPasteboard.general
         pb.clearContents()
-        pb.setString(text, forType: .string)
+
+        if let data = item.imageData, let img = NSImage(data: data) {
+            pb.writeObjects([img])
+        } else {
+            pb.setString(item.text, forType: .string)
+        }
+
         lastChangeCount = pb.changeCount // don't re-capture our own copy
-        let pinned = history[i].pinned
+        let pinned = item.pinned
         history.remove(at: i)
-        history.insert(ClipItem(text: text, date: Date(), pinned: pinned), at: 0)
+        history.insert(ClipItem(text: item.text, date: Date(), pinned: pinned, imageData: item.imageData), at: 0)
         persistIfNeeded()
         rebuildMenu()
     }
