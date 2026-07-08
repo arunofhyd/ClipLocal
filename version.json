@@ -11,7 +11,7 @@
       ]
     },
     {
-      "version": "1.7",
+      "version": "1.6",
       "date": "July 2026",
       "changes": [
         "Moved Launch at Login, Skip password-manager copies, and History Storage into a new Preferences submenu",

@@ -69,6 +69,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         get { defaults.object(forKey: "skipConcealed") == nil ? true : defaults.bool(forKey: "skipConcealed") }
         set { defaults.set(newValue, forKey: "skipConcealed"); rebuildMenu() }
     }
+    var showImageDimensions: Bool {
+        get { defaults.bool(forKey: "showImageDimensions") }
+        set { defaults.set(newValue, forKey: "showImageDimensions"); rebuildMenu() }
+    }
     var maxItems: Int {
         get { let v = defaults.integer(forKey: "maxItems"); return v == 0 ? 50 : v }
         set { defaults.set(newValue, forKey: "maxItems"); rebuildMenu() }
@@ -157,7 +161,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         ⌘  Open the menu and press ⌘1–⌘9 to instantly copy any of your recent items.
 
-        🏷️  Each item shows a relevant icon — 🔗 links, ✉️ emails, #️⃣ numbers, 📄 notes — so your history is easy to scan.
+        🏷️  Each item shows a relevant icon — 🔗 links, ✉️ emails, #️⃣ numbers, 📄 notes, and 🖼️ images — so your history is easy to scan.
         """
         let para = NSMutableParagraphStyle()
         para.lineSpacing = 3
@@ -407,6 +411,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             attachment.bounds = NSRect(x: 0, y: -2, width: targetWidth, height: targetHeight)
 
             title.append(NSAttributedString(attachment: attachment))
+
+            // If the user wants to see dimensions, append them (e.g., extract "1024x768" from "[Image: 1024x768]")
+            if showImageDimensions, text.hasPrefix("[Image: "), text.hasSuffix("]") {
+                let dims = text.dropFirst(8).dropLast()
+                title.append(NSAttributedString(
+                    string: "  \(dims)",
+                    attributes: [.font: NSFont.menuFont(ofSize: 0), .foregroundColor: NSColor.secondaryLabelColor]))
+            }
         } else {
             title.append(NSAttributedString(
                 string: text,
@@ -537,6 +549,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         skip.state = skipConcealed ? .on : .off
         prefsSub.addItem(skip)
 
+        let showDims = NSMenuItem(title: "Show image dimensions",
+                                  action: #selector(toggleShowImageDimensions), keyEquivalent: "")
+        showDims.image = icon("photo.on.rectangle.angled")
+        showDims.target = self
+        showDims.state = showImageDimensions ? .on : .off
+        prefsSub.addItem(showDims)
+
         let launch = NSMenuItem(title: "Launch at Login",
                                 action: #selector(toggleLaunchAtLogin), keyEquivalent: "")
         launch.image = icon("power")
@@ -621,6 +640,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     @objc func setSession() { mode = .session; deleteStore() }
     @objc func setPersistent() { mode = .persistent; saveHistory() }
     @objc func toggleSkip() { skipConcealed.toggle() }
+    @objc func toggleShowImageDimensions() { showImageDimensions.toggle() }
 
     @objc func setHistorySize(_ sender: NSMenuItem) {
         maxItems = sender.tag          // trims + rebuilds via the setter
