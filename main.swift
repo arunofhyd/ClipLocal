@@ -33,6 +33,10 @@ class MenuSearchField: NSSearchField {
 
 /// Provides a smooth, animated background highlight when selecting filters.
 class FilterButton: NSButton {
+    var hasItems: Bool = false {
+        didSet { updateVisuals(animated: false) }
+    }
+
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         setup()
@@ -49,20 +53,31 @@ class FilterButton: NSButton {
         wantsLayer = true
         layer?.cornerRadius = 5
         imageScaling = .scaleProportionallyDown
-        // Crucial: Prevents the button from stealing focus from the search bar when clicked
         refusesFirstResponder = true
     }
 
     func setSelected(_ selected: Bool, animated: Bool = true) {
         self.state = selected ? .on : .off
+        updateVisuals(animated: animated)
+    }
 
+    private func updateVisuals(animated: Bool) {
+        let selected = self.state == .on
         let updateUI = {
             if selected {
                 self.contentTintColor = .white
                 self.layer?.backgroundColor = NSColor.controlAccentColor.cgColor
+                self.layer?.borderWidth = 0
             } else {
-                self.contentTintColor = .secondaryLabelColor
                 self.layer?.backgroundColor = NSColor.clear.cgColor
+                if self.hasItems {
+                    self.contentTintColor = NSColor.white.withAlphaComponent(0.8)
+                    self.layer?.borderColor = NSColor.white.withAlphaComponent(0.2).cgColor
+                    self.layer?.borderWidth = 1
+                } else {
+                    self.contentTintColor = .secondaryLabelColor
+                    self.layer?.borderWidth = 0
+                }
             }
         }
 
@@ -700,6 +715,31 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
         stack.alignment = .centerY
         stack.autoresizingMask = [.width]
 
+        // Pre-calculate which filters have items
+        var categoryCounts: [String: Int] = [
+            "link": 0, "image": 0, "text": 0, "file": 0, "number": 0, "email": 0, "code": 0
+        ]
+
+        for item in history {
+            let t = item.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            let textLower = t.lowercased()
+            let isImage = item.imageData != nil
+            let isCode = t.contains("{") || t.contains("}") || t.contains("<") || t.contains(">") || t.hasPrefix("func ") || t.hasPrefix("import ") || t.hasPrefix("class ")
+            let isLink = textLower.hasPrefix("http://") || textLower.hasPrefix("https://") || textLower.hasPrefix("www.")
+            let isEmail = t.contains("@") && t.contains(".") && !t.contains(" ") && t.count < 60
+            let isNum = t.range(of: "^[0-9 +().-]{5,}$", options: .regularExpression) != nil
+            let isFile = textLower.hasPrefix("file://") || textLower.hasPrefix("/")
+            let isText = !isImage && !isLink && !isEmail && !isNum && !isCode && !isFile
+
+            if isLink { categoryCounts["link"]! += 1 }
+            if isImage { categoryCounts["image"]! += 1 }
+            if isText { categoryCounts["text"]! += 1 }
+            if isFile { categoryCounts["file"]! += 1 }
+            if isCode { categoryCounts["code"]! += 1 }
+            if isNum { categoryCounts["number"]! += 1 }
+            if isEmail { categoryCounts["email"]! += 1 }
+        }
+
         for filter in filters {
             let btn = FilterButton(frame: .zero)
             btn.image = icon(filter.1)
@@ -707,6 +747,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
             btn.action = #selector(filterToggled(_:))
             btn.identifier = NSUserInterfaceItemIdentifier(filter.0)
             btn.toolTip = "Filter by \(filter.0)"
+
+            let count = categoryCounts[filter.0] ?? 0
+            btn.hasItems = count > 0
 
             if activeFilters.contains(filter.0) {
                 btn.setSelected(true, animated: false)
