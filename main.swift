@@ -72,11 +72,9 @@ class FilterButton: NSButton {
             } else {
                 self.layer?.backgroundColor = NSColor.clear.cgColor
                 if self.hasItems {
-                    // Bright, normal icon color when items exist
-                    self.contentTintColor = NSColor.white.withAlphaComponent(0.9)
+                    self.contentTintColor = .labelColor
                 } else {
-                    // Faded, greyish icon color when empty
-                    self.contentTintColor = NSColor.white.withAlphaComponent(0.3)
+                    self.contentTintColor = .tertiaryLabelColor
                 }
             }
         }
@@ -364,6 +362,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
            let pngData = bitmap.representation(using: .png, properties: [:]) {
             imageToStore = pngData
             textToStore = "[Image: \(Int(img.size.width))x\(Int(img.size.height))]"
+        } else if let fileURLs = pb.readObjects(forClasses: [NSURL.self], options: nil) as? [URL], let firstURL = fileURLs.first {
+            textToStore = firstURL.absoluteString
         } else if let text = pb.string(forType: .string),
                   !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             textToStore = text
