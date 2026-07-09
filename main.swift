@@ -6,7 +6,7 @@ import ServiceManagement
 //  ClipLocal — 100% on-device clipboard history, no third parties
 // ============================================================
 
-let appVersion = "1.7"
+let appVersion = "1.8"
 let updateCheckURL = "https://raw.githubusercontent.com/arunofhyd/ClipLocal/main/version.json"
 let downloadPageURL = "https://cliplocal.vercel.app/#install"
 
@@ -236,7 +236,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
 
         ⌘  Open the menu and press ⌘1–⌘9 to instantly copy any of your recent items.
 
-        🏷️  Each item shows a relevant icon — 🔗 links, ✉️ emails, #️⃣ numbers, 📄 notes, and 🖼️ images — so your history is easy to scan.
+        🏷️  Each item shows a relevant icon — 🔗 links, ✉️ emails, #️⃣ numbers, 🧑‍💻 code, 📄 notes, and 🖼️ images — so your history is easy to scan.
         """
         let para = NSMutableParagraphStyle()
         para.lineSpacing = 3
@@ -455,6 +455,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
         }
         let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
         let lower = t.lowercased()
+
+        let isCode = t.contains("{") || t.contains("}") || t.contains("<") || t.contains(">") || t.hasPrefix("func ") || t.hasPrefix("import ") || t.hasPrefix("class ")
+        if isCode {
+            return "curlybraces"
+        }
         if lower.hasPrefix("http://") || lower.hasPrefix("https://") || lower.hasPrefix("www.") {
             return "link"
         }
@@ -611,17 +616,19 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
                 let textLower = t.lowercased()
 
                 let isImage = item.imageData != nil
+                let isCode = t.contains("{") || t.contains("}") || t.contains("<") || t.contains(">") || t.hasPrefix("func ") || t.hasPrefix("import ") || t.hasPrefix("class ")
                 let isLink = textLower.hasPrefix("http://") || textLower.hasPrefix("https://") || textLower.hasPrefix("www.")
                 let isEmail = t.contains("@") && t.contains(".") && !t.contains(" ") && t.count < 60
                 let isNum = t.range(of: "^[0-9 +().-]{5,}$", options: .regularExpression) != nil
-                let isDoc = t.contains("\n") || t.count > 60
-                let isText = !isImage && !isLink && !isEmail && !isNum && !isDoc
+                let isDoc = (t.contains("\n") || t.count > 60) && !isCode
+                let isText = !isImage && !isLink && !isEmail && !isNum && !isCode && !isDoc
 
                 if activeFilters.contains("link") && isLink { filterMatched = true }
                 if activeFilters.contains("email") && isEmail { filterMatched = true }
                 if activeFilters.contains("number") && isNum { filterMatched = true }
                 if activeFilters.contains("image") && isImage { filterMatched = true }
                 if activeFilters.contains("doc") && isDoc { filterMatched = true }
+                if activeFilters.contains("code") && isCode { filterMatched = true }
                 if activeFilters.contains("text") && isText { filterMatched = true }
 
                 if !filterMatched {
@@ -678,12 +685,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
         filtersContainer.autoresizingMask = [.width]
 
         let filters = [
-            ("link", "link"),
-            ("image", "photo"),
-            ("text", "text.alignleft"),
+            ("code", "curlybraces"),
             ("doc", "doc.plaintext"),
+            ("email", "envelope"),
+            ("image", "photo"),
+            ("link", "link"),
             ("number", "number"),
-            ("email", "envelope")
+            ("text", "text.alignleft")
         ]
 
         let stack = NSStackView(frame: NSRect(x: 12, y: 5, width: 276, height: 22))
