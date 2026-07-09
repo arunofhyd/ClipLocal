@@ -492,15 +492,19 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
         // Delay making the search field first responder so it actually renders the blinking cursor
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
             guard let self = self, let sf = self.searchField, self.isMenuOpen else { return }
-            if sf.window?.firstResponder != sf {
-                sf.window?.makeFirstResponder(sf)
-            }
+
+            // Force re-evaluation of the field editor by first clearing focus
+            sf.window?.makeFirstResponder(nil)
+            sf.window?.makeFirstResponder(sf)
+
+            // selectText jumpstarts the field editor drawing state in menus
+            sf.selectText(nil)
+
             if let editor = sf.currentEditor() {
                 editor.moveToEndOfLine(nil)
             } else {
-                // If the field editor isn't available yet, wait a tiny bit longer
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-                    sf.window?.makeFirstResponder(sf)
+                    sf.selectText(nil)
                     sf.currentEditor()?.moveToEndOfLine(nil)
                 }
             }
@@ -511,6 +515,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
         isMenuOpen = false
         focusTimer?.invalidate()
         focusTimer = nil
+
+        // Defocus the search field so the next open creates a fresh field editor
+        searchField?.window?.makeFirstResponder(nil)
 
         // Reset search/filter state when menu closes
         currentSearchText = ""
