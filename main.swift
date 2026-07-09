@@ -492,22 +492,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
         // Delay making the search field first responder so it actually renders the blinking cursor
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
             guard let self = self, let sf = self.searchField, self.isMenuOpen else { return }
-
-            // Force re-evaluation of the field editor by first clearing focus
-            sf.window?.makeFirstResponder(nil)
             sf.window?.makeFirstResponder(sf)
-
-            // selectText jumpstarts the field editor drawing state in menus
             sf.selectText(nil)
-
-            if let editor = sf.currentEditor() {
-                editor.moveToEndOfLine(nil)
-            } else {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-                    sf.selectText(nil)
-                    sf.currentEditor()?.moveToEndOfLine(nil)
-                }
-            }
+            sf.currentEditor()?.moveToEndOfLine(nil)
         }
     }
 
@@ -530,6 +517,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
                 if let btn = v as? NSButton {
                     btn.state = .off
                     btn.contentTintColor = NSColor.secondaryLabelColor
+                    btn.layer?.backgroundColor = NSColor.clear.cgColor
                 }
             }
         }
@@ -555,10 +543,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
         let filterName = sender.identifier?.rawValue ?? ""
         if sender.state == .on {
             activeFilters.insert(filterName)
-            sender.contentTintColor = NSColor.controlAccentColor
+            sender.contentTintColor = NSColor.white
+            sender.layer?.backgroundColor = NSColor.controlAccentColor.cgColor
         } else {
             activeFilters.remove(filterName)
             sender.contentTintColor = NSColor.secondaryLabelColor
+            sender.layer?.backgroundColor = NSColor.clear.cgColor
         }
         applySearchAndFilter()
     }
@@ -666,8 +656,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
         for filter in filters {
             let btn = NSButton(frame: .zero)
             btn.setButtonType(.toggle)
-            btn.bezelStyle = .recessed
-            btn.showsBorderOnlyWhileMouseInside = true
+            btn.isBordered = false
+            btn.wantsLayer = true
+            btn.layer?.cornerRadius = 4
             btn.image = icon(filter.1)
             btn.imageScaling = .scaleProportionallyDown
             btn.target = self
@@ -678,10 +669,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
 
             if activeFilters.contains(filter.0) {
                 btn.state = .on
-                btn.contentTintColor = NSColor.controlAccentColor
+                btn.contentTintColor = NSColor.white
+                btn.layer?.backgroundColor = NSColor.controlAccentColor.cgColor
             } else {
                 btn.state = .off
                 btn.contentTintColor = NSColor.secondaryLabelColor
+                btn.layer?.backgroundColor = NSColor.clear.cgColor
             }
 
             btn.translatesAutoresizingMaskIntoConstraints = false
