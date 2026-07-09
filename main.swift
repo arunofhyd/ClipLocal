@@ -492,8 +492,18 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
         // Delay making the search field first responder so it actually renders the blinking cursor
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
             guard let self = self, let sf = self.searchField, self.isMenuOpen else { return }
-            sf.window?.makeFirstResponder(sf)
-            sf.currentEditor()?.moveToEndOfLine(nil)
+            if sf.window?.firstResponder != sf {
+                sf.window?.makeFirstResponder(sf)
+            }
+            if let editor = sf.currentEditor() {
+                editor.moveToEndOfLine(nil)
+            } else {
+                // If the field editor isn't available yet, wait a tiny bit longer
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                    sf.window?.makeFirstResponder(sf)
+                    sf.currentEditor()?.moveToEndOfLine(nil)
+                }
+            }
         }
     }
 
@@ -506,6 +516,16 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
         currentSearchText = ""
         activeFilters.removeAll()
         searchField?.stringValue = ""
+
+        // Un-highlight filter buttons
+        if let stack = filtersMenuItem?.view?.subviews.compactMap({ $0 as? NSStackView }).first {
+            for v in stack.views {
+                if let btn = v as? NSButton {
+                    btn.state = .off
+                    btn.contentTintColor = NSColor.secondaryLabelColor
+                }
+            }
+        }
 
         // Show all items again just in case the menu object is reused by OS
         for item in historyMenuItems {
@@ -549,18 +569,22 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
             var matchesFilter = true
             if !activeFilters.isEmpty {
                 let textLower = item.text.lowercased()
+                // A filter acts as an OR among the active filters
                 var filterMatched = false
 
-                if activeFilters.contains("link") && (textLower.hasPrefix("http://") || textLower.hasPrefix("https://")) { filterMatched = true }
-                if activeFilters.contains("email") && textLower.contains("@") && !textLower.contains(" ") { filterMatched = true }
-
+                let isLink = textLower.hasPrefix("http://") || textLower.hasPrefix("https://")
+                let isEmail = textLower.contains("@") && !textLower.contains(" ") && !textLower.hasPrefix("http")
                 let isNum = Double(textLower.trimmingCharacters(in: .whitespacesAndNewlines)) != nil
+                let isImage = item.imageData != nil
+                let isDoc = textLower.hasPrefix("file://")
+                let isText = !isNum && !isLink && !isImage && !isDoc && !isEmail
+
+                if activeFilters.contains("link") && isLink { filterMatched = true }
+                if activeFilters.contains("email") && isEmail { filterMatched = true }
                 if activeFilters.contains("number") && isNum { filterMatched = true }
-
-                if activeFilters.contains("image") && item.imageData != nil { filterMatched = true }
-
-                if activeFilters.contains("text") && !isNum && !textLower.hasPrefix("http") && item.imageData == nil { filterMatched = true }
-                if activeFilters.contains("doc") && textLower.hasPrefix("file://") { filterMatched = true }
+                if activeFilters.contains("image") && isImage { filterMatched = true }
+                if activeFilters.contains("doc") && isDoc { filterMatched = true }
+                if activeFilters.contains("text") && isText { filterMatched = true }
 
                 if !filterMatched {
                     matchesFilter = false
