@@ -52,7 +52,7 @@ enum PrivacyMode: String {
 }
 
 // MARK: - The app
-class AppDelegate: NSObject, NSApplicationDelegate {
+class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFieldDelegate {
     var statusItem: NSStatusItem!
     var timer: Timer?
     var lastChangeCount = NSPasteboard.general.changeCount
@@ -60,6 +60,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     let key = KeyStore.loadOrCreateKey()
     let defaults = UserDefaults.standard
     var previewWindow: NSWindow?
+
+    var isMenuOpen = false
+    var currentSearchText = ""
+    var activeFilters: Set<String> = []
+    var historyMenuItems: [NSMenuItem] = []
+    var searchField: NSSearchField?
+    var needsRebuildAfterClose = false
+    var filtersMenuItem: NSMenuItem?
+    var focusTimer: Timer?
+
 
     var mode: PrivacyMode {
         get { PrivacyMode(rawValue: defaults.string(forKey: "mode") ?? "session") ?? .session }
@@ -459,8 +469,112 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         return title
     }
 
+
+    // MARK: - NSMenuDelegate & Search/Filter Actions
+    func menuWillOpen(_ menu: NSMenu) {
+        isMenuOpen = true
+
+        focusTimer?.invalidate()
+        let timer = Timer(timeInterval: 0.05, repeats: true) { [weak self] _ in
+            guard let self = self, let sf = self.searchField else { return }
+            let isFocused = (sf.window?.firstResponder == sf) || (sf.currentEditor() != nil && sf.window?.firstResponder == sf.currentEditor())
+            if let item = self.filtersMenuItem {
+                if isFocused && item.isHidden {
+                    item.isHidden = false
+                } else if !isFocused && !item.isHidden {
+                    item.isHidden = true
+                }
+            }
+        }
+        RunLoop.current.add(timer, forMode: .common)
+        self.focusTimer = timer
+
+        // Delay making the search field first responder so it actually renders the blinking cursor
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
+            guard let self = self, let sf = self.searchField, self.isMenuOpen else { return }
+            sf.window?.makeFirstResponder(sf)
+            sf.currentEditor()?.moveToEndOfLine(nil)
+        }
+    }
+
+    func menuDidClose(_ menu: NSMenu) {
+        isMenuOpen = false
+        focusTimer?.invalidate()
+        focusTimer = nil
+
+        // Reset search/filter state when menu closes
+        currentSearchText = ""
+        activeFilters.removeAll()
+        searchField?.stringValue = ""
+
+        // Show all items again just in case the menu object is reused by OS
+        for item in historyMenuItems {
+            item.isHidden = false
+        }
+
+        if needsRebuildAfterClose {
+            needsRebuildAfterClose = false
+            rebuildMenu()
+        }
+    }
+
+    func controlTextDidChange(_ obj: Notification) {
+        guard let field = obj.object as? NSSearchField else { return }
+        currentSearchText = field.stringValue.lowercased()
+        applySearchAndFilter()
+    }
+
+    @objc func filterToggled(_ sender: NSButton) {
+        let filterName = sender.identifier?.rawValue ?? ""
+        if sender.state == .on {
+            activeFilters.insert(filterName)
+            sender.contentTintColor = NSColor.controlAccentColor
+        } else {
+            activeFilters.remove(filterName)
+            sender.contentTintColor = NSColor.secondaryLabelColor
+        }
+        applySearchAndFilter()
+    }
+
+    func applySearchAndFilter() {
+        for (i, item) in history.enumerated() {
+            guard i < historyMenuItems.count else { continue }
+            let menuItem = historyMenuItems[i]
+
+            var matchesSearch = true
+            if !currentSearchText.isEmpty {
+                matchesSearch = item.text.lowercased().contains(currentSearchText)
+            }
+
+            var matchesFilter = true
+            if !activeFilters.isEmpty {
+                let textLower = item.text.lowercased()
+                var filterMatched = false
+
+                if activeFilters.contains("link") && (textLower.hasPrefix("http://") || textLower.hasPrefix("https://")) { filterMatched = true }
+                if activeFilters.contains("email") && textLower.contains("@") && !textLower.contains(" ") { filterMatched = true }
+
+                let isNum = Double(textLower.trimmingCharacters(in: .whitespacesAndNewlines)) != nil
+                if activeFilters.contains("number") && isNum { filterMatched = true }
+
+                if activeFilters.contains("image") && item.imageData != nil { filterMatched = true }
+
+                if activeFilters.contains("text") && !isNum && !textLower.hasPrefix("http") && item.imageData == nil { filterMatched = true }
+                if activeFilters.contains("doc") && textLower.hasPrefix("file://") { filterMatched = true }
+
+                if !filterMatched {
+                    matchesFilter = false
+                }
+            }
+
+            menuItem.isHidden = !(matchesSearch && matchesFilter)
+        }
+    }
+
     func rebuildMenu() {
         let menu = NSMenu()
+        menu.delegate = self
+
         let header = NSMenuItem(title: "ClipLocal — History (\(history.count))", action: nil, keyEquivalent: "")
         header.image = icon("doc.on.clipboard")
         // Hover the header to choose how many items to keep.
@@ -480,6 +594,78 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(header)
         menu.addItem(.separator())
 
+        // --- Search and Filter UI ---
+        let searchViewItem = NSMenuItem()
+        let searchContainer = NSView(frame: NSRect(x: 0, y: 0, width: 300, height: 32))
+        searchContainer.autoresizingMask = [.width]
+
+        let sf = NSSearchField(frame: NSRect(x: 12, y: 5, width: 276, height: 22))
+        sf.autoresizingMask = [.width]
+        sf.placeholderString = "Search history..."
+        sf.delegate = self
+        sf.focusRingType = .none
+        sf.stringValue = currentSearchText
+        self.searchField = sf
+        searchContainer.addSubview(sf)
+
+        searchViewItem.view = searchContainer
+        menu.addItem(searchViewItem)
+
+        let filtersMenuItem = NSMenuItem()
+        let filtersContainer = NSView(frame: NSRect(x: 0, y: 0, width: 300, height: 32))
+        filtersContainer.autoresizingMask = [.width]
+
+        let filters = [
+            ("link", "link"),
+            ("image", "photo"),
+            ("text", "text.alignleft"),
+            ("doc", "doc.plaintext"),
+            ("number", "number"),
+            ("email", "envelope")
+        ]
+
+        let stack = NSStackView(frame: NSRect(x: 12, y: 5, width: 276, height: 22))
+        stack.orientation = .horizontal
+        stack.distribution = .equalSpacing
+        stack.alignment = .centerY
+        stack.autoresizingMask = [.width]
+
+        for (i, filter) in filters.enumerated() {
+            let btn = NSButton(frame: .zero)
+            btn.setButtonType(.toggle)
+            btn.bezelStyle = .recessed
+            btn.showsBorderOnlyWhileMouseInside = true
+            btn.image = icon(filter.1)
+            btn.imageScaling = .scaleProportionallyDown
+            btn.target = self
+            btn.action = #selector(filterToggled(_:))
+            btn.identifier = NSUserInterfaceItemIdentifier(filter.0)
+            btn.toolTip = "Filter by \(filter.0)"
+            btn.refusesFirstResponder = true
+
+            if activeFilters.contains(filter.0) {
+                btn.state = .on
+                btn.contentTintColor = NSColor.controlAccentColor
+            } else {
+                btn.state = .off
+                btn.contentTintColor = NSColor.secondaryLabelColor
+            }
+
+            btn.translatesAutoresizingMaskIntoConstraints = false
+            btn.widthAnchor.constraint(equalToConstant: 28).isActive = true
+            btn.heightAnchor.constraint(equalToConstant: 22).isActive = true
+            stack.addView(btn, in: .leading)
+        }
+
+        filtersContainer.addSubview(stack)
+        filtersMenuItem.view = filtersContainer
+        filtersMenuItem.isHidden = true
+        self.filtersMenuItem = filtersMenuItem
+        menu.addItem(filtersMenuItem)
+        menu.addItem(.separator())
+        // --- End Search and Filter UI ---
+
+        historyMenuItems.removeAll()
         if history.isEmpty {
             let empty = NSMenuItem(title: "— empty —", action: nil, keyEquivalent: "")
             empty.isEnabled = false
@@ -527,9 +713,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 sub.addItem(copyA); sub.addItem(pinA); sub.addItem(.separator()); sub.addItem(delA)
                 mi.submenu = sub
                 menu.addItem(mi)
+                historyMenuItems.append(mi)
             }
         }
         menu.addItem(.separator())
+
+        applySearchAndFilter() // apply initially
 
         let clear = NSMenuItem(title: "Clear History Now", action: #selector(clearNow), keyEquivalent: "")
         clear.attributedTitle = paintedTitle(for: "Clear History Now", shortcut: "⌘⌫")
