@@ -532,6 +532,17 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
             item.isHidden = false
         }
 
+        // Reset filter button UI states
+        if let view = filtersMenuItem?.view, let stack = view.subviews.compactMap({ $0 as? NSStackView }).first {
+            for v in stack.views {
+                if let btn = v as? NSButton {
+                    btn.state = .off
+                    btn.contentTintColor = NSColor.secondaryLabelColor
+                    btn.showsBorderOnlyWhileMouseInside = true
+                }
+            }
+        }
+
         if needsRebuildAfterClose {
             needsRebuildAfterClose = false
             rebuildMenu()
@@ -549,9 +560,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
         if sender.state == .on {
             activeFilters.insert(filterName)
             sender.contentTintColor = NSColor.controlAccentColor
+            sender.showsBorderOnlyWhileMouseInside = false
         } else {
             activeFilters.remove(filterName)
             sender.contentTintColor = NSColor.secondaryLabelColor
+            sender.showsBorderOnlyWhileMouseInside = true
         }
         applySearchAndFilter()
     }
@@ -568,16 +581,18 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
 
             var matchesFilter = true
             if !activeFilters.isEmpty {
-                let textLower = item.text.lowercased()
                 // A filter acts as an OR among the active filters
                 var filterMatched = false
 
-                let isLink = textLower.hasPrefix("http://") || textLower.hasPrefix("https://")
-                let isEmail = textLower.contains("@") && !textLower.contains(" ") && !textLower.hasPrefix("http")
-                let isNum = Double(textLower.trimmingCharacters(in: .whitespacesAndNewlines)) != nil
+                let t = item.text.trimmingCharacters(in: .whitespacesAndNewlines)
+                let textLower = t.lowercased()
+
                 let isImage = item.imageData != nil
-                let isDoc = textLower.hasPrefix("file://")
-                let isText = !isNum && !isLink && !isImage && !isDoc && !isEmail
+                let isLink = textLower.hasPrefix("http://") || textLower.hasPrefix("https://") || textLower.hasPrefix("www.")
+                let isEmail = t.contains("@") && t.contains(".") && !t.contains(" ") && t.count < 60
+                let isNum = t.range(of: "^[0-9 +().-]{5,}$", options: .regularExpression) != nil
+                let isDoc = t.contains("\n") || t.count > 60
+                let isText = !isImage && !isLink && !isEmail && !isNum && !isDoc
 
                 if activeFilters.contains("link") && isLink { filterMatched = true }
                 if activeFilters.contains("email") && isEmail { filterMatched = true }
@@ -670,9 +685,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
             if activeFilters.contains(filter.0) {
                 btn.state = .on
                 btn.contentTintColor = NSColor.controlAccentColor
+                btn.showsBorderOnlyWhileMouseInside = false
             } else {
                 btn.state = .off
                 btn.contentTintColor = NSColor.secondaryLabelColor
+                btn.showsBorderOnlyWhileMouseInside = true
             }
 
             btn.translatesAutoresizingMaskIntoConstraints = false
