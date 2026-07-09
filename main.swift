@@ -236,7 +236,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
 
         ⌘  Open the menu and press ⌘1–⌘9 to instantly copy any of your recent items.
 
-        🏷️  Each item shows a relevant icon — 🔗 links, ✉️ emails, #️⃣ numbers, 🧑‍💻 code, 📄 notes, and 🖼️ images — so your history is easy to scan.
+        🏷️  Each item shows a relevant icon — 🔗 links, ✉️ emails, #️⃣ numbers, 🧑‍💻 code, 📄 files, and 🖼️ images — so your history is easy to scan.
         """
         let para = NSMutableParagraphStyle()
         para.lineSpacing = 3
@@ -458,7 +458,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
 
         let isCode = t.contains("{") || t.contains("}") || t.contains("<") || t.contains(">") || t.hasPrefix("func ") || t.hasPrefix("import ") || t.hasPrefix("class ")
         if isCode {
-            return "curlybraces"
+            return "chevron.left.forwardslash.chevron.right"
         }
         if lower.hasPrefix("http://") || lower.hasPrefix("https://") || lower.hasPrefix("www.") {
             return "link"
@@ -469,8 +469,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
         if t.range(of: "^[0-9 +().-]{5,}$", options: .regularExpression) != nil {
             return "number"
         }
-        if t.contains("\n") || t.count > 60 {
-            return "doc.plaintext"
+        if lower.hasPrefix("file://") || lower.hasPrefix("/") {
+            return "doc"
         }
         return "text.alignleft"
     }
@@ -620,14 +620,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
                 let isLink = textLower.hasPrefix("http://") || textLower.hasPrefix("https://") || textLower.hasPrefix("www.")
                 let isEmail = t.contains("@") && t.contains(".") && !t.contains(" ") && t.count < 60
                 let isNum = t.range(of: "^[0-9 +().-]{5,}$", options: .regularExpression) != nil
-                let isDoc = (t.contains("\n") || t.count > 60) && !isCode
-                let isText = !isImage && !isLink && !isEmail && !isNum && !isCode && !isDoc
+                let isFile = textLower.hasPrefix("file://") || textLower.hasPrefix("/")
+                let isText = !isImage && !isLink && !isEmail && !isNum && !isCode && !isFile
 
                 if activeFilters.contains("link") && isLink { filterMatched = true }
                 if activeFilters.contains("email") && isEmail { filterMatched = true }
                 if activeFilters.contains("number") && isNum { filterMatched = true }
                 if activeFilters.contains("image") && isImage { filterMatched = true }
-                if activeFilters.contains("doc") && isDoc { filterMatched = true }
+                if activeFilters.contains("file") && isFile { filterMatched = true }
                 if activeFilters.contains("code") && isCode { filterMatched = true }
                 if activeFilters.contains("text") && isText { filterMatched = true }
 
@@ -685,9 +685,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
         filtersContainer.autoresizingMask = [.width]
 
         let filters = [
-            ("code", "curlybraces"),
-            ("doc", "doc.plaintext"),
+            ("code", "chevron.left.forwardslash.chevron.right"),
             ("email", "envelope"),
+            ("file", "doc"),
             ("image", "photo"),
             ("link", "link"),
             ("number", "number"),

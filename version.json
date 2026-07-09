@@ -7,6 +7,7 @@
       "date": "August 2026",
       "changes": [
         "Added 'Code' smart icon category and filter",
+        "Renamed 'Notes' category to 'Files' with improved local path parsing",
         "Redesigned search and filter menu layout",
         "Filters are now dynamically shown when searching",
         "Filters are sorted alphabetically"
