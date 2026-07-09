@@ -69,12 +69,15 @@ class FilterButton: NSButton {
             if selected {
                 self.contentTintColor = .white
                 self.layer?.backgroundColor = NSColor.controlAccentColor.cgColor
+                self.alphaValue = 1.0
             } else {
+                self.contentTintColor = .secondaryLabelColor
                 self.layer?.backgroundColor = NSColor.clear.cgColor
+
                 if self.hasItems {
-                    self.contentTintColor = .labelColor
+                    self.alphaValue = 1.0
                 } else {
-                    self.contentTintColor = .tertiaryLabelColor
+                    self.alphaValue = 0.3
                 }
             }
         }
@@ -158,6 +161,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
     var showImageDimensions: Bool {
         get { defaults.bool(forKey: "showImageDimensions") }
         set { defaults.set(newValue, forKey: "showImageDimensions"); rebuildMenu() }
+    }
+    var showFullFilePath: Bool {
+        get { defaults.bool(forKey: "showFullFilePath") }
+        set { defaults.set(newValue, forKey: "showFullFilePath"); rebuildMenu() }
     }
     var maxItems: Int {
         get { let v = defaults.integer(forKey: "maxItems"); return v == 0 ? 50 : v }
@@ -356,14 +363,15 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
         var textToStore = ""
         var imageToStore: Data? = nil
 
-        if let img = NSImage(pasteboard: pb),
+        if let fileURLs = pb.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL], let firstURL = fileURLs.first, firstURL.isFileURL {
+            // macOS often puts the file's icon in the pasteboard too. We must check for files FIRST.
+            textToStore = firstURL.path // Use neat /Users/... instead of file:///...
+        } else if let img = NSImage(pasteboard: pb),
            let tiff = img.tiffRepresentation,
            let bitmap = NSBitmapImageRep(data: tiff),
            let pngData = bitmap.representation(using: .png, properties: [:]) {
             imageToStore = pngData
             textToStore = "[Image: \(Int(img.size.width))x\(Int(img.size.height))]"
-        } else if let fileURLs = pb.readObjects(forClasses: [NSURL.self], options: nil) as? [URL], let firstURL = fileURLs.first {
-            textToStore = firstURL.absoluteString
         } else if let text = pb.string(forType: .string),
                   !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             textToStore = text
@@ -778,7 +786,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
             menu.addItem(empty)
         } else {
             for (i, item) in history.enumerated() {
-                let oneLine = item.text
+                var displayText = item.text
+                if !showFullFilePath && (item.text.hasPrefix("file://") || item.text.hasPrefix("/")) {
+                    let path = item.text.hasPrefix("file://") ? String(item.text.dropFirst(7)) : item.text
+                    displayText = URL(fileURLWithPath: path).lastPathComponent
+                }
+                let oneLine = displayText
                     .replacingOccurrences(of: "\n", with: " ")
                     .trimmingCharacters(in: .whitespacesAndNewlines)
                 let snippet = oneLine.count > 34 ? String(oneLine.prefix(34)) + "…" : oneLine
@@ -869,6 +882,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
         showDims.state = showImageDimensions ? .on : .off
         prefsSub.addItem(showDims)
 
+        let showPaths = NSMenuItem(title: "Show full file paths",
+                                  action: #selector(toggleShowFullFilePath), keyEquivalent: "")
+        showPaths.image = icon("folder")
+        showPaths.target = self
+        showPaths.state = showFullFilePath ? .on : .off
+        prefsSub.addItem(showPaths)
+
         let launch = NSMenuItem(title: "Launch at Login",
                                 action: #selector(toggleLaunchAtLogin), keyEquivalent: "")
         launch.image = icon("power")
@@ -953,6 +973,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
     @objc func setPersistent() { mode = .persistent; saveHistory() }
     @objc func toggleSkip() { skipConcealed.toggle() }
     @objc func toggleShowImageDimensions() { showImageDimensions.toggle() }
+    @objc func toggleShowFullFilePath() { showFullFilePath.toggle() }
 
     @objc func setHistorySize(_ sender: NSMenuItem) {
         maxItems = sender.tag
