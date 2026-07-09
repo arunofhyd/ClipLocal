@@ -1,7 +1,17 @@
 {
-  "version": "1.7",
+  "version": "1.8",
   "downloadURL": "https://cliplocal.vercel.app/#install",
   "changelog": [
+    {
+      "version": "1.8",
+      "date": "August 2026",
+      "changes": [
+        "Added 'Code' smart icon category and filter",
+        "Redesigned search and filter menu layout",
+        "Filters are now dynamically shown when searching",
+        "Filters are sorted alphabetically"
+      ]
+    },
     {
       "version": "1.7",
       "date": "August 2026",
