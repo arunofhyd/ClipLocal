@@ -7,13 +7,78 @@ import ServiceManagement
 // ============================================================
 
 let appVersion = "1.7"
-// The update check reads this small file from your GitHub. It's the ONLY
-// network request the app ever makes. Nothing else leaves the Mac.
 let updateCheckURL = "https://raw.githubusercontent.com/arunofhyd/ClipLocal/main/version.json"
 let downloadPageURL = "https://cliplocal.vercel.app/#install"
 
-// MARK: - Encryption key (stored in a protected local file, NOT the Keychain,
-//         so macOS never shows a scary Keychain-access prompt).
+// MARK: - Custom UI Components
+
+/// Ensures the NSSearchField reliably grabs focus and shows the blinking cursor inside an NSMenu.
+class MenuSearchField: NSSearchField {
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if window != nil {
+            // Attempt to grab focus immediately when added to the window
+            self.window?.makeFirstResponder(self)
+
+            // Dispatch asynchronously to guarantee it catches the cursor blink
+            // after the menu has fully transitioned onto the screen.
+            DispatchQueue.main.async { [weak self] in
+                guard let self = self, let win = self.window else { return }
+                win.makeFirstResponder(self)
+                self.currentEditor()?.moveToEndOfLine(nil)
+            }
+        }
+    }
+}
+
+/// Provides a smooth, animated background highlight when selecting filters.
+class FilterButton: NSButton {
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        setup()
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        setup()
+    }
+
+    private func setup() {
+        setButtonType(.toggle)
+        isBordered = false
+        wantsLayer = true
+        layer?.cornerRadius = 5
+        imageScaling = .scaleProportionallyDown
+        // Crucial: Prevents the button from stealing focus from the search bar when clicked
+        refusesFirstResponder = true
+    }
+
+    func setSelected(_ selected: Bool, animated: Bool = true) {
+        self.state = selected ? .on : .off
+
+        let updateUI = {
+            if selected {
+                self.contentTintColor = .white
+                self.layer?.backgroundColor = NSColor.controlAccentColor.cgColor
+            } else {
+                self.contentTintColor = .secondaryLabelColor
+                self.layer?.backgroundColor = NSColor.clear.cgColor
+            }
+        }
+
+        if animated {
+            NSAnimationContext.runAnimationGroup { ctx in
+                ctx.duration = 0.15
+                ctx.allowsImplicitAnimation = true
+                updateUI()
+            }
+        } else {
+            updateUI()
+        }
+    }
+}
+
+// MARK: - Encryption key (stored in a protected local file)
 enum KeyStore {
     static var keyURL: URL {
         let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -28,7 +93,6 @@ enum KeyStore {
         }
         let key = SymmetricKey(size: .bits256)
         let data = key.withUnsafeBytes { Data($0) }
-        // Write with owner-only permissions (0600) and file protection.
         try? data.write(to: keyURL, options: .completeFileProtection)
         try? FileManager.default.setAttributes([.posixPermissions: 0o600],
                                                ofItemAtPath: keyURL.path)
@@ -70,9 +134,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
     var filtersMenuItem: NSMenuItem?
     var focusTimer: Timer?
 
-
     var mode: PrivacyMode {
-        get { PrivacyMode(rawValue: defaults.string(forKey: "mode") ?? "session") ?? .session }
+        get { PrivacyMode(rawValue: defaults.string(forKey: "mode") ?? "persistent") ?? .persistent }
         set { defaults.set(newValue.rawValue, forKey: "mode"); persistIfNeeded(); rebuildMenu() }
     }
     var skipConcealed: Bool {
@@ -89,6 +152,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        if defaults.object(forKey: "hasLaunchedBefore") == nil {
+            defaults.set(true, forKey: "hasLaunchedBefore")
+            try? SMAppService.mainApp.register()
+        }
+
         NSApp.setActivationPolicy(.accessory) // menu-bar only, no dock icon
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         if let button = statusItem.button {
@@ -130,7 +198,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
         bg.state = .active
         bg.wantsLayer = true
 
-        // App glyph
         let icon = NSImageView(frame: NSRect(x: (width - 72)/2, y: height - 120, width: 72, height: 72))
         let cfg = NSImage.SymbolConfiguration(pointSize: 60, weight: .regular)
         icon.image = NSImage(systemSymbolName: "lock.doc.fill", accessibilityDescription: nil)?
@@ -158,8 +225,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
         tagline.textColor = .secondaryLabelColor
         bg.addSubview(tagline)
 
-        // Privacy body — a wrapping label that MEASURES its own height,
-        // so nothing above or below can ever overlap it.
         let bodyText = """
         🔒  100% on-device. Your clipboard data NEVER leaves your Mac — no cloud, no servers, no accounts, no analytics, no third parties. Ever.
 
@@ -181,7 +246,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
             .paragraphStyle: para
         ])
         let bodyWidth = width - 80
-        // Measure the REAL wrapped height reliably (sizeToFit under-measures).
         let measured = attr.boundingRect(
             with: NSSize(width: bodyWidth, height: .greatestFiniteMagnitude),
             options: [.usesLineFragmentOrigin, .usesFontLeading])
@@ -190,22 +254,16 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
         privacy.lineBreakMode = .byWordWrapping
         privacy.maximumNumberOfLines = 0
         privacy.preferredMaxLayoutWidth = bodyWidth
-        // Top of the text sits 24px below the tagline.
         let textTop = (height - 210) - 24
 
-        // Dynamically compute the required window height and update it.
-        // The bottom elements require roughly 150px of space:
-        // Credit (18) + padding (30) + DontShow (20) + padding (20) + Buttons (32) + BottomMargin (26)
         let bottomSpaceNeeded: CGFloat = 160
         let newHeight = (height - textTop) + textHeight + bottomSpaceNeeded
         let finalHeight = max(height, newHeight)
 
-        // Adjust the window's frame to the new computed height
         let oldFrame = win.frame
         win.setFrame(NSRect(x: oldFrame.minX, y: oldFrame.maxY - finalHeight, width: width, height: finalHeight), display: true)
         bg.frame = NSRect(x: 0, y: 0, width: width, height: finalHeight)
 
-        // Relocate all top-anchored views since height changed
         icon.frame.origin.y = finalHeight - 120
         name.frame.origin.y = finalHeight - 164
         version.frame.origin.y = finalHeight - 186
@@ -215,7 +273,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
         privacy.frame = NSRect(x: 40, y: newTextTop - textHeight, width: bodyWidth, height: textHeight)
         bg.addSubview(privacy)
 
-        // Credit — placed below the measured text
         let credit = NSTextField(labelWithString: "Built by Arun Thomas")
         credit.frame = NSRect(x: 0, y: (newTextTop - textHeight) - 34, width: width, height: 18)
         credit.alignment = .center
@@ -223,20 +280,17 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
         credit.textColor = .secondaryLabelColor
         bg.addSubview(credit)
 
-        // "Don't show again" toggle — sized to content and centered.
         let dontShow = NSButton(checkboxWithTitle: "Don't show again",
                                 target: self, action: #selector(toggleHideAbout(_:)))
         dontShow.font = NSFont.systemFont(ofSize: 11)
         dontShow.sizeToFit()
         let dsW = dontShow.frame.width
-        // Anchor to the credit position to guarantee no overlaps
         let dontShowY = credit.frame.minY - 40
         dontShow.frame = NSRect(x: (width - dsW)/2, y: dontShowY, width: dsW, height: 20)
         dontShow.state = defaults.bool(forKey: "hideAbout") ? .on : .off
         bg.addSubview(dontShow)
 
         let contact = NSButton(title: "Contact", target: self, action: #selector(contactDeveloper))
-        // Anchor buttons below "Don't show again" safely
         let buttonsY = dontShow.frame.minY - 48
         contact.frame = NSRect(x: 40, y: buttonsY, width: 100, height: 32)
         contact.bezelStyle = .rounded
@@ -395,7 +449,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
             .withSymbolConfiguration(cfg)
     }
 
-    // Pick a relevant SF Symbol based on what the copied text looks like.
     func iconName(for text: String) -> String {
         if text.hasPrefix("[Image:") {
             return "photo"
@@ -419,7 +472,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
 
     func paintedTitle(for text: String, shortcut: String, isSubmenu: Bool = false, image: NSImage? = nil) -> NSAttributedString {
         let para = NSMutableParagraphStyle()
-        // Submenu items need a slightly smaller tab stop to align correctly with the macOS ">" arrow space taking up the right edge
         let tabLocation: CGFloat = isSubmenu ? 295.25 : 300
         para.tabStops = [NSTextTab(textAlignment: .right, location: tabLocation)]
         para.lineBreakMode = .byTruncatingTail
@@ -427,11 +479,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
         let title = NSMutableAttributedString()
 
         if let img = image {
-            // Scale the image down to exactly match the standard menu line height (~14px)
-            // so we get a tiny inline preview without expanding the menu row vertically.
             let targetHeight: CGFloat = 14.0
             let ratio = img.size.width / img.size.height
-            // Restrict maximum width so extremely wide panoramas don't break the layout
             let targetWidth = min(targetHeight * ratio, 250.0)
 
             let scaledImage = NSImage(size: NSSize(width: targetWidth, height: targetHeight))
@@ -441,12 +490,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
 
             let attachment = NSTextAttachment()
             attachment.image = scaledImage
-            // Slight baseline offset to align perfectly with the surrounding text/icons
             attachment.bounds = NSRect(x: 0, y: -2, width: targetWidth, height: targetHeight)
 
             title.append(NSAttributedString(attachment: attachment))
 
-            // If the user wants to see dimensions, append them (e.g., extract "1024x768" from "[Image: 1024x768]")
             if showImageDimensions, text.hasPrefix("[Image: "), text.hasSuffix("]") {
                 let dims = text.dropFirst(8).dropLast()
                 title.append(NSAttributedString(
@@ -469,33 +516,31 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
         return title
     }
 
-
     // MARK: - NSMenuDelegate & Search/Filter Actions
     func menuWillOpen(_ menu: NSMenu) {
         isMenuOpen = true
-
         focusTimer?.invalidate()
-        let timer = Timer(timeInterval: 0.05, repeats: true) { [weak self] _ in
+
+        // This timer intelligently keeps filters visible while searching OR if filters are active
+        let timer = Timer(timeInterval: 0.1, repeats: true) { [weak self] _ in
             guard let self = self, let sf = self.searchField else { return }
+
+            // Check if the search field or its active field editor currently has focus
             let isFocused = (sf.window?.firstResponder == sf) || (sf.currentEditor() != nil && sf.window?.firstResponder == sf.currentEditor())
+
+            // Show the filters if we are typing OR if we have actively applied any filter.
+            let shouldShow = isFocused || !self.activeFilters.isEmpty
+
             if let item = self.filtersMenuItem {
-                if isFocused && item.isHidden {
+                if shouldShow && item.isHidden {
                     item.isHidden = false
-                } else if !isFocused && !item.isHidden {
+                } else if !shouldShow && !item.isHidden {
                     item.isHidden = true
                 }
             }
         }
         RunLoop.current.add(timer, forMode: .common)
         self.focusTimer = timer
-
-        // Delay making the search field first responder so it actually renders the blinking cursor
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
-            guard let self = self, let sf = self.searchField, self.isMenuOpen else { return }
-            sf.window?.makeFirstResponder(sf)
-            sf.selectText(nil)
-            sf.currentEditor()?.moveToEndOfLine(nil)
-        }
     }
 
     func menuDidClose(_ menu: NSMenu) {
@@ -503,26 +548,21 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
         focusTimer?.invalidate()
         focusTimer = nil
 
-        // Defocus the search field so the next open creates a fresh field editor
         searchField?.window?.makeFirstResponder(nil)
 
-        // Reset search/filter state when menu closes
         currentSearchText = ""
         activeFilters.removeAll()
         searchField?.stringValue = ""
 
-        // Un-highlight filter buttons
+        // Smoothly un-highlight custom filter buttons
         if let stack = filtersMenuItem?.view?.subviews.compactMap({ $0 as? NSStackView }).first {
             for v in stack.views {
-                if let btn = v as? NSButton {
-                    btn.state = .off
-                    btn.contentTintColor = NSColor.secondaryLabelColor
-                    btn.layer?.backgroundColor = NSColor.clear.cgColor
+                if let btn = v as? FilterButton {
+                    btn.setSelected(false, animated: false)
                 }
             }
         }
 
-        // Show all items again just in case the menu object is reused by OS
         for item in historyMenuItems {
             item.isHidden = false
         }
@@ -539,16 +579,16 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
         applySearchAndFilter()
     }
 
-    @objc func filterToggled(_ sender: NSButton) {
+    @objc func filterToggled(_ sender: FilterButton) {
         let filterName = sender.identifier?.rawValue ?? ""
-        if sender.state == .on {
+        let isActivating = sender.state == .on
+
+        sender.setSelected(isActivating, animated: true)
+
+        if isActivating {
             activeFilters.insert(filterName)
-            sender.contentTintColor = NSColor.white
-            sender.layer?.backgroundColor = NSColor.controlAccentColor.cgColor
         } else {
             activeFilters.remove(filterName)
-            sender.contentTintColor = NSColor.secondaryLabelColor
-            sender.layer?.backgroundColor = NSColor.clear.cgColor
         }
         applySearchAndFilter()
     }
@@ -565,7 +605,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
 
             var matchesFilter = true
             if !activeFilters.isEmpty {
-                // A filter acts as an OR among the active filters
                 var filterMatched = false
 
                 let t = item.text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -600,7 +639,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
 
         let header = NSMenuItem(title: "ClipLocal — History (\(history.count))", action: nil, keyEquivalent: "")
         header.image = icon("doc.on.clipboard")
-        // Hover the header to choose how many items to keep.
         let sizeSub = NSMenu()
         let sizeTitle = NSMenuItem(title: "Keep up to…", action: nil, keyEquivalent: "")
         sizeTitle.isEnabled = false
@@ -622,7 +660,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
         let searchContainer = NSView(frame: NSRect(x: 0, y: 0, width: 300, height: 32))
         searchContainer.autoresizingMask = [.width]
 
-        let sf = NSSearchField(frame: NSRect(x: 12, y: 5, width: 276, height: 22))
+        // Using our subclass to fix NSMenu cursor bugs
+        let sf = MenuSearchField(frame: NSRect(x: 12, y: 5, width: 276, height: 22))
         sf.autoresizingMask = [.width]
         sf.placeholderString = "Search history..."
         sf.delegate = self
@@ -654,27 +693,17 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
         stack.autoresizingMask = [.width]
 
         for filter in filters {
-            let btn = NSButton(frame: .zero)
-            btn.setButtonType(.toggle)
-            btn.isBordered = false
-            btn.wantsLayer = true
-            btn.layer?.cornerRadius = 4
+            let btn = FilterButton(frame: .zero)
             btn.image = icon(filter.1)
-            btn.imageScaling = .scaleProportionallyDown
             btn.target = self
             btn.action = #selector(filterToggled(_:))
             btn.identifier = NSUserInterfaceItemIdentifier(filter.0)
             btn.toolTip = "Filter by \(filter.0)"
-            btn.refusesFirstResponder = true
 
             if activeFilters.contains(filter.0) {
-                btn.state = .on
-                btn.contentTintColor = NSColor.white
-                btn.layer?.backgroundColor = NSColor.controlAccentColor.cgColor
+                btn.setSelected(true, animated: false)
             } else {
-                btn.state = .off
-                btn.contentTintColor = NSColor.secondaryLabelColor
-                btn.layer?.backgroundColor = NSColor.clear.cgColor
+                btn.setSelected(false, animated: false)
             }
 
             btn.translatesAutoresizingMaskIntoConstraints = false
@@ -698,12 +727,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
             menu.addItem(empty)
         } else {
             for (i, item) in history.enumerated() {
-                // Keep snippets short so the row never wraps to a second line.
                 let oneLine = item.text
                     .replacingOccurrences(of: "\n", with: " ")
                     .trimmingCharacters(in: .whitespacesAndNewlines)
                 let snippet = oneLine.count > 34 ? String(oneLine.prefix(34)) + "…" : oneLine
-                // First 9 items get a ⌘1–⌘9 shortcut: press to copy.
                 let shortcut = i < 9 ? "\(i + 1)" : ""
                 let mi = NSMenuItem(title: snippet,
                                     action: #selector(copyItem(_:)), keyEquivalent: shortcut)
@@ -711,15 +738,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
                 mi.image = icon(item.pinned ? "pin.fill" : iconName(for: item.text))
                 mi.target = self; mi.tag = i
 
-                // Because items have submenus, macOS hides the keyEquivalent.
-                // So we paint "⌘N" into the title, right-aligned before the arrow.
                 var previewImage: NSImage? = nil
                 if let data = item.imageData, let loaded = NSImage(data: data) {
                     previewImage = loaded
                 }
 
-                // If it's an image, or it has a shortcut, we must use paintedTitle
-                // to either render the inline image attachment, or paint the hidden shortcut, or both.
                 if i < 9 || previewImage != nil {
                     let shortcutToPaint = i < 9 ? "⌘\(i + 1)" : ""
                     mi.attributedTitle = paintedTitle(for: snippet, shortcut: shortcutToPaint, isSubmenu: true, image: previewImage)
@@ -744,7 +767,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
         }
         menu.addItem(.separator())
 
-        applySearchAndFilter() // apply initially
+        applySearchAndFilter()
 
         let clear = NSMenuItem(title: "Clear History Now", action: #selector(clearNow), keyEquivalent: "")
         clear.attributedTitle = paintedTitle(for: "Clear History Now", shortcut: "⌘⌫")
@@ -843,7 +866,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
         pb.clearContents()
 
         if let data = item.imageData, let img = NSImage(data: data) {
-            // Write standard PNG data for broad compatibility
             pb.setData(data, forType: .png)
             if let tiff = img.tiffRepresentation {
                 pb.setData(tiff, forType: .tiff)
@@ -852,7 +874,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
             pb.setString(item.text, forType: .string)
         }
 
-        lastChangeCount = pb.changeCount // don't re-capture our own copy
+        lastChangeCount = pb.changeCount
         let pinned = item.pinned
         history.remove(at: i)
         history.insert(ClipItem(text: item.text, date: Date(), pinned: pinned, imageData: item.imageData), at: 0)
@@ -882,7 +904,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
     @objc func toggleShowImageDimensions() { showImageDimensions.toggle() }
 
     @objc func setHistorySize(_ sender: NSMenuItem) {
-        maxItems = sender.tag          // trims + rebuilds via the setter
+        maxItems = sender.tag
         trimHistory()
         persistIfNeeded()
         rebuildMenu()
@@ -911,7 +933,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
     }
 
     @objc func clearNow() {
-        // Keep pinned items; clear everything else.
         history = history.filter { $0.pinned }
         if history.isEmpty {
             deleteStore()
@@ -923,7 +944,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
 
     @objc func quitApp() { NSApp.terminate(nil) }
 
-    // MARK: - Update check (the ONLY network request the app makes)
+    // MARK: - Update check
     @objc func checkForUpdatesMenu() { checkForUpdates(silentIfCurrent: false) }
 
     func checkForUpdates(silentIfCurrent: Bool) {
