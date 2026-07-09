@@ -69,15 +69,16 @@ class FilterButton: NSButton {
             if selected {
                 self.contentTintColor = .white
                 self.layer?.backgroundColor = NSColor.controlAccentColor.cgColor
-                self.alphaValue = 1.0
+                self.animator().alphaValue = 1.0
             } else {
-                self.contentTintColor = .secondaryLabelColor
                 self.layer?.backgroundColor = NSColor.clear.cgColor
 
                 if self.hasItems {
-                    self.alphaValue = 1.0
+                    self.contentTintColor = .labelColor
+                    self.animator().alphaValue = 1.0
                 } else {
-                    self.alphaValue = 0.3
+                    self.contentTintColor = .tertiaryLabelColor
+                    self.animator().alphaValue = 0.2
                 }
             }
         }
@@ -498,7 +499,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
         return "text.alignleft"
     }
 
-    func paintedTitle(for text: String, shortcut: String, isSubmenu: Bool = false, image: NSImage? = nil) -> NSAttributedString {
+    func paintedTitle(for text: String, shortcut: String, isSubmenu: Bool = false, image: NSImage? = nil, extraLabel: String? = nil) -> NSAttributedString {
         let para = NSMutableParagraphStyle()
         let tabLocation: CGFloat = isSubmenu ? 295.25 : 300
         para.tabStops = [NSTextTab(textAlignment: .right, location: tabLocation)]
@@ -532,6 +533,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
             title.append(NSAttributedString(
                 string: text,
                 attributes: [.font: NSFont.menuFont(ofSize: 0)]))
+
+            if let extra = extraLabel {
+                title.append(NSAttributedString(
+                    string: "  \(extra)",
+                    attributes: [.font: NSFont.menuFont(ofSize: 0), .foregroundColor: NSColor.secondaryLabelColor]))
+            }
         }
 
         title.append(NSAttributedString(
@@ -787,14 +794,35 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
         } else {
             for (i, item) in history.enumerated() {
                 var displayText = item.text
-                if !showFullFilePath && (item.text.hasPrefix("file://") || item.text.hasPrefix("/")) {
+                var extraLabel: String? = nil
+
+                let isFile = item.text.hasPrefix("file://") || item.text.hasPrefix("/")
+                if isFile {
                     let path = item.text.hasPrefix("file://") ? String(item.text.dropFirst(7)) : item.text
-                    displayText = URL(fileURLWithPath: path).lastPathComponent
+                    let url = URL(fileURLWithPath: path)
+
+                    if showFullFilePath {
+                        // When showing full path, filename is text, and minified path is extra
+                        let dir = url.deletingLastPathComponent().path
+                        // Minify path like /Users/arun/Desktop -> ~/Desktop
+                        let home = FileManager.default.homeDirectoryForCurrentUser.path
+                        let miniDir = dir.hasPrefix(home) ? "~" + String(dir.dropFirst(home.count)) : dir
+
+                        displayText = url.lastPathComponent
+                        extraLabel = miniDir
+                    } else {
+                        // Just filename
+                        displayText = url.lastPathComponent
+                    }
                 }
+
                 let oneLine = displayText
                     .replacingOccurrences(of: "\n", with: " ")
                     .trimmingCharacters(in: .whitespacesAndNewlines)
-                let snippet = oneLine.count > 34 ? String(oneLine.prefix(34)) + "…" : oneLine
+
+                // Truncate dynamically so there is room for the extraLabel if present
+                let maxLen = extraLabel != nil ? 24 : 34
+                let snippet = oneLine.count > maxLen ? String(oneLine.prefix(maxLen)) + "…" : oneLine
                 let shortcut = i < 9 ? "\(i + 1)" : ""
                 let mi = NSMenuItem(title: snippet,
                                     action: #selector(copyItem(_:)), keyEquivalent: shortcut)
@@ -807,9 +835,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
                     previewImage = loaded
                 }
 
-                if i < 9 || previewImage != nil {
+                if i < 9 || previewImage != nil || extraLabel != nil {
                     let shortcutToPaint = i < 9 ? "⌘\(i + 1)" : ""
-                    mi.attributedTitle = paintedTitle(for: snippet, shortcut: shortcutToPaint, isSubmenu: true, image: previewImage)
+                    mi.attributedTitle = paintedTitle(for: snippet, shortcut: shortcutToPaint, isSubmenu: true, image: previewImage, extraLabel: extraLabel)
                 }
 
                 let sub = NSMenu()
