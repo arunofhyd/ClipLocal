@@ -532,17 +532,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
             item.isHidden = false
         }
 
-        // Reset filter button UI states
-        if let view = filtersMenuItem?.view, let stack = view.subviews.compactMap({ $0 as? NSStackView }).first {
-            for v in stack.views {
-                if let btn = v as? NSButton {
-                    btn.state = .off
-                    btn.contentTintColor = NSColor.secondaryLabelColor
-                    btn.showsBorderOnlyWhileMouseInside = true
-                }
-            }
-        }
-
         if needsRebuildAfterClose {
             needsRebuildAfterClose = false
             rebuildMenu()
@@ -560,11 +549,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
         if sender.state == .on {
             activeFilters.insert(filterName)
             sender.contentTintColor = NSColor.controlAccentColor
-            sender.showsBorderOnlyWhileMouseInside = false
         } else {
             activeFilters.remove(filterName)
             sender.contentTintColor = NSColor.secondaryLabelColor
-            sender.showsBorderOnlyWhileMouseInside = true
         }
         applySearchAndFilter()
     }
@@ -685,11 +672,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
             if activeFilters.contains(filter.0) {
                 btn.state = .on
                 btn.contentTintColor = NSColor.controlAccentColor
-                btn.showsBorderOnlyWhileMouseInside = false
             } else {
                 btn.state = .off
                 btn.contentTintColor = NSColor.secondaryLabelColor
-                btn.showsBorderOnlyWhileMouseInside = true
             }
 
             btn.translatesAutoresizingMaskIntoConstraints = false
