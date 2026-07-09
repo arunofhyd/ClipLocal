@@ -40,7 +40,8 @@ Built specifically for people who handle **sensitive text** and don't want their
 *   **Copy Preview**: 🔔 A subtle "✓ Copied" panel slides into the bottom-right and fades away.
 *   **Full Control**: 📌 Pin, delete, and re-copy any item straight from the menu bar.
 *   **Quick Shortcuts**: ⌨️ Open the menu and press **⌘1–⌘9** to instantly copy any of your recent items.
-*   **Smart Icons**: 🏷️ Each item shows a relevant icon so your history is easy to scan — 🔗 for links, ✉️ for emails, #️⃣ for numbers, and 📄 for notes.
+*   **Smart Icons**: 🏷️ Each item shows a relevant icon so your history is easy to scan — 🔗 for links, ✉️ for emails, #️⃣ for numbers, 📄 for notes, and 🖼️ for images.
+*   **Image Previews**: 🖼️ Copies standard images seamlessly, rendering tiny inline previews inside your history menu.
 *   **Panic Wipe**: 🧹 One-click "Clear History Now" clears everything instantly.
 *   **Launch at Login**: 🚀 Optional — start ClipLocal automatically when you log in.
 *   **Menu-Bar Native**: Runs quietly with no Dock icon. Built with Swift for zero dependencies.

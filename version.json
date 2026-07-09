@@ -1,13 +1,21 @@
 {
-  "version": "1.6",
+  "version": "1.7",
   "downloadURL": "https://cliplocal.vercel.app/#install",
   "changelog": [
+    {
+      "version": "1.7",
+      "date": "August 2026",
+      "changes": [
+        "Added support for copying and pasting images natively",
+        "Added inline image previews inside the history menu"
+      ]
+    },
     {
       "version": "1.6",
       "date": "July 2026",
       "changes": [
         "Moved Launch at Login, Skip password-manager copies, and History Storage into a new Preferences submenu",
-        "Added ⌘, shortcut for accessing Preferences"
+        "Added \u2318, shortcut for accessing Preferences"
       ]
     },
     {
@@ -21,7 +29,7 @@
       "version": "1.4",
       "date": "July 2026",
       "changes": [
-        "Pinned items are now kept safe — \u201cClear History Now\u201d no longer removes them",
+        "Pinned items are now kept safe \u2014 \u201cClear History Now\u201d no longer removes them",
         "Renamed \u201cPersistent\u201d option to \u201ckeep on quit\u201d for clarity"
       ]
     },
@@ -49,7 +57,7 @@
       "changes": [
         "Number shortcuts (1\u20139) to quickly copy history items",
         "Relevant icons for each item and menu action",
-        "\u2318\u232B shortcut to clear history",
+        "\u2318\u232b shortcut to clear history",
         "\u201cDon\u2019t show again\u201d option for the welcome screen",
         "Cleaner menu layout"
       ]
@@ -59,7 +67,7 @@
       "date": "July 2026",
       "changes": [
         "First release of ClipLocal",
-        "100% on-device clipboard history — nothing ever leaves your Mac",
+        "100% on-device clipboard history \u2014 nothing ever leaves your Mac",
         "Bottom-right \u201cCopied\u201d preview",
         "Session-only and encrypted Persistent privacy modes",
         "Skips password-manager copies by default",

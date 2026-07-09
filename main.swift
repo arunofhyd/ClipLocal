@@ -6,7 +6,7 @@ import ServiceManagement
 //  ClipLocal — 100% on-device clipboard history, no third parties
 // ============================================================
 
-let appVersion = "1.6"
+let appVersion = "1.7"
 // The update check reads this small file from your GitHub. It's the ONLY
 // network request the app ever makes. Nothing else leaves the Mac.
 let updateCheckURL = "https://raw.githubusercontent.com/arunofhyd/ClipLocal/main/version.json"
@@ -43,6 +43,7 @@ struct ClipItem: Codable {
     let text: String
     let date: Date
     var pinned: Bool = false
+    var imageData: Data?
 }
 
 enum PrivacyMode: String {
@@ -67,6 +68,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var skipConcealed: Bool {
         get { defaults.object(forKey: "skipConcealed") == nil ? true : defaults.bool(forKey: "skipConcealed") }
         set { defaults.set(newValue, forKey: "skipConcealed"); rebuildMenu() }
+    }
+    var showImageDimensions: Bool {
+        get { defaults.bool(forKey: "showImageDimensions") }
+        set { defaults.set(newValue, forKey: "showImageDimensions"); rebuildMenu() }
     }
     var maxItems: Int {
         get { let v = defaults.integer(forKey: "maxItems"); return v == 0 ? 50 : v }
@@ -156,7 +161,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         ⌘  Open the menu and press ⌘1–⌘9 to instantly copy any of your recent items.
 
-        🏷️  Each item shows a relevant icon — 🔗 links, ✉️ emails, #️⃣ numbers, 📄 notes — so your history is easy to scan.
+        🏷️  Each item shows a relevant icon — 🔗 links, ✉️ emails, #️⃣ numbers, 📄 notes, and 🖼️ images — so your history is easy to scan.
         """
         let para = NSMutableParagraphStyle()
         para.lineSpacing = 3
@@ -177,12 +182,32 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         privacy.preferredMaxLayoutWidth = bodyWidth
         // Top of the text sits 24px below the tagline.
         let textTop = (height - 210) - 24
-        privacy.frame = NSRect(x: 40, y: textTop - textHeight, width: bodyWidth, height: textHeight)
+
+        // Dynamically compute the required window height and update it.
+        // The bottom elements require roughly 150px of space:
+        // Credit (18) + padding (30) + DontShow (20) + padding (20) + Buttons (32) + BottomMargin (26)
+        let bottomSpaceNeeded: CGFloat = 160
+        let newHeight = (height - textTop) + textHeight + bottomSpaceNeeded
+        let finalHeight = max(height, newHeight)
+
+        // Adjust the window's frame to the new computed height
+        let oldFrame = win.frame
+        win.setFrame(NSRect(x: oldFrame.minX, y: oldFrame.maxY - finalHeight, width: width, height: finalHeight), display: true)
+        bg.frame = NSRect(x: 0, y: 0, width: width, height: finalHeight)
+
+        // Relocate all top-anchored views since height changed
+        icon.frame.origin.y = finalHeight - 120
+        name.frame.origin.y = finalHeight - 164
+        version.frame.origin.y = finalHeight - 186
+        tagline.frame.origin.y = finalHeight - 210
+        let newTextTop = (finalHeight - 210) - 24
+
+        privacy.frame = NSRect(x: 40, y: newTextTop - textHeight, width: bodyWidth, height: textHeight)
         bg.addSubview(privacy)
 
-        // Credit — placed 28px below the measured text, so it can never collide.
+        // Credit — placed below the measured text
         let credit = NSTextField(labelWithString: "Built by Arun Thomas")
-        credit.frame = NSRect(x: 0, y: (textTop - textHeight) - 34, width: width, height: 18)
+        credit.frame = NSRect(x: 0, y: (newTextTop - textHeight) - 34, width: width, height: 18)
         credit.alignment = .center
         credit.font = NSFont.systemFont(ofSize: 12, weight: .semibold)
         credit.textColor = .secondaryLabelColor
@@ -194,17 +219,21 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         dontShow.font = NSFont.systemFont(ofSize: 11)
         dontShow.sizeToFit()
         let dsW = dontShow.frame.width
-        dontShow.frame = NSRect(x: (width - dsW)/2, y: 74, width: dsW, height: 20)
+        // Anchor to the credit position to guarantee no overlaps
+        let dontShowY = credit.frame.minY - 40
+        dontShow.frame = NSRect(x: (width - dsW)/2, y: dontShowY, width: dsW, height: 20)
         dontShow.state = defaults.bool(forKey: "hideAbout") ? .on : .off
         bg.addSubview(dontShow)
 
         let contact = NSButton(title: "Contact", target: self, action: #selector(contactDeveloper))
-        contact.frame = NSRect(x: 40, y: 26, width: 100, height: 32)
+        // Anchor buttons below "Don't show again" safely
+        let buttonsY = dontShow.frame.minY - 48
+        contact.frame = NSRect(x: 40, y: buttonsY, width: 100, height: 32)
         contact.bezelStyle = .rounded
         bg.addSubview(contact)
 
         let close = NSButton(title: "Get Started", target: self, action: #selector(closeAbout))
-        close.frame = NSRect(x: width - 160, y: 26, width: 120, height: 32)
+        close.frame = NSRect(x: width - 160, y: buttonsY, width: 120, height: 32)
         close.bezelStyle = .rounded
         close.keyEquivalent = "\r"
         close.bezelColor = NSColor.controlAccentColor
@@ -247,19 +276,37 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             if types.contains(concealed) || types.contains(transient) { return }
         }
 
-        guard let text = pb.string(forType: .string),
-              !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        var textToStore = ""
+        var imageToStore: Data? = nil
+
+        if let img = NSImage(pasteboard: pb),
+           let tiff = img.tiffRepresentation,
+           let bitmap = NSBitmapImageRep(data: tiff),
+           let pngData = bitmap.representation(using: .png, properties: [:]) {
+            imageToStore = pngData
+            textToStore = "[Image: \(Int(img.size.width))x\(Int(img.size.height))]"
+        } else if let text = pb.string(forType: .string),
+                  !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            textToStore = text
+        } else {
+            return
+        }
 
         var pinned = false
-        if let idx = history.firstIndex(where: { $0.text == text }) {
+        if let idx = history.firstIndex(where: {
+            if let img1 = $0.imageData, let img2 = imageToStore {
+                return img1 == img2
+            }
+            return $0.imageData == nil && imageToStore == nil && $0.text == textToStore
+        }) {
             pinned = history[idx].pinned
             history.remove(at: idx)
         }
-        history.insert(ClipItem(text: text, date: Date(), pinned: pinned), at: 0)
+        history.insert(ClipItem(text: textToStore, date: Date(), pinned: pinned, imageData: imageToStore), at: 0)
         trimHistory()
         persistIfNeeded()
         rebuildMenu()
-        showPreview(text)
+        showPreview(textToStore)
     }
 
     func trimHistory() {
@@ -340,6 +387,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     // Pick a relevant SF Symbol based on what the copied text looks like.
     func iconName(for text: String) -> String {
+        if text.hasPrefix("[Image:") {
+            return "photo"
+        }
         let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
         let lower = t.lowercased()
         if lower.hasPrefix("http://") || lower.hasPrefix("https://") || lower.hasPrefix("www.") {
@@ -357,15 +407,48 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         return "text.alignleft"
     }
 
-    func paintedTitle(for text: String, shortcut: String, isSubmenu: Bool = false) -> NSAttributedString {
+    func paintedTitle(for text: String, shortcut: String, isSubmenu: Bool = false, image: NSImage? = nil) -> NSAttributedString {
         let para = NSMutableParagraphStyle()
         // Submenu items need a slightly smaller tab stop to align correctly with the macOS ">" arrow space taking up the right edge
         let tabLocation: CGFloat = isSubmenu ? 295.25 : 300
         para.tabStops = [NSTextTab(textAlignment: .right, location: tabLocation)]
         para.lineBreakMode = .byTruncatingTail
-        let title = NSMutableAttributedString(
-            string: text,
-            attributes: [.font: NSFont.menuFont(ofSize: 0)])
+
+        let title = NSMutableAttributedString()
+
+        if let img = image {
+            // Scale the image down to exactly match the standard menu line height (~14px)
+            // so we get a tiny inline preview without expanding the menu row vertically.
+            let targetHeight: CGFloat = 14.0
+            let ratio = img.size.width / img.size.height
+            // Restrict maximum width so extremely wide panoramas don't break the layout
+            let targetWidth = min(targetHeight * ratio, 250.0)
+
+            let scaledImage = NSImage(size: NSSize(width: targetWidth, height: targetHeight))
+            scaledImage.lockFocus()
+            img.draw(in: NSRect(x: 0, y: 0, width: targetWidth, height: targetHeight))
+            scaledImage.unlockFocus()
+
+            let attachment = NSTextAttachment()
+            attachment.image = scaledImage
+            // Slight baseline offset to align perfectly with the surrounding text/icons
+            attachment.bounds = NSRect(x: 0, y: -2, width: targetWidth, height: targetHeight)
+
+            title.append(NSAttributedString(attachment: attachment))
+
+            // If the user wants to see dimensions, append them (e.g., extract "1024x768" from "[Image: 1024x768]")
+            if showImageDimensions, text.hasPrefix("[Image: "), text.hasSuffix("]") {
+                let dims = text.dropFirst(8).dropLast()
+                title.append(NSAttributedString(
+                    string: "  \(dims)",
+                    attributes: [.font: NSFont.menuFont(ofSize: 0), .foregroundColor: NSColor.secondaryLabelColor]))
+            }
+        } else {
+            title.append(NSAttributedString(
+                string: text,
+                attributes: [.font: NSFont.menuFont(ofSize: 0)]))
+        }
+
         title.append(NSAttributedString(
             string: "\t\(shortcut)",
             attributes: [
@@ -418,8 +501,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
                 // Because items have submenus, macOS hides the keyEquivalent.
                 // So we paint "⌘N" into the title, right-aligned before the arrow.
-                if i < 9 {
-                    mi.attributedTitle = paintedTitle(for: snippet, shortcut: "⌘\(i + 1)")
+                var previewImage: NSImage? = nil
+                if let data = item.imageData, let loaded = NSImage(data: data) {
+                    previewImage = loaded
+                }
+
+                // If it's an image, or it has a shortcut, we must use paintedTitle
+                // to either render the inline image attachment, or paint the hidden shortcut, or both.
+                if i < 9 || previewImage != nil {
+                    let shortcutToPaint = i < 9 ? "⌘\(i + 1)" : ""
+                    mi.attributedTitle = paintedTitle(for: snippet, shortcut: shortcutToPaint, isSubmenu: true, image: previewImage)
                 }
 
                 let sub = NSMenu()
@@ -482,6 +573,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         skip.state = skipConcealed ? .on : .off
         prefsSub.addItem(skip)
 
+        let showDims = NSMenuItem(title: "Show image dimensions",
+                                  action: #selector(toggleShowImageDimensions), keyEquivalent: "")
+        showDims.image = icon("photo.on.rectangle.angled")
+        showDims.target = self
+        showDims.state = showImageDimensions ? .on : .off
+        prefsSub.addItem(showDims)
+
         let launch = NSMenuItem(title: "Launch at Login",
                                 action: #selector(toggleLaunchAtLogin), keyEquivalent: "")
         launch.image = icon("power")
@@ -525,14 +623,24 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     @objc func copyItem(_ sender: NSMenuItem) {
         let i = sender.tag
         guard i < history.count else { return }
-        let text = history[i].text
+        let item = history[i]
         let pb = NSPasteboard.general
         pb.clearContents()
-        pb.setString(text, forType: .string)
+
+        if let data = item.imageData, let img = NSImage(data: data) {
+            // Write standard PNG data for broad compatibility
+            pb.setData(data, forType: .png)
+            if let tiff = img.tiffRepresentation {
+                pb.setData(tiff, forType: .tiff)
+            }
+        } else {
+            pb.setString(item.text, forType: .string)
+        }
+
         lastChangeCount = pb.changeCount // don't re-capture our own copy
-        let pinned = history[i].pinned
+        let pinned = item.pinned
         history.remove(at: i)
-        history.insert(ClipItem(text: text, date: Date(), pinned: pinned), at: 0)
+        history.insert(ClipItem(text: item.text, date: Date(), pinned: pinned, imageData: item.imageData), at: 0)
         persistIfNeeded()
         rebuildMenu()
     }
@@ -556,6 +664,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     @objc func setSession() { mode = .session; deleteStore() }
     @objc func setPersistent() { mode = .persistent; saveHistory() }
     @objc func toggleSkip() { skipConcealed.toggle() }
+    @objc func toggleShowImageDimensions() { showImageDimensions.toggle() }
 
     @objc func setHistorySize(_ sender: NSMenuItem) {
         maxItems = sender.tag          // trims + rebuilds via the setter
