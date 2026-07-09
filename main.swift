@@ -663,7 +663,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
         stack.alignment = .centerY
         stack.autoresizingMask = [.width]
 
-        for (i, filter) in filters.enumerated() {
+        for filter in filters {
             let btn = NSButton(frame: .zero)
             btn.setButtonType(.toggle)
             btn.bezelStyle = .recessed
