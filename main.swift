@@ -182,12 +182,32 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         privacy.preferredMaxLayoutWidth = bodyWidth
         // Top of the text sits 24px below the tagline.
         let textTop = (height - 210) - 24
-        privacy.frame = NSRect(x: 40, y: textTop - textHeight, width: bodyWidth, height: textHeight)
+
+        // Dynamically compute the required window height and update it.
+        // The bottom elements require roughly 150px of space:
+        // Credit (18) + padding (30) + DontShow (20) + padding (20) + Buttons (32) + BottomMargin (26)
+        let bottomSpaceNeeded: CGFloat = 160
+        let newHeight = (height - textTop) + textHeight + bottomSpaceNeeded
+        let finalHeight = max(height, newHeight)
+
+        // Adjust the window's frame to the new computed height
+        let oldFrame = win.frame
+        win.setFrame(NSRect(x: oldFrame.minX, y: oldFrame.maxY - finalHeight, width: width, height: finalHeight), display: true)
+        bg.frame = NSRect(x: 0, y: 0, width: width, height: finalHeight)
+
+        // Relocate all top-anchored views since height changed
+        icon.frame.origin.y = finalHeight - 120
+        name.frame.origin.y = finalHeight - 164
+        version.frame.origin.y = finalHeight - 186
+        tagline.frame.origin.y = finalHeight - 210
+        let newTextTop = (finalHeight - 210) - 24
+
+        privacy.frame = NSRect(x: 40, y: newTextTop - textHeight, width: bodyWidth, height: textHeight)
         bg.addSubview(privacy)
 
-        // Credit — placed 28px below the measured text, so it can never collide.
+        // Credit — placed below the measured text
         let credit = NSTextField(labelWithString: "Built by Arun Thomas")
-        credit.frame = NSRect(x: 0, y: (textTop - textHeight) - 34, width: width, height: 18)
+        credit.frame = NSRect(x: 0, y: (newTextTop - textHeight) - 34, width: width, height: 18)
         credit.alignment = .center
         credit.font = NSFont.systemFont(ofSize: 12, weight: .semibold)
         credit.textColor = .secondaryLabelColor
@@ -199,17 +219,21 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         dontShow.font = NSFont.systemFont(ofSize: 11)
         dontShow.sizeToFit()
         let dsW = dontShow.frame.width
-        dontShow.frame = NSRect(x: (width - dsW)/2, y: 74, width: dsW, height: 20)
+        // Anchor to the credit position to guarantee no overlaps
+        let dontShowY = credit.frame.minY - 40
+        dontShow.frame = NSRect(x: (width - dsW)/2, y: dontShowY, width: dsW, height: 20)
         dontShow.state = defaults.bool(forKey: "hideAbout") ? .on : .off
         bg.addSubview(dontShow)
 
         let contact = NSButton(title: "Contact", target: self, action: #selector(contactDeveloper))
-        contact.frame = NSRect(x: 40, y: 26, width: 100, height: 32)
+        // Anchor buttons below "Don't show again" safely
+        let buttonsY = dontShow.frame.minY - 48
+        contact.frame = NSRect(x: 40, y: buttonsY, width: 100, height: 32)
         contact.bezelStyle = .rounded
         bg.addSubview(contact)
 
         let close = NSButton(title: "Get Started", target: self, action: #selector(closeAbout))
-        close.frame = NSRect(x: width - 160, y: 26, width: 120, height: 32)
+        close.frame = NSRect(x: width - 160, y: buttonsY, width: 120, height: 32)
         close.bezelStyle = .rounded
         close.keyEquivalent = "\r"
         close.bezelColor = NSColor.controlAccentColor
