@@ -64,19 +64,19 @@ class FilterButton: NSButton {
     private func updateVisuals(animated: Bool) {
         let selected = self.state == .on
         let updateUI = {
+            self.layer?.borderWidth = 0
+
             if selected {
                 self.contentTintColor = .white
                 self.layer?.backgroundColor = NSColor.controlAccentColor.cgColor
-                self.layer?.borderWidth = 0
             } else {
                 self.layer?.backgroundColor = NSColor.clear.cgColor
                 if self.hasItems {
-                    self.contentTintColor = NSColor.white.withAlphaComponent(0.8)
-                    self.layer?.borderColor = NSColor.white.withAlphaComponent(0.2).cgColor
-                    self.layer?.borderWidth = 1
+                    // Bright, normal icon color when items exist
+                    self.contentTintColor = NSColor.white.withAlphaComponent(0.9)
                 } else {
-                    self.contentTintColor = .secondaryLabelColor
-                    self.layer?.borderWidth = 0
+                    // Faded, greyish icon color when empty
+                    self.contentTintColor = NSColor.white.withAlphaComponent(0.3)
                 }
             }
         }
