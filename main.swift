@@ -300,8 +300,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
             let itemH = featureHeights[i]
             let itemY = currentY - itemH
 
-            let iconView = NSImageView(frame: NSRect(x: 40, y: itemY + itemH - 26, width: 26, height: 26))
-            let iconCfg = NSImage.SymbolConfiguration(pointSize: 18, weight: .regular)
+            let iconSize: CGFloat = 32
+            let iconY = itemY + (itemH - iconSize) / 2
+            let iconView = NSImageView(frame: NSRect(x: 40, y: iconY, width: iconSize, height: iconSize))
+            let iconCfg = NSImage.SymbolConfiguration(pointSize: 22, weight: .regular)
             iconView.image = NSImage(systemSymbolName: f.0, accessibilityDescription: nil)?
                 .withSymbolConfiguration(iconCfg)
             iconView.contentTintColor = NSColor.controlAccentColor
