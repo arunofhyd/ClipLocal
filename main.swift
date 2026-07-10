@@ -6,7 +6,7 @@ import ServiceManagement
 //  ClipLocal — 100% on-device clipboard history, no third parties
 // ============================================================
 
-let appVersion = "1.8"
+let appVersion = "1.9"
 let updateCheckURL = "https://raw.githubusercontent.com/arunofhyd/ClipLocal/main/version.json"
 let downloadPageURL = "https://cliplocal.vercel.app/#install"
 
@@ -29,10 +29,21 @@ class MenuSearchField: NSSearchField {
             }
         }
     }
+
+    override func mouseDown(with event: NSEvent) {
+        super.mouseDown(with: event)
+        // Ensure clicking anywhere within the search field's bounds reliably claims focus
+        // away from the NSMenu tracker and re-engages the text editor cursor.
+        self.window?.makeFirstResponder(self)
+    }
 }
 
 /// Provides a smooth, animated background highlight when selecting filters.
 class FilterButton: NSButton {
+    var hasItems: Bool = false {
+        didSet { updateVisuals(animated: false) }
+    }
+
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         setup()
@@ -55,14 +66,28 @@ class FilterButton: NSButton {
 
     func setSelected(_ selected: Bool, animated: Bool = true) {
         self.state = selected ? .on : .off
+        updateVisuals(animated: animated)
+    }
 
+    private func updateVisuals(animated: Bool) {
+        let selected = self.state == .on
         let updateUI = {
+            self.layer?.borderWidth = 0
+
             if selected {
                 self.contentTintColor = .white
                 self.layer?.backgroundColor = NSColor.controlAccentColor.cgColor
+                self.animator().alphaValue = 1.0
             } else {
-                self.contentTintColor = .secondaryLabelColor
                 self.layer?.backgroundColor = NSColor.clear.cgColor
+
+                if self.hasItems {
+                    self.contentTintColor = .labelColor
+                    self.animator().alphaValue = 1.0
+                } else {
+                    self.contentTintColor = .tertiaryLabelColor
+                    self.animator().alphaValue = 0.2
+                }
             }
         }
 
@@ -343,7 +368,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
         var textToStore = ""
         var imageToStore: Data? = nil
 
-        if let img = NSImage(pasteboard: pb),
+        if let fileURLs = pb.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL], let firstURL = fileURLs.first, firstURL.isFileURL {
+            textToStore = firstURL.path
+        } else if let img = NSImage(pasteboard: pb),
            let tiff = img.tiffRepresentation,
            let bitmap = NSBitmapImageRep(data: tiff),
            let pngData = bitmap.representation(using: .png, properties: [:]) {
@@ -475,7 +502,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
         return "text.alignleft"
     }
 
-    func paintedTitle(for text: String, shortcut: String, isSubmenu: Bool = false, image: NSImage? = nil) -> NSAttributedString {
+    func paintedTitle(for text: String, shortcut: String, isSubmenu: Bool = false, image: NSImage? = nil, extraLabel: String? = nil) -> NSAttributedString {
         let para = NSMutableParagraphStyle()
         let tabLocation: CGFloat = isSubmenu ? 295.25 : 300
         para.tabStops = [NSTextTab(textAlignment: .right, location: tabLocation)]
@@ -509,6 +536,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
             title.append(NSAttributedString(
                 string: text,
                 attributes: [.font: NSFont.menuFont(ofSize: 0)]))
+
+            if let extra = extraLabel {
+                title.append(NSAttributedString(
+                    string: "  \(extra)",
+                    attributes: [.font: NSFont.menuFont(ofSize: 0), .foregroundColor: NSColor.secondaryLabelColor]))
+            }
         }
 
         title.append(NSAttributedString(
@@ -533,8 +566,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
             // Check if the search field or its active field editor currently has focus
             let isFocused = (sf.window?.firstResponder == sf) || (sf.currentEditor() != nil && sf.window?.firstResponder == sf.currentEditor())
 
-            // Show the filters if we are typing OR if we have actively applied any filter.
-            let shouldShow = isFocused || !self.activeFilters.isEmpty
+            // Show the filters ONLY if we are actively focused in the search bar.
+            let shouldShow = isFocused
 
             if let item = self.filtersMenuItem {
                 if shouldShow && item.isHidden {
@@ -668,14 +701,22 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
         searchContainer.autoresizingMask = [.width]
 
         // Using our subclass to fix NSMenu cursor bugs
-        let sf = MenuSearchField(frame: NSRect(x: 12, y: 5, width: 276, height: 22))
-        sf.autoresizingMask = [.width]
+        let sf = MenuSearchField(frame: .zero)
         sf.placeholderString = "Search history..."
         sf.delegate = self
         sf.focusRingType = .none
         sf.stringValue = currentSearchText
         self.searchField = sf
+
+        sf.translatesAutoresizingMaskIntoConstraints = false
         searchContainer.addSubview(sf)
+
+        NSLayoutConstraint.activate([
+            sf.leadingAnchor.constraint(equalTo: searchContainer.leadingAnchor, constant: 14),
+            sf.trailingAnchor.constraint(equalTo: searchContainer.trailingAnchor, constant: -14),
+            sf.centerYAnchor.constraint(equalTo: searchContainer.centerYAnchor),
+            sf.heightAnchor.constraint(equalToConstant: 22)
+        ])
 
         searchViewItem.view = searchContainer
         menu.addItem(searchViewItem)
@@ -694,11 +735,45 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
             ("text", "text.alignleft")
         ]
 
-        let stack = NSStackView(frame: NSRect(x: 12, y: 5, width: 276, height: 22))
+        let stack = NSStackView(frame: .zero)
         stack.orientation = .horizontal
         stack.distribution = .equalSpacing
         stack.alignment = .centerY
-        stack.autoresizingMask = [.width]
+
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        filtersContainer.addSubview(stack)
+
+        NSLayoutConstraint.activate([
+            stack.leadingAnchor.constraint(equalTo: filtersContainer.leadingAnchor, constant: 14),
+            stack.trailingAnchor.constraint(equalTo: filtersContainer.trailingAnchor, constant: -14),
+            stack.centerYAnchor.constraint(equalTo: filtersContainer.centerYAnchor),
+            stack.heightAnchor.constraint(equalToConstant: 22)
+        ])
+
+        // Pre-calculate which filters have items
+        var categoryCounts: [String: Int] = [
+            "link": 0, "image": 0, "text": 0, "file": 0, "number": 0, "email": 0, "code": 0
+        ]
+
+        for item in history {
+            let t = item.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            let textLower = t.lowercased()
+            let isImage = item.imageData != nil
+            let isCode = t.contains("{") || t.contains("}") || t.contains("<") || t.contains(">") || t.hasPrefix("func ") || t.hasPrefix("import ") || t.hasPrefix("class ")
+            let isLink = textLower.hasPrefix("http://") || textLower.hasPrefix("https://") || textLower.hasPrefix("www.")
+            let isEmail = t.contains("@") && t.contains(".") && !t.contains(" ") && t.count < 60
+            let isNum = t.range(of: "^[0-9 +().-]{5,}$", options: .regularExpression) != nil
+            let isFile = textLower.hasPrefix("file://") || textLower.hasPrefix("/")
+            let isText = !isImage && !isLink && !isEmail && !isNum && !isCode && !isFile
+
+            if isLink { categoryCounts["link"]! += 1 }
+            if isImage { categoryCounts["image"]! += 1 }
+            if isText { categoryCounts["text"]! += 1 }
+            if isFile { categoryCounts["file"]! += 1 }
+            if isCode { categoryCounts["code"]! += 1 }
+            if isNum { categoryCounts["number"]! += 1 }
+            if isEmail { categoryCounts["email"]! += 1 }
+        }
 
         for filter in filters {
             let btn = FilterButton(frame: .zero)
@@ -708,11 +783,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
             btn.identifier = NSUserInterfaceItemIdentifier(filter.0)
             btn.toolTip = "Filter by \(filter.0)"
 
-            if activeFilters.contains(filter.0) {
-                btn.setSelected(true, animated: false)
-            } else {
-                btn.setSelected(false, animated: false)
-            }
+            let count = categoryCounts[filter.0] ?? 0
+            btn.hasItems = count > 0
+
+            let isSelected = activeFilters.contains(filter.0)
+            btn.state = isSelected ? .on : .off
+            btn.setSelected(isSelected, animated: false)
 
             btn.translatesAutoresizingMaskIntoConstraints = false
             btn.widthAnchor.constraint(equalToConstant: 28).isActive = true
@@ -720,7 +796,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
             stack.addView(btn, in: .leading)
         }
 
-        filtersContainer.addSubview(stack)
         filtersMenuItem.view = filtersContainer
         filtersMenuItem.isHidden = true
         self.filtersMenuItem = filtersMenuItem
@@ -735,10 +810,22 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
             menu.addItem(empty)
         } else {
             for (i, item) in history.enumerated() {
-                let oneLine = item.text
+                var displayText = item.text
+                let extraLabel: String? = nil
+
+                let isFile = item.text.hasPrefix("file://") || item.text.hasPrefix("/")
+                if isFile {
+                    let path = item.text.hasPrefix("file://") ? String(item.text.dropFirst(7)) : item.text
+                    let url = URL(fileURLWithPath: path)
+                    displayText = url.lastPathComponent
+                }
+
+                let oneLine = displayText
                     .replacingOccurrences(of: "\n", with: " ")
                     .trimmingCharacters(in: .whitespacesAndNewlines)
-                let snippet = oneLine.count > 34 ? String(oneLine.prefix(34)) + "…" : oneLine
+
+                let maxLen = extraLabel != nil ? 20 : 34
+                let snippet = oneLine.count > maxLen ? String(oneLine.prefix(maxLen)) + "…" : oneLine
                 let shortcut = i < 9 ? "\(i + 1)" : ""
                 let mi = NSMenuItem(title: snippet,
                                     action: #selector(copyItem(_:)), keyEquivalent: shortcut)
@@ -751,9 +838,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
                     previewImage = loaded
                 }
 
-                if i < 9 || previewImage != nil {
+                if i < 9 || previewImage != nil || extraLabel != nil {
                     let shortcutToPaint = i < 9 ? "⌘\(i + 1)" : ""
-                    mi.attributedTitle = paintedTitle(for: snippet, shortcut: shortcutToPaint, isSubmenu: true, image: previewImage)
+                    mi.attributedTitle = paintedTitle(for: snippet, shortcut: shortcutToPaint, isSubmenu: true, image: previewImage, extraLabel: extraLabel)
                 }
 
                 let sub = NSMenu()
@@ -878,6 +965,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
             if let tiff = img.tiffRepresentation {
                 pb.setData(tiff, forType: .tiff)
             }
+        } else if (item.text.hasPrefix("/") || item.text.hasPrefix("file://")) && FileManager.default.fileExists(atPath: item.text.hasPrefix("file://") ? String(item.text.dropFirst(7)) : item.text) {
+            let path = item.text.hasPrefix("file://") ? String(item.text.dropFirst(7)) : item.text
+            let url = URL(fileURLWithPath: path)
+            pb.writeObjects([url as NSURL])
+            pb.setString(item.text, forType: .string)
         } else {
             pb.setString(item.text, forType: .string)
         }
