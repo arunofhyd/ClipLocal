@@ -296,6 +296,7 @@ struct ContentView: View {
                     }
                     Divider()
                     Menu {
+                        Menu {
                             Button(action: { manager.mode = .session }) {
                                 Label("Session-only (wiped on quit)", systemImage: manager.mode == .session ? "checkmark" : "")
                             }
@@ -471,7 +472,7 @@ struct ContentView: View {
             manager.persistIfNeeded()
         }
     }
-}
+} // End of ContentView
 
 struct FilterButton: View {
     let title: String
