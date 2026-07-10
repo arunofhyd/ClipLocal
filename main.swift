@@ -695,6 +695,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
         // --- Search and Filter UI ---
         let searchViewItem = NSMenuItem()
         let searchContainer = NSView(frame: NSRect(x: 0, y: 0, width: 300, height: 32))
+        searchContainer.autoresizingMask = [.width]
 
         // Using our subclass to fix NSMenu cursor bugs
         let sf = MenuSearchField(frame: .zero)
@@ -708,10 +709,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
         searchContainer.addSubview(sf)
 
         NSLayoutConstraint.activate([
-            searchContainer.widthAnchor.constraint(equalToConstant: 300),
-            searchContainer.heightAnchor.constraint(equalToConstant: 32),
             sf.leadingAnchor.constraint(equalTo: searchContainer.leadingAnchor, constant: 14),
-            sf.trailingAnchor.constraint(equalTo: searchContainer.trailingAnchor, constant: -14),
+            sf.trailingAnchor.constraint(equalTo: searchContainer.trailingAnchor, constant: 0),
             sf.centerYAnchor.constraint(equalTo: searchContainer.centerYAnchor),
             sf.heightAnchor.constraint(equalToConstant: 22)
         ])
@@ -721,6 +720,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
 
         let filtersMenuItem = NSMenuItem()
         let filtersContainer = NSView(frame: NSRect(x: 0, y: 0, width: 300, height: 32))
+        filtersContainer.autoresizingMask = [.width]
 
         let filters = [
             ("code", "chevron.left.forwardslash.chevron.right"),
@@ -741,10 +741,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
         filtersContainer.addSubview(stack)
 
         NSLayoutConstraint.activate([
-            filtersContainer.widthAnchor.constraint(equalToConstant: 300),
-            filtersContainer.heightAnchor.constraint(equalToConstant: 32),
             stack.leadingAnchor.constraint(equalTo: filtersContainer.leadingAnchor, constant: 14),
-            stack.trailingAnchor.constraint(equalTo: filtersContainer.trailingAnchor, constant: -14),
+            stack.trailingAnchor.constraint(equalTo: filtersContainer.trailingAnchor, constant: 0),
             stack.centerYAnchor.constraint(equalTo: filtersContainer.centerYAnchor),
             stack.heightAnchor.constraint(equalToConstant: 22)
         ])
