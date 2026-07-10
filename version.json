@@ -1,7 +1,16 @@
 {
-  "version": "1.8",
+  "version": "1.9",
   "downloadURL": "https://cliplocal.vercel.app/#install",
   "changelog": [
+    {
+      "version": "1.9",
+      "date": "August 2026",
+      "changes": [
+        "Fixed search and filter layout to span dynamically with perfect padding",
+        "Removed 'show full file paths' feature to simplify UI",
+        "Optimized dynamic filter icon hiding based on search bar focus"
+      ]
+    },
     {
       "version": "1.8",
       "date": "August 2026",

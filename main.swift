@@ -6,7 +6,7 @@ import ServiceManagement
 //  ClipLocal — 100% on-device clipboard history, no third parties
 // ============================================================
 
-let appVersion = "1.8"
+let appVersion = "1.9"
 let updateCheckURL = "https://raw.githubusercontent.com/arunofhyd/ClipLocal/main/version.json"
 let downloadPageURL = "https://cliplocal.vercel.app/#install"
 
@@ -163,10 +163,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
     var showImageDimensions: Bool {
         get { defaults.bool(forKey: "showImageDimensions") }
         set { defaults.set(newValue, forKey: "showImageDimensions"); rebuildMenu() }
-    }
-    var showFullFilePath: Bool {
-        get { defaults.bool(forKey: "showFullFilePath") }
-        set { defaults.set(newValue, forKey: "showFullFilePath"); rebuildMenu() }
     }
     var maxItems: Int {
         get { let v = defaults.integer(forKey: "maxItems"); return v == 0 ? 50 : v }
@@ -710,7 +706,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
 
         NSLayoutConstraint.activate([
             sf.leadingAnchor.constraint(equalTo: searchContainer.leadingAnchor, constant: 14),
-            sf.trailingAnchor.constraint(equalTo: searchContainer.trailingAnchor, constant: 0),
+            sf.trailingAnchor.constraint(equalTo: searchContainer.trailingAnchor, constant: -14),
             sf.centerYAnchor.constraint(equalTo: searchContainer.centerYAnchor),
             sf.heightAnchor.constraint(equalToConstant: 22)
         ])
@@ -742,7 +738,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
 
         NSLayoutConstraint.activate([
             stack.leadingAnchor.constraint(equalTo: filtersContainer.leadingAnchor, constant: 14),
-            stack.trailingAnchor.constraint(equalTo: filtersContainer.trailingAnchor, constant: 0),
+            stack.trailingAnchor.constraint(equalTo: filtersContainer.trailingAnchor, constant: -14),
             stack.centerYAnchor.constraint(equalTo: filtersContainer.centerYAnchor),
             stack.heightAnchor.constraint(equalToConstant: 22)
         ])
@@ -814,26 +810,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
                 if isFile {
                     let path = item.text.hasPrefix("file://") ? String(item.text.dropFirst(7)) : item.text
                     let url = URL(fileURLWithPath: path)
-
-                    if showFullFilePath {
-                        // When showing full path, filename is text, and minified path is extra
-                        let dir = url.deletingLastPathComponent().path
-                        // Minify path like /Users/arun/Desktop -> ~/Desktop
-                        let home = FileManager.default.homeDirectoryForCurrentUser.path
-                        var miniDir = dir.hasPrefix(home) ? "~" + String(dir.dropFirst(home.count)) : dir
-
-                        if miniDir.count > 25 {
-                            let prefix = String(miniDir.prefix(10))
-                            let suffix = String(miniDir.suffix(12))
-                            miniDir = "\(prefix)...\(suffix)"
-                        }
-
-                        displayText = url.lastPathComponent
-                        extraLabel = miniDir
-                    } else {
-                        // Just filename
-                        displayText = url.lastPathComponent
-                    }
+                    displayText = url.lastPathComponent
                 }
 
                 let oneLine = displayText
@@ -929,13 +906,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
         showDims.state = showImageDimensions ? .on : .off
         prefsSub.addItem(showDims)
 
-        let showPaths = NSMenuItem(title: "Show full file paths",
-                                  action: #selector(toggleShowFullFilePath), keyEquivalent: "")
-        showPaths.image = icon("folder")
-        showPaths.target = self
-        showPaths.state = showFullFilePath ? .on : .off
-        prefsSub.addItem(showPaths)
-
         let launch = NSMenuItem(title: "Launch at Login",
                                 action: #selector(toggleLaunchAtLogin), keyEquivalent: "")
         launch.image = icon("power")
@@ -1025,7 +995,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
     @objc func setPersistent() { mode = .persistent; saveHistory() }
     @objc func toggleSkip() { skipConcealed.toggle() }
     @objc func toggleShowImageDimensions() { showImageDimensions.toggle() }
-    @objc func toggleShowFullFilePath() { showFullFilePath.toggle() }
 
     @objc func setHistorySize(_ sender: NSMenuItem) {
         maxItems = sender.tag
