@@ -291,10 +291,11 @@ struct ContentView: View {
             // Footer / Settings
             HStack {
                 Menu {
-                    Button("Clear History Now") { manager.clearNow() }
+                    Button(action: { manager.clearNow() }) {
+                        Label("Clear History Now", systemImage: "trash.fill")
+                    }
                     Divider()
                     Menu {
-                        Menu {
                             Button(action: { manager.mode = .session }) {
                                 Label("Session-only (wiped on quit)", systemImage: manager.mode == .session ? "checkmark" : "")
                             }
@@ -328,14 +329,20 @@ struct ContentView: View {
                         Label("Preferences...", systemImage: "gearshape")
                     }
                     Divider()
-                    Button("Check for Updates...") {
+                    Button(action: {
                         (NSApp.delegate as? AppDelegate)?.checkForUpdates(silentIfCurrent: false)
+                    }) {
+                        Label("Check for Updates...", systemImage: "arrow.triangle.2.circlepath")
                     }
-                    Button("About ClipLocal") {
+                    Button(action: {
                         (NSApp.delegate as? AppDelegate)?.showAbout(onLaunch: false)
+                    }) {
+                        Label("About ClipLocal", systemImage: "info.circle")
                     }
-                    Button("Quit") {
+                    Button(action: {
                         NSApp.terminate(nil)
+                    }) {
+                        Label("Quit", systemImage: "xmark.circle")
                     }
                 } label: {
                     Image(systemName: "gearshape")
