@@ -299,12 +299,12 @@ struct ContentView: View {
                     Menu {
                         Menu {
                             Button(action: { manager.mode = .session }) {
-                                Text("Session-only (wiped on quit)")
-                                Image(systemName: manager.mode == .session ? "checkmark" : "lock")
+                                Text(manager.mode == .session ? "✓ Session-only (wiped on quit)" : "    Session-only (wiped on quit)")
+                                Image(systemName: "lock")
                             }
                             Button(action: { manager.mode = .persistent }) {
-                                Text("Persistent (kept on quit)")
-                                Image(systemName: manager.mode == .persistent ? "checkmark" : "externaldrive.fill")
+                                Text(manager.mode == .persistent ? "✓ Persistent (kept on quit)" : "    Persistent (kept on quit)")
+                                Image(systemName: "externaldrive.fill")
                             }
                         } label: {
                             Text("History Storage")
@@ -314,8 +314,7 @@ struct ContentView: View {
                         Menu {
                             ForEach([10, 25, 50, 100, 200], id: \.self) { size in
                                 Button(action: { manager.maxItems = size }) {
-                                    Text("\(size) items")
-                                    if manager.maxItems == size { Image(systemName: "checkmark") }
+                                    Text(manager.maxItems == size ? "✓ \(size) items" : "    \(size) items")
                                 }
                             }
                         } label: {
@@ -324,16 +323,16 @@ struct ContentView: View {
                         }
 
                         Button(action: { manager.skipConcealed.toggle() }) {
-                            Text("Skip password-manager copies")
-                            Image(systemName: manager.skipConcealed ? "checkmark" : "key.fill")
+                            Text(manager.skipConcealed ? "✓ Skip password-manager copies" : "    Skip password-manager copies")
+                            Image(systemName: "key.fill")
                         }
                         Button(action: { manager.showImageDimensions.toggle() }) {
-                            Text("Show image dimensions")
-                            Image(systemName: manager.showImageDimensions ? "checkmark" : "photo.on.rectangle.angled")
+                            Text(manager.showImageDimensions ? "✓ Show image dimensions" : "    Show image dimensions")
+                            Image(systemName: "photo.on.rectangle.angled")
                         }
                         Button(action: { manager.toggleLaunchAtLogin() }) {
-                            Text("Launch at Login")
-                            Image(systemName: manager.launchAtLoginEnabled ? "checkmark" : "power")
+                            Text(manager.launchAtLoginEnabled ? "✓ Launch at Login" : "    Launch at Login")
+                            Image(systemName: "power")
                         }
                     } label: {
                         Text("Preferences...")
