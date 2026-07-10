@@ -250,39 +250,39 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
         tagline.textColor = .secondaryLabelColor
         bg.addSubview(tagline)
 
-        let bodyText = """
-        🔒  100% on-device. Your clipboard data NEVER leaves your Mac — no cloud, no servers, no accounts, no analytics, no third parties. Ever.
+        let features = [
+            ("lock.shield", "100% On-Device & Private", "Your clipboard data never leaves your Mac. No cloud, no tracking, no accounts."),
+            ("key", "Skips Secrets", "By default, passwords copied from 1Password, Bitwarden, etc., are completely ignored."),
+            ("eye.slash", "No Analytics", "Zero telemetry. The app only connects to GitHub manually when you check for updates."),
+            ("externaldrive.fill", "Encrypted Storage", "In Persistent mode, your history is encrypted (AES-GCM) on disk. Only your Mac account can read it.")
+        ]
 
-        💾  In Persistent mode, history is encrypted with a key stored in a protected file that only your macOS account can read.
-
-        🔑  Session-only mode keeps everything in memory and wipes it the moment you quit.
-
-        🛡️  Copies from password managers are skipped by default, and you can clear everything instantly anytime.
-
-        ⌘  Open the menu and press ⌘1–⌘9 to instantly copy any of your recent items.
-
-        🏷️  Each item shows a relevant icon — 🔗 links, ✉️ emails, #️⃣ numbers, 🧑‍💻 code, 📄 files, and 🖼️ images — so your history is easy to scan.
-        """
-        let para = NSMutableParagraphStyle()
-        para.lineSpacing = 3
-        let attr = NSAttributedString(string: bodyText, attributes: [
-            .font: NSFont.systemFont(ofSize: 12.5),
-            .foregroundColor: NSColor.labelColor,
-            .paragraphStyle: para
-        ])
         let bodyWidth = width - 80
-        let measured = attr.boundingRect(
-            with: NSSize(width: bodyWidth, height: .greatestFiniteMagnitude),
-            options: [.usesLineFragmentOrigin, .usesFontLeading])
-        let textHeight = ceil(measured.height) + 8
-        let privacy = NSTextField(labelWithAttributedString: attr)
-        privacy.lineBreakMode = .byWordWrapping
-        privacy.maximumNumberOfLines = 0
-        privacy.preferredMaxLayoutWidth = bodyWidth
-        let textTop = (height - 210) - 24
+        let textWidth = bodyWidth - 44
+        let para = NSMutableParagraphStyle()
+        para.lineSpacing = 2
+        let textFont = NSFont.systemFont(ofSize: 12.5)
+        let titleFont = NSFont.systemFont(ofSize: 13.5, weight: .bold)
 
+        var featureHeights: [CGFloat] = []
+        var totalFeaturesHeight: CGFloat = 0
+        for f in features {
+            let attr = NSAttributedString(string: f.2, attributes: [
+                .font: textFont,
+                .paragraphStyle: para
+            ])
+            let measured = attr.boundingRect(
+                with: NSSize(width: textWidth, height: .greatestFiniteMagnitude),
+                options: [.usesLineFragmentOrigin, .usesFontLeading])
+            let h = ceil(measured.height) + 24 // title height + spacing
+            featureHeights.append(h)
+            totalFeaturesHeight += h + 20 // item spacing
+        }
+        totalFeaturesHeight -= 20 // remove last spacing
+
+        let textTop = (height - 210) - 24
         let bottomSpaceNeeded: CGFloat = 160
-        let newHeight = (height - textTop) + textHeight + bottomSpaceNeeded
+        let newHeight = (height - textTop) + totalFeaturesHeight + bottomSpaceNeeded
         let finalHeight = max(height, newHeight)
 
         let oldFrame = win.frame
@@ -295,11 +295,46 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
         tagline.frame.origin.y = finalHeight - 210
         let newTextTop = (finalHeight - 210) - 24
 
-        privacy.frame = NSRect(x: 40, y: newTextTop - textHeight, width: bodyWidth, height: textHeight)
-        bg.addSubview(privacy)
+        var currentY = newTextTop
+        for (i, f) in features.enumerated() {
+            let itemH = featureHeights[i]
+            let itemY = currentY - itemH
+
+            let iconView = NSImageView(frame: NSRect(x: 40, y: itemY + itemH - 26, width: 26, height: 26))
+            let iconCfg = NSImage.SymbolConfiguration(pointSize: 18, weight: .regular)
+            iconView.image = NSImage(systemSymbolName: f.0, accessibilityDescription: nil)?
+                .withSymbolConfiguration(iconCfg)
+            iconView.contentTintColor = NSColor.controlAccentColor
+            bg.addSubview(iconView)
+
+            let titleLabel = NSTextField(labelWithString: f.1)
+            titleLabel.frame = NSRect(x: 84, y: itemY + itemH - 22, width: textWidth, height: 18)
+            titleLabel.font = titleFont
+            titleLabel.textColor = .labelColor
+            titleLabel.isEditable = false
+            titleLabel.drawsBackground = false
+            titleLabel.isBordered = false
+            bg.addSubview(titleLabel)
+
+            let attr = NSAttributedString(string: f.2, attributes: [
+                .font: textFont,
+                .foregroundColor: NSColor.secondaryLabelColor,
+                .paragraphStyle: para
+            ])
+            let descLabel = NSTextField(labelWithAttributedString: attr)
+            descLabel.frame = NSRect(x: 84, y: itemY, width: textWidth, height: itemH - 24)
+            descLabel.lineBreakMode = .byWordWrapping
+            descLabel.maximumNumberOfLines = 0
+            descLabel.isEditable = false
+            descLabel.drawsBackground = false
+            descLabel.isBordered = false
+            bg.addSubview(descLabel)
+
+            currentY = itemY - 20
+        }
 
         let credit = NSTextField(labelWithString: "Built by Arun Thomas")
-        credit.frame = NSRect(x: 0, y: (newTextTop - textHeight) - 34, width: width, height: 18)
+        credit.frame = NSRect(x: 0, y: currentY - 34, width: width, height: 18)
         credit.alignment = .center
         credit.font = NSFont.systemFont(ofSize: 12, weight: .semibold)
         credit.textColor = .secondaryLabelColor
