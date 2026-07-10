@@ -6,102 +6,9 @@ import ServiceManagement
 //  ClipLocal — 100% on-device clipboard history, no third parties
 // ============================================================
 
-let appVersion = "1.9"
+let appVersion = "2.0"
 let updateCheckURL = "https://raw.githubusercontent.com/arunofhyd/ClipLocal/main/version.json"
 let downloadPageURL = "https://cliplocal.vercel.app/#install"
-
-// MARK: - Custom UI Components
-
-/// Ensures the NSSearchField reliably grabs focus and shows the blinking cursor inside an NSMenu.
-class MenuSearchField: NSSearchField {
-    override func viewDidMoveToWindow() {
-        super.viewDidMoveToWindow()
-        if window != nil {
-            // Attempt to grab focus immediately when added to the window
-            self.window?.makeFirstResponder(self)
-
-            // Dispatch asynchronously to guarantee it catches the cursor blink
-            // after the menu has fully transitioned onto the screen.
-            DispatchQueue.main.async { [weak self] in
-                guard let self = self, let win = self.window else { return }
-                win.makeFirstResponder(self)
-                self.currentEditor()?.moveToEndOfLine(nil)
-            }
-        }
-    }
-
-    override func mouseDown(with event: NSEvent) {
-        super.mouseDown(with: event)
-        // Ensure clicking anywhere within the search field's bounds reliably claims focus
-        // away from the NSMenu tracker and re-engages the text editor cursor.
-        self.window?.makeFirstResponder(self)
-    }
-}
-
-/// Provides a smooth, animated background highlight when selecting filters.
-class FilterButton: NSButton {
-    var hasItems: Bool = false {
-        didSet { updateVisuals(animated: false) }
-    }
-
-    override init(frame frameRect: NSRect) {
-        super.init(frame: frameRect)
-        setup()
-    }
-
-    required init?(coder: NSCoder) {
-        super.init(coder: coder)
-        setup()
-    }
-
-    private func setup() {
-        setButtonType(.toggle)
-        isBordered = false
-        wantsLayer = true
-        layer?.cornerRadius = 5
-        imageScaling = .scaleProportionallyDown
-        // Crucial: Prevents the button from stealing focus from the search bar when clicked
-        refusesFirstResponder = true
-    }
-
-    func setSelected(_ selected: Bool, animated: Bool = true) {
-        self.state = selected ? .on : .off
-        updateVisuals(animated: animated)
-    }
-
-    private func updateVisuals(animated: Bool) {
-        let selected = self.state == .on
-        let updateUI = {
-            self.layer?.borderWidth = 0
-
-            if selected {
-                self.contentTintColor = .white
-                self.layer?.backgroundColor = NSColor.controlAccentColor.cgColor
-                self.animator().alphaValue = 1.0
-            } else {
-                self.layer?.backgroundColor = NSColor.clear.cgColor
-
-                if self.hasItems {
-                    self.contentTintColor = .labelColor
-                    self.animator().alphaValue = 1.0
-                } else {
-                    self.contentTintColor = .tertiaryLabelColor
-                    self.animator().alphaValue = 0.2
-                }
-            }
-        }
-
-        if animated {
-            NSAnimationContext.runAnimationGroup { ctx in
-                ctx.duration = 0.15
-                ctx.allowsImplicitAnimation = true
-                updateUI()
-            }
-        } else {
-            updateUI()
-        }
-    }
-}
 
 // MARK: - Encryption key (stored in a protected local file)
 enum KeyStore {
@@ -140,8 +47,630 @@ enum PrivacyMode: String {
     case persistent
 }
 
-// MARK: - The app
-class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFieldDelegate {
+// MARK: - Custom Hover Table Row View
+class HoverTableRowView: NSTableRowView {
+    private var trackingArea: NSTrackingArea?
+    var isHovered: Bool = false {
+        didSet {
+            needsDisplay = true
+        }
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let trackingArea = trackingArea {
+            removeTrackingArea(trackingArea)
+        }
+        let options: NSTrackingArea.Options = [.mouseEnteredAndExited, .activeInActiveWindow, .inVisibleRect]
+        let area = NSTrackingArea(rect: bounds, options: options, owner: self, userInfo: nil)
+        addTrackingArea(area)
+        trackingArea = area
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        isHovered = true
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        isHovered = false
+    }
+
+    override func drawBackground(in dirtyRect: NSRect) {
+        if isSelected {
+            NSColor.selectedContentBackgroundColor.setFill()
+            dirtyRect.fill()
+        } else if isHovered {
+            NSColor.quaternaryLabelColor.setFill()
+            dirtyRect.fill()
+        } else {
+            super.drawBackground(in: dirtyRect)
+        }
+    }
+
+    override func drawSelection(in dirtyRect: NSRect) {
+        // We handle selection color drawing in drawBackground
+    }
+}
+
+// MARK: - Custom Cell View for NSTableView
+class ClipCellView: NSTableCellView {
+    let iconImageView = NSImageView()
+    let titleTextField = NSTextField()
+    let shortcutTextField = NSTextField()
+    let previewImageView = NSImageView()
+    let metaTextField = NSTextField()
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        setupViews()
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        setupViews()
+    }
+
+    private func setupViews() {
+        iconImageView.imageScaling = .scaleProportionallyDown
+        iconImageView.contentTintColor = .secondaryLabelColor
+        iconImageView.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(iconImageView)
+
+        titleTextField.isEditable = false
+        titleTextField.isSelectable = false
+        titleTextField.isBordered = false
+        titleTextField.drawsBackground = false
+        titleTextField.font = NSFont.systemFont(ofSize: 13, weight: .regular)
+        titleTextField.lineBreakMode = .byTruncatingTail
+        titleTextField.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(titleTextField)
+
+        shortcutTextField.isEditable = false
+        shortcutTextField.isSelectable = false
+        shortcutTextField.isBordered = false
+        shortcutTextField.drawsBackground = false
+        shortcutTextField.font = NSFont.monospacedSystemFont(ofSize: 11, weight: .medium)
+        shortcutTextField.textColor = .tertiaryLabelColor
+        shortcutTextField.alignment = .right
+        shortcutTextField.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(shortcutTextField)
+
+        previewImageView.imageScaling = .scaleProportionallyUpOrDown
+        previewImageView.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(previewImageView)
+
+        metaTextField.isEditable = false
+        metaTextField.isSelectable = false
+        metaTextField.isBordered = false
+        metaTextField.drawsBackground = false
+        metaTextField.font = NSFont.systemFont(ofSize: 11, weight: .regular)
+        metaTextField.textColor = .secondaryLabelColor
+        metaTextField.lineBreakMode = .byTruncatingTail
+        metaTextField.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(metaTextField)
+
+        NSLayoutConstraint.activate([
+            iconImageView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 10),
+            iconImageView.centerYAnchor.constraint(equalTo: centerYAnchor),
+            iconImageView.widthAnchor.constraint(equalToConstant: 20),
+            iconImageView.heightAnchor.constraint(equalToConstant: 20),
+
+            shortcutTextField.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
+            shortcutTextField.centerYAnchor.constraint(equalTo: centerYAnchor),
+            shortcutTextField.widthAnchor.constraint(equalToConstant: 34),
+
+            previewImageView.leadingAnchor.constraint(equalTo: iconImageView.trailingAnchor, constant: 8),
+            previewImageView.centerYAnchor.constraint(equalTo: centerYAnchor),
+            previewImageView.widthAnchor.constraint(equalToConstant: 32),
+            previewImageView.heightAnchor.constraint(equalToConstant: 32),
+
+            titleTextField.leadingAnchor.constraint(equalTo: iconImageView.trailingAnchor, constant: 8),
+            titleTextField.trailingAnchor.constraint(equalTo: shortcutTextField.leadingAnchor, constant: -8),
+            titleTextField.topAnchor.constraint(equalTo: topAnchor, constant: 4),
+            titleTextField.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -4),
+
+            metaTextField.leadingAnchor.constraint(equalTo: previewImageView.trailingAnchor, constant: 8),
+            metaTextField.trailingAnchor.constraint(equalTo: shortcutTextField.leadingAnchor, constant: -8),
+            metaTextField.centerYAnchor.constraint(equalTo: centerYAnchor)
+        ])
+    }
+
+    func configure(with item: ClipItem, index: Int, showDimensions: Bool) {
+        let isImage = item.imageData != nil
+        let shortcutText = index < 9 ? "⌘\(index + 1)" : ""
+        shortcutTextField.stringValue = shortcutText
+
+        iconImageView.image = NSImage(systemSymbolName: item.pinned ? "pin.fill" : iconName(for: item.text), accessibilityDescription: nil)
+
+        if isImage, let data = item.imageData, let img = NSImage(data: data) {
+            previewImageView.isHidden = false
+            previewImageView.image = img
+            titleTextField.isHidden = true
+            metaTextField.isHidden = false
+
+            if showDimensions {
+                let width = Int(img.size.width)
+                let height = Int(img.size.height)
+                metaTextField.stringValue = "Image: \(width)x\(height)"
+            } else {
+                metaTextField.stringValue = "Image Preview"
+            }
+        } else {
+            previewImageView.isHidden = true
+            titleTextField.isHidden = false
+            metaTextField.isHidden = true
+
+            var displayText = item.text
+            let isFile = item.text.hasPrefix("file://") || item.text.hasPrefix("/")
+            if isFile {
+                let path = item.text.hasPrefix("file://") ? String(item.text.dropFirst(7)) : item.text
+                let url = URL(fileURLWithPath: path)
+                displayText = url.lastPathComponent
+            }
+
+            let cleanText = displayText
+                .replacingOccurrences(of: "\n", with: " ")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+
+            titleTextField.stringValue = cleanText
+        }
+    }
+
+    private func iconName(for text: String) -> String {
+        if text.hasPrefix("[Image:") { return "photo" }
+        let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let lower = t.lowercased()
+        let isCode = t.contains("{") || t.contains("}") || t.contains("<") || t.contains(">") || t.hasPrefix("func ") || t.hasPrefix("import ") || t.hasPrefix("class ")
+        if isCode { return "chevron.left.forwardslash.chevron.right" }
+        if lower.hasPrefix("http://") || lower.hasPrefix("https://") || lower.hasPrefix("www.") { return "link" }
+        if t.contains("@"), t.contains("."), !t.contains(" "), t.count < 60 { return "envelope" }
+        if t.range(of: "^[0-9 +().-]{5,}$", options: .regularExpression) != nil { return "number" }
+        if lower.hasPrefix("file://") || lower.hasPrefix("/") { return "doc" }
+        return "text.alignleft"
+    }
+}
+
+// MARK: - Filter Button (Smooth hover/active toggles)
+class PopoverFilterButton: NSButton {
+    var filterName: String = ""
+    var hasItems: Bool = false {
+        didSet { updateVisuals(animated: false) }
+    }
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        setup()
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        setup()
+    }
+
+    private func setup() {
+        setButtonType(.toggle)
+        isBordered = false
+        wantsLayer = true
+        layer?.cornerRadius = 5
+        imageScaling = .scaleProportionallyDown
+        refusesFirstResponder = true
+    }
+
+    func setSelected(_ selected: Bool, animated: Bool = true) {
+        self.state = selected ? .on : .off
+        updateVisuals(animated: animated)
+    }
+
+    private func updateVisuals(animated: Bool) {
+        let selected = self.state == .on
+        let updateUI = {
+            if selected {
+                self.contentTintColor = .white
+                self.layer?.backgroundColor = NSColor.controlAccentColor.cgColor
+                self.alphaValue = 1.0
+            } else {
+                self.layer?.backgroundColor = NSColor.clear.cgColor
+                if self.hasItems {
+                    self.contentTintColor = .labelColor
+                    self.alphaValue = 1.0
+                } else {
+                    self.contentTintColor = .tertiaryLabelColor
+                    self.alphaValue = 0.3
+                }
+            }
+        }
+
+        if animated {
+            NSAnimationContext.runAnimationGroup { ctx in
+                ctx.duration = 0.15
+                ctx.allowsImplicitAnimation = true
+                updateUI()
+            }
+        } else {
+            updateUI()
+        }
+    }
+}
+
+// MARK: - Popover Content View Controller
+class PopoverViewController: NSViewController, NSTableViewDataSource, NSTableViewDelegate, NSSearchFieldDelegate {
+
+    weak var appDelegate: AppDelegate?
+
+    let searchField = NSSearchField()
+    let filtersStackView = NSStackView()
+    let scrollView = NSScrollView()
+    let tableView = NSTableView()
+    let bottomBar = NSView()
+    let settingsButton = NSButton()
+    let clearButton = NSButton()
+
+    var filteredItems: [(originalIndex: Int, item: ClipItem)] = []
+    var activeFilters: Set<String> = []
+    var currentSearchText = ""
+
+    override func loadView() {
+        let mainView = NSView(frame: NSRect(x: 0, y: 0, width: 340, height: 460))
+        mainView.wantsLayer = true
+        self.view = mainView
+
+        setupSearchField()
+        setupFilters()
+        setupScrollView()
+        setupBottomBar()
+
+        setupLayoutConstraints()
+    }
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        tableView.dataSource = self
+        tableView.delegate = self
+        tableView.doubleAction = #selector(tableViewDoubleClicked(_:))
+    }
+
+    override func viewWillAppear() {
+        super.viewWillAppear()
+        refreshData()
+        self.view.window?.makeFirstResponder(searchField)
+    }
+
+    func refreshData() {
+        guard let appDelegate = appDelegate else { return }
+
+        let originalHistory = appDelegate.history
+        var categoryCounts: [String: Int] = [
+            "link": 0, "image": 0, "text": 0, "file": 0, "number": 0, "email": 0, "code": 0
+        ]
+
+        for item in originalHistory {
+            let t = item.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            let textLower = t.lowercased()
+            let isImage = item.imageData != nil
+            let isCode = t.contains("{") || t.contains("}") || t.contains("<") || t.contains(">") || t.hasPrefix("func ") || t.hasPrefix("import ") || t.hasPrefix("class ")
+            let isLink = textLower.hasPrefix("http://") || textLower.hasPrefix("https://") || textLower.hasPrefix("www.")
+            let isEmail = t.contains("@") && t.contains(".") && !t.contains(" ") && t.count < 60
+            let isNum = t.range(of: "^[0-9 +().-]{5,}$", options: .regularExpression) != nil
+            let isFile = textLower.hasPrefix("file://") || textLower.hasPrefix("/")
+            let isText = !isImage && !isLink && !isEmail && !isNum && !isCode && !isFile
+
+            if isLink { categoryCounts["link"]! += 1 }
+            if isImage { categoryCounts["image"]! += 1 }
+            if isText { categoryCounts["text"]! += 1 }
+            if isFile { categoryCounts["file"]! += 1 }
+            if isCode { categoryCounts["code"]! += 1 }
+            if isNum { categoryCounts["number"]! += 1 }
+            if isEmail { categoryCounts["email"]! += 1 }
+        }
+
+        for view in filtersStackView.views {
+            if let btn = view as? PopoverFilterButton {
+                let count = categoryCounts[btn.filterName] ?? 0
+                btn.hasItems = count > 0
+            }
+        }
+
+        filteredItems = []
+        for (i, item) in originalHistory.enumerated() {
+            var matchesSearch = true
+            if !currentSearchText.isEmpty {
+                matchesSearch = item.text.lowercased().contains(currentSearchText)
+            }
+
+            var matchesFilter = true
+            if !activeFilters.isEmpty {
+                var filterMatched = false
+                let t = item.text.trimmingCharacters(in: .whitespacesAndNewlines)
+                let textLower = t.lowercased()
+                let isImage = item.imageData != nil
+                let isCode = t.contains("{") || t.contains("}") || t.contains("<") || t.contains(">") || t.hasPrefix("func ") || t.hasPrefix("import ") || t.hasPrefix("class ")
+                let isLink = textLower.hasPrefix("http://") || textLower.hasPrefix("https://") || textLower.hasPrefix("www.")
+                let isEmail = t.contains("@") && t.contains(".") && !t.contains(" ") && t.count < 60
+                let isNum = t.range(of: "^[0-9 +().-]{5,}$", options: .regularExpression) != nil
+                let isFile = textLower.hasPrefix("file://") || textLower.hasPrefix("/")
+                let isText = !isImage && !isLink && !isEmail && !isNum && !isCode && !isFile
+
+                if activeFilters.contains("link") && isLink { filterMatched = true }
+                if activeFilters.contains("email") && isEmail { filterMatched = true }
+                if activeFilters.contains("number") && isNum { filterMatched = true }
+                if activeFilters.contains("image") && isImage { filterMatched = true }
+                if activeFilters.contains("file") && isFile { filterMatched = true }
+                if activeFilters.contains("code") && isCode { filterMatched = true }
+                if activeFilters.contains("text") && isText { filterMatched = true }
+
+                matchesFilter = filterMatched
+            }
+
+            if matchesSearch && matchesFilter {
+                filteredItems.append((originalIndex: i, item: item))
+            }
+        }
+
+        tableView.reloadData()
+    }
+
+    private func setupSearchField() {
+        searchField.placeholderString = "Search history..."
+        searchField.delegate = self
+        searchField.focusRingType = .none
+        searchField.translatesAutoresizingMaskIntoConstraints = false
+        self.view.addSubview(searchField)
+    }
+
+    private func setupFilters() {
+        filtersStackView.orientation = .horizontal
+        filtersStackView.distribution = .equalSpacing
+        filtersStackView.alignment = .centerY
+        filtersStackView.translatesAutoresizingMaskIntoConstraints = false
+        self.view.addSubview(filtersStackView)
+
+        let filters = [
+            ("code", "chevron.left.forwardslash.chevron.right"),
+            ("email", "envelope"),
+            ("file", "doc"),
+            ("image", "photo"),
+            ("link", "link"),
+            ("number", "number"),
+            ("text", "text.alignleft")
+        ]
+
+        for filter in filters {
+            let btn = PopoverFilterButton(frame: .zero)
+            btn.image = NSImage(systemSymbolName: filter.1, accessibilityDescription: nil)
+            btn.target = self
+            btn.action = #selector(filterToggled(_:))
+            btn.filterName = filter.0
+            btn.toolTip = "Filter by \(filter.0)"
+
+            btn.translatesAutoresizingMaskIntoConstraints = false
+            btn.widthAnchor.constraint(equalToConstant: 26).isActive = true
+            btn.heightAnchor.constraint(equalToConstant: 22).isActive = true
+            filtersStackView.addView(btn, in: .leading)
+        }
+    }
+
+    private func setupScrollView() {
+        scrollView.hasVerticalScroller = true
+        scrollView.drawsBackground = false
+        scrollView.translatesAutoresizingMaskIntoConstraints = false
+        self.view.addSubview(scrollView)
+
+        tableView.headerView = nil
+        tableView.backgroundColor = .clear
+        tableView.selectionHighlightStyle = .regular
+
+        let col = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("clipColumn"))
+        col.width = 310
+        tableView.addTableColumn(col)
+
+        scrollView.documentView = tableView
+    }
+
+    private func setupBottomBar() {
+        bottomBar.wantsLayer = true
+        bottomBar.translatesAutoresizingMaskIntoConstraints = false
+        self.view.addSubview(bottomBar)
+
+        settingsButton.image = NSImage(systemSymbolName: "gearshape", accessibilityDescription: "Settings")
+        settingsButton.isBordered = false
+        settingsButton.target = self
+        settingsButton.action = #selector(settingsClicked(_:))
+        settingsButton.translatesAutoresizingMaskIntoConstraints = false
+        bottomBar.addSubview(settingsButton)
+
+        clearButton.image = NSImage(systemSymbolName: "trash", accessibilityDescription: "Clear history")
+        clearButton.isBordered = false
+        clearButton.target = self
+        clearButton.action = #selector(clearClicked(_:))
+        clearButton.translatesAutoresizingMaskIntoConstraints = false
+        bottomBar.addSubview(clearButton)
+    }
+
+    private func setupLayoutConstraints() {
+        NSLayoutConstraint.activate([
+            searchField.topAnchor.constraint(equalTo: self.view.topAnchor, constant: 12),
+            searchField.leadingAnchor.constraint(equalTo: self.view.leadingAnchor, constant: 14),
+            searchField.trailingAnchor.constraint(equalTo: self.view.trailingAnchor, constant: -14),
+            searchField.heightAnchor.constraint(equalToConstant: 24),
+
+            filtersStackView.topAnchor.constraint(equalTo: searchField.bottomAnchor, constant: 8),
+            filtersStackView.leadingAnchor.constraint(equalTo: self.view.leadingAnchor, constant: 14),
+            filtersStackView.trailingAnchor.constraint(equalTo: self.view.trailingAnchor, constant: -14),
+            filtersStackView.heightAnchor.constraint(equalToConstant: 24),
+
+            scrollView.topAnchor.constraint(equalTo: filtersStackView.bottomAnchor, constant: 8),
+            scrollView.leadingAnchor.constraint(equalTo: self.view.leadingAnchor),
+            scrollView.trailingAnchor.constraint(equalTo: self.view.trailingAnchor),
+            scrollView.bottomAnchor.constraint(equalTo: bottomBar.topAnchor),
+
+            bottomBar.leadingAnchor.constraint(equalTo: self.view.leadingAnchor),
+            bottomBar.trailingAnchor.constraint(equalTo: self.view.trailingAnchor),
+            bottomBar.bottomAnchor.constraint(equalTo: self.view.bottomAnchor),
+            bottomBar.heightAnchor.constraint(equalToConstant: 38),
+
+            clearButton.leadingAnchor.constraint(equalTo: bottomBar.leadingAnchor, constant: 14),
+            clearButton.centerYAnchor.constraint(equalTo: bottomBar.centerYAnchor),
+            clearButton.widthAnchor.constraint(equalToConstant: 24),
+            clearButton.heightAnchor.constraint(equalToConstant: 24),
+
+            settingsButton.trailingAnchor.constraint(equalTo: bottomBar.trailingAnchor, constant: -14),
+            settingsButton.centerYAnchor.constraint(equalTo: bottomBar.centerYAnchor),
+            settingsButton.widthAnchor.constraint(equalToConstant: 24),
+            settingsButton.heightAnchor.constraint(equalToConstant: 24)
+        ])
+    }
+
+    // MARK: - Table view dataSource & delegate
+    func numberOfRows(in tableView: NSTableView) -> Int {
+        return filteredItems.count
+    }
+
+    func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
+        let identifier = NSUserInterfaceItemIdentifier("ClipCell")
+        var cell = tableView.makeView(withIdentifier: identifier, owner: self) as? ClipCellView
+        if cell == nil {
+            cell = ClipCellView(frame: NSRect(x: 0, y: 0, width: tableView.bounds.width, height: 44))
+            cell?.identifier = identifier
+        }
+
+        let entry = filteredItems[row]
+        let showDimensions = appDelegate?.showImageDimensions ?? false
+        cell?.configure(with: entry.item, index: row, showDimensions: showDimensions)
+        return cell
+    }
+
+    func tableView(_ tableView: NSTableView, rowViewForRow row: Int) -> NSTableRowView? {
+        let identifier = NSUserInterfaceItemIdentifier("HoverRow")
+        var rowView = tableView.makeView(withIdentifier: identifier, owner: self) as? HoverTableRowView
+        if rowView == nil {
+            rowView = HoverTableRowView()
+            rowView?.identifier = identifier
+        }
+        return rowView
+    }
+
+    func tableView(_ tableView: NSTableView, heightOfRow row: Int) -> CGFloat {
+        return 44
+    }
+
+    // MARK: - Native Swipe Actions
+    func tableView(_ tableView: NSTableView, rowActionsForRow row: Int, edge: NSTableView.RowActionEdge) -> [NSTableViewRowAction] {
+        let entry = filteredItems[row]
+
+        if edge == .trailing {
+            // Delete action
+            let deleteAction = NSTableViewRowAction(style: .destructive, title: "Delete") { [weak self] (_, _) in
+                guard let self = self, let appDelegate = self.appDelegate else { return }
+                let originalIndex = entry.originalIndex
+                appDelegate.history.remove(at: originalIndex)
+                appDelegate.persistIfNeeded()
+                self.refreshData()
+            }
+            deleteAction.backgroundColor = .systemRed
+            return [deleteAction]
+        } else if edge == .leading {
+            // Pin / Unpin action
+            let isPinned = entry.item.pinned
+            let pinTitle = isPinned ? "Unpin" : "Pin"
+            let pinAction = NSTableViewRowAction(style: .regular, title: pinTitle) { [weak self] (_, _) in
+                guard let self = self, let appDelegate = self.appDelegate else { return }
+                let originalIndex = entry.originalIndex
+                appDelegate.history[originalIndex].pinned.toggle()
+                appDelegate.persistIfNeeded()
+                self.refreshData()
+            }
+            pinAction.backgroundColor = isPinned ? .systemBlue : .systemOrange
+            return [pinAction]
+        }
+
+        return []
+    }
+
+    // MARK: - Actions
+    @objc func filterToggled(_ sender: PopoverFilterButton) {
+        let isActivating = sender.state == .on
+        sender.setSelected(isActivating, animated: true)
+
+        if isActivating {
+            activeFilters.insert(sender.filterName)
+        } else {
+            activeFilters.remove(sender.filterName)
+        }
+        refreshData()
+    }
+
+    func controlTextDidChange(_ obj: Notification) {
+        guard let field = obj.object as? NSSearchField else { return }
+        currentSearchText = field.stringValue.lowercased()
+        refreshData()
+    }
+
+    @objc func tableViewDoubleClicked(_ sender: NSTableView) {
+        let row = sender.clickedRow
+        guard row >= 0 && row < filteredItems.count else { return }
+        copyItemAndDismiss(atRow: row)
+    }
+
+    func copyItemAndDismiss(atRow row: Int) {
+        guard let appDelegate = appDelegate else { return }
+        let entry = filteredItems[row]
+        appDelegate.copyItemWithIndex(entry.originalIndex)
+        appDelegate.closePopover()
+    }
+
+    @objc func clearClicked(_ sender: NSButton) {
+        guard let appDelegate = appDelegate else { return }
+        appDelegate.clearNow()
+        refreshData()
+    }
+
+    @objc func settingsClicked(_ sender: NSButton) {
+        guard let appDelegate = appDelegate else { return }
+        let menu = appDelegate.buildSettingsMenu()
+        let p = NSPoint(x: 0, y: sender.bounds.height)
+        menu.popUp(positioning: nil, at: p, in: sender)
+    }
+
+    // MARK: - Keyboard Handling
+    override func keyUp(with event: NSEvent) {
+        // Return key on selected table view row
+        if event.keyCode == 36 { // Enter / Return
+            let row = tableView.selectedRow
+            if row >= 0 && row < filteredItems.count {
+                copyItemAndDismiss(atRow: row)
+                return
+            }
+        }
+
+        // Command + number logic
+        if event.modifierFlags.contains(.command) {
+            if let chars = event.charactersIgnoringModifiers, chars.count == 1 {
+                if let num = Int(chars), num >= 1 && num <= 9 {
+                    let index = num - 1
+                    if index < filteredItems.count {
+                        copyItemAndDismiss(atRow: index)
+                        return
+                    }
+                }
+            }
+        }
+        super.keyUp(with: event)
+    }
+}
+
+// MARK: - Custom Popover to ensure Key status
+class ClipboardPopover: NSPopover {
+    override init() {
+        super.init()
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+    }
+}
+
+// MARK: - The app Delegate
+class AppDelegate: NSObject, NSApplicationDelegate {
     var statusItem: NSStatusItem!
     var timer: Timer?
     var lastChangeCount = NSPasteboard.general.changeCount
@@ -150,30 +679,24 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
     let defaults = UserDefaults.standard
     var previewWindow: NSWindow?
 
-    var isMenuOpen = false
-    var currentSearchText = ""
-    var activeFilters: Set<String> = []
-    var historyMenuItems: [NSMenuItem] = []
-    var searchField: NSSearchField?
-    var needsRebuildAfterClose = false
-    var filtersMenuItem: NSMenuItem?
-    var focusTimer: Timer?
+    let popover = ClipboardPopover()
+    var popoverViewController: PopoverViewController!
 
     var mode: PrivacyMode {
         get { PrivacyMode(rawValue: defaults.string(forKey: "mode") ?? "persistent") ?? .persistent }
-        set { defaults.set(newValue.rawValue, forKey: "mode"); persistIfNeeded(); rebuildMenu() }
+        set { defaults.set(newValue.rawValue, forKey: "mode"); persistIfNeeded(); popoverViewController?.refreshData() }
     }
     var skipConcealed: Bool {
         get { defaults.object(forKey: "skipConcealed") == nil ? true : defaults.bool(forKey: "skipConcealed") }
-        set { defaults.set(newValue, forKey: "skipConcealed"); rebuildMenu() }
+        set { defaults.set(newValue, forKey: "skipConcealed"); popoverViewController?.refreshData() }
     }
     var showImageDimensions: Bool {
         get { defaults.bool(forKey: "showImageDimensions") }
-        set { defaults.set(newValue, forKey: "showImageDimensions"); rebuildMenu() }
+        set { defaults.set(newValue, forKey: "showImageDimensions"); popoverViewController?.refreshData() }
     }
     var maxItems: Int {
         get { let v = defaults.integer(forKey: "maxItems"); return v == 0 ? 50 : v }
-        set { defaults.set(newValue, forKey: "maxItems"); rebuildMenu() }
+        set { defaults.set(newValue, forKey: "maxItems"); popoverViewController?.refreshData() }
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -187,14 +710,42 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
         if let button = statusItem.button {
             button.image = NSImage(systemSymbolName: "doc.on.clipboard",
                                    accessibilityDescription: "ClipLocal")
+            button.target = self
+            button.action = #selector(statusItemClicked(_:))
         }
+
+        popoverViewController = PopoverViewController()
+        popoverViewController.appDelegate = self
+        popover.contentViewController = popoverViewController
+        popover.behavior = .transient
+
         if mode == .persistent { loadHistory() }
-        rebuildMenu()
         showAbout(onLaunch: true)
         checkForUpdates(silentIfCurrent: true)
         timer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
             self?.checkClipboard()
         }
+    }
+
+    @objc func statusItemClicked(_ sender: AnyObject?) {
+        if popover.isShown {
+            closePopover()
+        } else {
+            showPopover()
+        }
+    }
+
+    func showPopover() {
+        if let button = statusItem.button {
+            // Activating application is necessary for key window/popover focus
+            NSApp.activate(ignoringOtherApps: true)
+            popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+            popover.contentViewController?.view.window?.makeKey()
+        }
+    }
+
+    func closePopover() {
+        popover.performClose(nil)
     }
 
     // MARK: - About window (privacy-first splash)
@@ -259,9 +810,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
 
         🛡️  Copies from password managers are skipped by default, and you can clear everything instantly anytime.
 
-        ⌘  Open the menu and press ⌘1–⌘9 to instantly copy any of your recent items.
+        ⌘  Open the popover and press ⌘1–⌘9 to instantly copy any of your recent items.
 
         🏷️  Each item shows a relevant icon — 🔗 links, ✉️ emails, #️⃣ numbers, 🧑‍💻 code, 📄 files, and 🖼️ images — so your history is easy to scan.
+
+        👉  Swipe LEFT on a row to delete it, or swipe RIGHT to pin / unpin it!
         """
         let para = NSMutableParagraphStyle()
         para.lineSpacing = 3
@@ -396,7 +949,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
         history.insert(ClipItem(text: textToStore, date: Date(), pinned: pinned, imageData: imageToStore), at: 0)
         trimHistory()
         persistIfNeeded()
-        rebuildMenu()
+        popoverViewController?.refreshData()
         showPreview(textToStore)
     }
 
@@ -469,221 +1022,37 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
         }
     }
 
-    // MARK: - The menu
-    func icon(_ name: String) -> NSImage? {
-        let cfg = NSImage.SymbolConfiguration(pointSize: 13, weight: .regular)
-        return NSImage(systemSymbolName: name, accessibilityDescription: nil)?
-            .withSymbolConfiguration(cfg)
-    }
-
-    func iconName(for text: String) -> String {
-        if text.hasPrefix("[Image:") {
-            return "photo"
-        }
-        let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        let lower = t.lowercased()
-
-        let isCode = t.contains("{") || t.contains("}") || t.contains("<") || t.contains(">") || t.hasPrefix("func ") || t.hasPrefix("import ") || t.hasPrefix("class ")
-        if isCode {
-            return "chevron.left.forwardslash.chevron.right"
-        }
-        if lower.hasPrefix("http://") || lower.hasPrefix("https://") || lower.hasPrefix("www.") {
-            return "link"
-        }
-        if t.contains("@"), t.contains("."), !t.contains(" "), t.count < 60 {
-            return "envelope"
-        }
-        if t.range(of: "^[0-9 +().-]{5,}$", options: .regularExpression) != nil {
-            return "number"
-        }
-        if lower.hasPrefix("file://") || lower.hasPrefix("/") {
-            return "doc"
-        }
-        return "text.alignleft"
-    }
-
-    func paintedTitle(for text: String, shortcut: String, isSubmenu: Bool = false, image: NSImage? = nil, extraLabel: String? = nil) -> NSAttributedString {
-        let para = NSMutableParagraphStyle()
-        let tabLocation: CGFloat = isSubmenu ? 295.25 : 300
-        para.tabStops = [NSTextTab(textAlignment: .right, location: tabLocation)]
-        para.lineBreakMode = .byTruncatingTail
-
-        let title = NSMutableAttributedString()
-
-        if let img = image {
-            let targetHeight: CGFloat = 14.0
-            let ratio = img.size.width / img.size.height
-            let targetWidth = min(targetHeight * ratio, 250.0)
-
-            let scaledImage = NSImage(size: NSSize(width: targetWidth, height: targetHeight))
-            scaledImage.lockFocus()
-            img.draw(in: NSRect(x: 0, y: 0, width: targetWidth, height: targetHeight))
-            scaledImage.unlockFocus()
-
-            let attachment = NSTextAttachment()
-            attachment.image = scaledImage
-            attachment.bounds = NSRect(x: 0, y: -2, width: targetWidth, height: targetHeight)
-
-            title.append(NSAttributedString(attachment: attachment))
-
-            if showImageDimensions, text.hasPrefix("[Image: "), text.hasSuffix("]") {
-                let dims = text.dropFirst(8).dropLast()
-                title.append(NSAttributedString(
-                    string: "  \(dims)",
-                    attributes: [.font: NSFont.menuFont(ofSize: 0), .foregroundColor: NSColor.secondaryLabelColor]))
-            }
-        } else {
-            title.append(NSAttributedString(
-                string: text,
-                attributes: [.font: NSFont.menuFont(ofSize: 0)]))
-
-            if let extra = extraLabel {
-                title.append(NSAttributedString(
-                    string: "  \(extra)",
-                    attributes: [.font: NSFont.menuFont(ofSize: 0), .foregroundColor: NSColor.secondaryLabelColor]))
-            }
-        }
-
-        title.append(NSAttributedString(
-            string: "\t\(shortcut)",
-            attributes: [
-                .font: NSFont.menuFont(ofSize: 0),
-                .foregroundColor: NSColor.tertiaryLabelColor,
-                .paragraphStyle: para
-            ]))
-        return title
-    }
-
-    // MARK: - NSMenuDelegate & Search/Filter Actions
-    func menuWillOpen(_ menu: NSMenu) {
-        isMenuOpen = true
-        focusTimer?.invalidate()
-
-        // This timer intelligently keeps filters visible while searching OR if filters are active
-        let timer = Timer(timeInterval: 0.1, repeats: true) { [weak self] _ in
-            guard let self = self, let sf = self.searchField else { return }
-
-            // Check if the search field or its active field editor currently has focus
-            let isFocused = (sf.window?.firstResponder == sf) || (sf.currentEditor() != nil && sf.window?.firstResponder == sf.currentEditor())
-
-            // Show the filters ONLY if we are actively focused in the search bar.
-            let shouldShow = isFocused
-
-            if let item = self.filtersMenuItem {
-                if shouldShow && item.isHidden {
-                    item.isHidden = false
-                } else if !shouldShow && !item.isHidden {
-                    item.isHidden = true
-                }
-            }
-        }
-        RunLoop.current.add(timer, forMode: .common)
-        self.focusTimer = timer
-    }
-
-    func menuDidClose(_ menu: NSMenu) {
-        isMenuOpen = false
-        focusTimer?.invalidate()
-        focusTimer = nil
-
-        searchField?.window?.makeFirstResponder(nil)
-
-        currentSearchText = ""
-        activeFilters.removeAll()
-        searchField?.stringValue = ""
-
-        // Smoothly un-highlight custom filter buttons
-        if let stack = filtersMenuItem?.view?.subviews.compactMap({ $0 as? NSStackView }).first {
-            for v in stack.views {
-                if let btn = v as? FilterButton {
-                    btn.setSelected(false, animated: false)
-                }
-            }
-        }
-
-        for item in historyMenuItems {
-            item.isHidden = false
-        }
-
-        if needsRebuildAfterClose {
-            needsRebuildAfterClose = false
-            rebuildMenu()
-        }
-    }
-
-    func controlTextDidChange(_ obj: Notification) {
-        guard let field = obj.object as? NSSearchField else { return }
-        currentSearchText = field.stringValue.lowercased()
-        applySearchAndFilter()
-    }
-
-    @objc func filterToggled(_ sender: FilterButton) {
-        let filterName = sender.identifier?.rawValue ?? ""
-        let isActivating = sender.state == .on
-
-        sender.setSelected(isActivating, animated: true)
-
-        if isActivating {
-            activeFilters.insert(filterName)
-        } else {
-            activeFilters.remove(filterName)
-        }
-        applySearchAndFilter()
-    }
-
-    func applySearchAndFilter() {
-        for (i, item) in history.enumerated() {
-            guard i < historyMenuItems.count else { continue }
-            let menuItem = historyMenuItems[i]
-
-            var matchesSearch = true
-            if !currentSearchText.isEmpty {
-                matchesSearch = item.text.lowercased().contains(currentSearchText)
-            }
-
-            var matchesFilter = true
-            if !activeFilters.isEmpty {
-                var filterMatched = false
-
-                let t = item.text.trimmingCharacters(in: .whitespacesAndNewlines)
-                let textLower = t.lowercased()
-
-                let isImage = item.imageData != nil
-                let isCode = t.contains("{") || t.contains("}") || t.contains("<") || t.contains(">") || t.hasPrefix("func ") || t.hasPrefix("import ") || t.hasPrefix("class ")
-                let isLink = textLower.hasPrefix("http://") || textLower.hasPrefix("https://") || textLower.hasPrefix("www.")
-                let isEmail = t.contains("@") && t.contains(".") && !t.contains(" ") && t.count < 60
-                let isNum = t.range(of: "^[0-9 +().-]{5,}$", options: .regularExpression) != nil
-                let isFile = textLower.hasPrefix("file://") || textLower.hasPrefix("/")
-                let isText = !isImage && !isLink && !isEmail && !isNum && !isCode && !isFile
-
-                if activeFilters.contains("link") && isLink { filterMatched = true }
-                if activeFilters.contains("email") && isEmail { filterMatched = true }
-                if activeFilters.contains("number") && isNum { filterMatched = true }
-                if activeFilters.contains("image") && isImage { filterMatched = true }
-                if activeFilters.contains("file") && isFile { filterMatched = true }
-                if activeFilters.contains("code") && isCode { filterMatched = true }
-                if activeFilters.contains("text") && isText { filterMatched = true }
-
-                if !filterMatched {
-                    matchesFilter = false
-                }
-            }
-
-            menuItem.isHidden = !(matchesSearch && matchesFilter)
-        }
-    }
-
-    func rebuildMenu() {
+    // MARK: - Menu Settings Builder
+    func buildSettingsMenu() -> NSMenu {
         let menu = NSMenu()
-        menu.delegate = self
 
-        let header = NSMenuItem(title: "ClipLocal — History (\(history.count))", action: nil, keyEquivalent: "")
-        header.image = icon("doc.on.clipboard")
+        let header = NSMenuItem(title: "ClipLocal Settings", action: nil, keyEquivalent: "")
+        header.isEnabled = false
+        menu.addItem(header)
+        menu.addItem(.separator())
+
+        // Storage mode submenu
+        let privacy = NSMenuItem(title: "History Storage", action: nil, keyEquivalent: "")
+        privacy.image = NSImage(systemSymbolName: "lock.shield", accessibilityDescription: nil)
+        let psub = NSMenu()
+        let sessionItem = NSMenuItem(title: "Session-only (wiped on quit)",
+                                     action: #selector(setSession), keyEquivalent: "")
+        sessionItem.image = NSImage(systemSymbolName: "lock", accessibilityDescription: nil)
+        sessionItem.target = self
+        sessionItem.state = mode == .session ? .on : .off
+        let persistItem = NSMenuItem(title: "Persistent (kept on quit)",
+                                     action: #selector(setPersistent), keyEquivalent: "")
+        persistItem.image = NSImage(systemSymbolName: "externaldrive.fill", accessibilityDescription: nil)
+        persistItem.target = self
+        persistItem.state = mode == .persistent ? .on : .off
+        psub.addItem(sessionItem); psub.addItem(persistItem)
+        privacy.submenu = psub
+        menu.addItem(privacy)
+
+        // Limits submenu
+        let sizeItem = NSMenuItem(title: "Keep up to…", action: nil, keyEquivalent: "")
+        sizeItem.image = NSImage(systemSymbolName: "slider.horizontal.3", accessibilityDescription: nil)
         let sizeSub = NSMenu()
-        let sizeTitle = NSMenuItem(title: "Keep up to…", action: nil, keyEquivalent: "")
-        sizeTitle.isEnabled = false
-        sizeSub.addItem(sizeTitle)
-        sizeSub.addItem(.separator())
         for n in [10, 25, 50, 100, 200] {
             let opt = NSMenuItem(title: "\(n) items", action: #selector(setHistorySize(_:)), keyEquivalent: "")
             opt.target = self
@@ -691,270 +1060,55 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
             opt.state = maxItems == n ? .on : .off
             sizeSub.addItem(opt)
         }
-        header.submenu = sizeSub
-        menu.addItem(header)
-        menu.addItem(.separator())
-
-        // --- Search and Filter UI ---
-        let searchViewItem = NSMenuItem()
-        let searchContainer = NSView(frame: NSRect(x: 0, y: 0, width: 300, height: 32))
-        searchContainer.autoresizingMask = [.width]
-
-        // Using our subclass to fix NSMenu cursor bugs
-        let sf = MenuSearchField(frame: .zero)
-        sf.placeholderString = "Search history..."
-        sf.delegate = self
-        sf.focusRingType = .none
-        sf.stringValue = currentSearchText
-        self.searchField = sf
-
-        sf.translatesAutoresizingMaskIntoConstraints = false
-        searchContainer.addSubview(sf)
-
-        NSLayoutConstraint.activate([
-            sf.leadingAnchor.constraint(equalTo: searchContainer.leadingAnchor, constant: 14),
-            sf.trailingAnchor.constraint(equalTo: searchContainer.trailingAnchor, constant: -14),
-            sf.centerYAnchor.constraint(equalTo: searchContainer.centerYAnchor),
-            sf.heightAnchor.constraint(equalToConstant: 22)
-        ])
-
-        searchViewItem.view = searchContainer
-        menu.addItem(searchViewItem)
-
-        let filtersMenuItem = NSMenuItem()
-        let filtersContainer = NSView(frame: NSRect(x: 0, y: 0, width: 300, height: 32))
-        filtersContainer.autoresizingMask = [.width]
-
-        let filters = [
-            ("code", "chevron.left.forwardslash.chevron.right"),
-            ("email", "envelope"),
-            ("file", "doc"),
-            ("image", "photo"),
-            ("link", "link"),
-            ("number", "number"),
-            ("text", "text.alignleft")
-        ]
-
-        let stack = NSStackView(frame: .zero)
-        stack.orientation = .horizontal
-        stack.distribution = .equalSpacing
-        stack.alignment = .centerY
-
-        stack.translatesAutoresizingMaskIntoConstraints = false
-        filtersContainer.addSubview(stack)
-
-        NSLayoutConstraint.activate([
-            stack.leadingAnchor.constraint(equalTo: filtersContainer.leadingAnchor, constant: 14),
-            stack.trailingAnchor.constraint(equalTo: filtersContainer.trailingAnchor, constant: -14),
-            stack.centerYAnchor.constraint(equalTo: filtersContainer.centerYAnchor),
-            stack.heightAnchor.constraint(equalToConstant: 22)
-        ])
-
-        // Pre-calculate which filters have items
-        var categoryCounts: [String: Int] = [
-            "link": 0, "image": 0, "text": 0, "file": 0, "number": 0, "email": 0, "code": 0
-        ]
-
-        for item in history {
-            let t = item.text.trimmingCharacters(in: .whitespacesAndNewlines)
-            let textLower = t.lowercased()
-            let isImage = item.imageData != nil
-            let isCode = t.contains("{") || t.contains("}") || t.contains("<") || t.contains(">") || t.hasPrefix("func ") || t.hasPrefix("import ") || t.hasPrefix("class ")
-            let isLink = textLower.hasPrefix("http://") || textLower.hasPrefix("https://") || textLower.hasPrefix("www.")
-            let isEmail = t.contains("@") && t.contains(".") && !t.contains(" ") && t.count < 60
-            let isNum = t.range(of: "^[0-9 +().-]{5,}$", options: .regularExpression) != nil
-            let isFile = textLower.hasPrefix("file://") || textLower.hasPrefix("/")
-            let isText = !isImage && !isLink && !isEmail && !isNum && !isCode && !isFile
-
-            if isLink { categoryCounts["link"]! += 1 }
-            if isImage { categoryCounts["image"]! += 1 }
-            if isText { categoryCounts["text"]! += 1 }
-            if isFile { categoryCounts["file"]! += 1 }
-            if isCode { categoryCounts["code"]! += 1 }
-            if isNum { categoryCounts["number"]! += 1 }
-            if isEmail { categoryCounts["email"]! += 1 }
-        }
-
-        for filter in filters {
-            let btn = FilterButton(frame: .zero)
-            btn.image = icon(filter.1)
-            btn.target = self
-            btn.action = #selector(filterToggled(_:))
-            btn.identifier = NSUserInterfaceItemIdentifier(filter.0)
-            btn.toolTip = "Filter by \(filter.0)"
-
-            let count = categoryCounts[filter.0] ?? 0
-            btn.hasItems = count > 0
-
-            let isSelected = activeFilters.contains(filter.0)
-            btn.state = isSelected ? .on : .off
-            btn.setSelected(isSelected, animated: false)
-
-            btn.translatesAutoresizingMaskIntoConstraints = false
-            btn.widthAnchor.constraint(equalToConstant: 28).isActive = true
-            btn.heightAnchor.constraint(equalToConstant: 22).isActive = true
-            stack.addView(btn, in: .leading)
-        }
-
-        filtersMenuItem.view = filtersContainer
-        filtersMenuItem.isHidden = true
-        self.filtersMenuItem = filtersMenuItem
-        menu.addItem(filtersMenuItem)
-        menu.addItem(.separator())
-        // --- End Search and Filter UI ---
-
-        historyMenuItems.removeAll()
-        if history.isEmpty {
-            let empty = NSMenuItem(title: "— empty —", action: nil, keyEquivalent: "")
-            empty.isEnabled = false
-            menu.addItem(empty)
-        } else {
-            for (i, item) in history.enumerated() {
-                var displayText = item.text
-                let extraLabel: String? = nil
-
-                let isFile = item.text.hasPrefix("file://") || item.text.hasPrefix("/")
-                if isFile {
-                    let path = item.text.hasPrefix("file://") ? String(item.text.dropFirst(7)) : item.text
-                    let url = URL(fileURLWithPath: path)
-                    displayText = url.lastPathComponent
-                }
-
-                let oneLine = displayText
-                    .replacingOccurrences(of: "\n", with: " ")
-                    .trimmingCharacters(in: .whitespacesAndNewlines)
-
-                let maxLen = extraLabel != nil ? 20 : 34
-                let snippet = oneLine.count > maxLen ? String(oneLine.prefix(maxLen)) + "…" : oneLine
-                let shortcut = i < 9 ? "\(i + 1)" : ""
-                let mi = NSMenuItem(title: snippet,
-                                    action: #selector(copyItem(_:)), keyEquivalent: shortcut)
-                mi.keyEquivalentModifierMask = [.command]
-                mi.image = icon(item.pinned ? "pin.fill" : iconName(for: item.text))
-                mi.target = self; mi.tag = i
-
-                var previewImage: NSImage? = nil
-                if let data = item.imageData, let loaded = NSImage(data: data) {
-                    previewImage = loaded
-                }
-
-                if i < 9 || previewImage != nil || extraLabel != nil {
-                    let shortcutToPaint = i < 9 ? "⌘\(i + 1)" : ""
-                    mi.attributedTitle = paintedTitle(for: snippet, shortcut: shortcutToPaint, isSubmenu: true, image: previewImage, extraLabel: extraLabel)
-                }
-
-                let sub = NSMenu()
-                let copyA = NSMenuItem(title: "Copy", action: #selector(copyItem(_:)), keyEquivalent: "")
-                copyA.image = icon("doc.on.doc")
-                copyA.target = self; copyA.tag = i
-                let pinA = NSMenuItem(title: item.pinned ? "Unpin" : "Pin",
-                                      action: #selector(togglePin(_:)), keyEquivalent: "")
-                pinA.image = icon(item.pinned ? "pin.slash" : "pin")
-                pinA.target = self; pinA.tag = i
-                let delA = NSMenuItem(title: "Delete", action: #selector(deleteItem(_:)), keyEquivalent: "")
-                delA.image = icon("trash")
-                delA.target = self; delA.tag = i
-                sub.addItem(copyA); sub.addItem(pinA); sub.addItem(.separator()); sub.addItem(delA)
-                mi.submenu = sub
-                menu.addItem(mi)
-                historyMenuItems.append(mi)
-            }
-        }
-        menu.addItem(.separator())
-
-        applySearchAndFilter()
-
-        let clear = NSMenuItem(title: "Clear History Now", action: #selector(clearNow), keyEquivalent: "")
-        clear.attributedTitle = paintedTitle(for: "Clear History Now", shortcut: "⌘⌫")
-        clear.image = icon("trash.fill")
-        clear.target = self
-        menu.addItem(clear)
-        let hiddenClear = NSMenuItem(title: "", action: #selector(clearNow), keyEquivalent: "\u{8}")
-        hiddenClear.keyEquivalentModifierMask = [.command]
-        hiddenClear.target = self
-        hiddenClear.isHidden = true
-        menu.addItem(hiddenClear)
+        sizeItem.submenu = sizeSub
+        menu.addItem(sizeItem)
 
         menu.addItem(.separator())
-
-        let prefs = NSMenuItem(title: "Preferences…", action: nil, keyEquivalent: "")
-        prefs.attributedTitle = paintedTitle(for: "Preferences…", shortcut: "⌘,", isSubmenu: true)
-        prefs.image = icon("gearshape")
-        let prefsSub = NSMenu()
-
-        let privacy = NSMenuItem(title: "History Storage", action: nil, keyEquivalent: "")
-        privacy.image = icon("lock.shield")
-        let psub = NSMenu()
-        let sessionItem = NSMenuItem(title: "Session-only (wiped on quit)",
-                                     action: #selector(setSession), keyEquivalent: "")
-        sessionItem.image = icon("lock")
-        sessionItem.target = self
-        sessionItem.state = mode == .session ? .on : .off
-        let persistItem = NSMenuItem(title: "Persistent (kept on quit)",
-                                     action: #selector(setPersistent), keyEquivalent: "")
-        persistItem.image = icon("externaldrive.fill")
-        persistItem.target = self
-        persistItem.state = mode == .persistent ? .on : .off
-        psub.addItem(sessionItem); psub.addItem(persistItem)
-        privacy.submenu = psub
-        prefsSub.addItem(privacy)
 
         let skip = NSMenuItem(title: "Skip password-manager copies",
                               action: #selector(toggleSkip), keyEquivalent: "")
-        skip.image = icon("key.fill")
+        skip.image = NSImage(systemSymbolName: "key.fill", accessibilityDescription: nil)
         skip.target = self
         skip.state = skipConcealed ? .on : .off
-        prefsSub.addItem(skip)
+        menu.addItem(skip)
 
         let showDims = NSMenuItem(title: "Show image dimensions",
                                   action: #selector(toggleShowImageDimensions), keyEquivalent: "")
-        showDims.image = icon("photo.on.rectangle.angled")
+        showDims.image = NSImage(systemSymbolName: "photo.on.rectangle.angled", accessibilityDescription: nil)
         showDims.target = self
         showDims.state = showImageDimensions ? .on : .off
-        prefsSub.addItem(showDims)
+        menu.addItem(showDims)
 
         let launch = NSMenuItem(title: "Launch at Login",
                                 action: #selector(toggleLaunchAtLogin), keyEquivalent: "")
-        launch.image = icon("power")
+        launch.image = NSImage(systemSymbolName: "power", accessibilityDescription: nil)
         launch.target = self
         launch.state = launchAtLoginEnabled ? .on : .off
-        prefsSub.addItem(launch)
-
-        prefs.submenu = prefsSub
-        menu.addItem(prefs)
-
-        let hiddenPrefs = NSMenuItem(title: "", action: nil, keyEquivalent: ",")
-        hiddenPrefs.keyEquivalentModifierMask = [.command]
-        hiddenPrefs.target = self
-        hiddenPrefs.isHidden = true
-        menu.addItem(hiddenPrefs)
+        menu.addItem(launch)
 
         menu.addItem(.separator())
+
         let updates = NSMenuItem(title: "Check for Updates…", action: #selector(checkForUpdatesMenu), keyEquivalent: "")
-        updates.image = icon("arrow.triangle.2.circlepath")
+        updates.image = NSImage(systemSymbolName: "arrow.triangle.2.circlepath", accessibilityDescription: nil)
         updates.target = self
         menu.addItem(updates)
+
         let about = NSMenuItem(title: "About ClipLocal", action: #selector(showAboutMenu), keyEquivalent: "")
-        about.image = icon("info.circle")
+        about.image = NSImage(systemSymbolName: "info.circle", accessibilityDescription: nil)
         about.target = self
         menu.addItem(about)
-        let quit = NSMenuItem(title: "Quit", action: #selector(quitApp), keyEquivalent: "")
-        quit.attributedTitle = paintedTitle(for: "Quit", shortcut: "⌘Q")
-        quit.image = icon("xmark.circle")
+
+        let quit = NSMenuItem(title: "Quit ClipLocal", action: #selector(quitApp), keyEquivalent: "q")
+        quit.keyEquivalentModifierMask = [.command]
+        quit.image = NSImage(systemSymbolName: "xmark.circle", accessibilityDescription: nil)
         quit.target = self
         menu.addItem(quit)
-        let hiddenQuit = NSMenuItem(title: "", action: #selector(quitApp), keyEquivalent: "q")
-        hiddenQuit.keyEquivalentModifierMask = [.command]
-        hiddenQuit.target = self
-        hiddenQuit.isHidden = true
-        menu.addItem(hiddenQuit)
 
-        statusItem.menu = menu
+        return menu
     }
 
-    // MARK: - Menu actions
-    @objc func copyItem(_ sender: NSMenuItem) {
-        let i = sender.tag
+    // MARK: - Action implementation
+    func copyItemWithIndex(_ i: Int) {
         guard i < history.count else { return }
         let item = history[i]
         let pb = NSPasteboard.general
@@ -979,23 +1133,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
         history.remove(at: i)
         history.insert(ClipItem(text: item.text, date: Date(), pinned: pinned, imageData: item.imageData), at: 0)
         persistIfNeeded()
-        rebuildMenu()
-    }
-
-    @objc func togglePin(_ sender: NSMenuItem) {
-        let i = sender.tag
-        guard i < history.count else { return }
-        history[i].pinned.toggle()
-        persistIfNeeded()
-        rebuildMenu()
-    }
-
-    @objc func deleteItem(_ sender: NSMenuItem) {
-        let i = sender.tag
-        guard i < history.count else { return }
-        history.remove(at: i)
-        persistIfNeeded()
-        rebuildMenu()
+        popoverViewController?.refreshData()
     }
 
     @objc func setSession() { mode = .session; deleteStore() }
@@ -1007,7 +1145,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
         maxItems = sender.tag
         trimHistory()
         persistIfNeeded()
-        rebuildMenu()
+        popoverViewController?.refreshData()
     }
 
     // MARK: - Launch at Login
@@ -1029,7 +1167,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
             alert.addButton(withTitle: "OK")
             alert.runModal()
         }
-        rebuildMenu()
+        popoverViewController?.refreshData()
     }
 
     @objc func clearNow() {
@@ -1039,7 +1177,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
         } else {
             persistIfNeeded()
         }
-        rebuildMenu()
+        popoverViewController?.refreshData()
     }
 
     @objc func quitApp() { NSApp.terminate(nil) }

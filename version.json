@@ -1,7 +1,19 @@
 {
-  "version": "1.9",
+  "version": "2.0",
   "downloadURL": "https://cliplocal.vercel.app/#install",
   "changelog": [
+    {
+      "version": "2.0",
+      "date": "August 2026",
+      "changes": [
+        "Major Rework: Replaced the traditional system menu with a gorgeous, high-performance NSPopover window",
+        "Added Native Swipe-to-Delete: Swipe left on any row to instantly remove it from history",
+        "Added Native Swipe-to-Pin/Unpin: Swipe right on any row to instantly lock or unlock it",
+        "Designed Beautiful View-Based NSTableView rows with smooth hover highlights and layout",
+        "Added quick keyboard navigation support including Return-to-copy, double-click-to-copy, and ⌘1-⌘9 shortcuts",
+        "Preserved 100% of all privacy modes, image dimensions, search filters, and automatic update checks"
+      ]
+    },
     {
       "version": "1.9",
       "date": "August 2026",
