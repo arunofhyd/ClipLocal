@@ -300,11 +300,11 @@ struct ContentView: View {
                         Menu {
                             Button(action: { manager.mode = .session }) {
                                 Text("Session-only (wiped on quit)")
-                                if manager.mode == .session { Image(systemName: "checkmark") }
+                                Image(systemName: manager.mode == .session ? "checkmark" : "lock")
                             }
                             Button(action: { manager.mode = .persistent }) {
                                 Text("Persistent (kept on quit)")
-                                if manager.mode == .persistent { Image(systemName: "checkmark") }
+                                Image(systemName: manager.mode == .persistent ? "checkmark" : "externaldrive.fill")
                             }
                         } label: {
                             Text("History Storage")
@@ -325,15 +325,15 @@ struct ContentView: View {
 
                         Button(action: { manager.skipConcealed.toggle() }) {
                             Text("Skip password-manager copies")
-                            if manager.skipConcealed { Image(systemName: "checkmark") }
+                            Image(systemName: manager.skipConcealed ? "checkmark" : "key.fill")
                         }
                         Button(action: { manager.showImageDimensions.toggle() }) {
                             Text("Show image dimensions")
-                            if manager.showImageDimensions { Image(systemName: "checkmark") }
+                            Image(systemName: manager.showImageDimensions ? "checkmark" : "photo.on.rectangle.angled")
                         }
                         Button(action: { manager.toggleLaunchAtLogin() }) {
                             Text("Launch at Login")
-                            if manager.launchAtLoginEnabled { Image(systemName: "checkmark") }
+                            Image(systemName: manager.launchAtLoginEnabled ? "checkmark" : "power")
                         }
                     } label: {
                         Text("Preferences...")
