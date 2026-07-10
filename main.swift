@@ -29,6 +29,13 @@ class MenuSearchField: NSSearchField {
             }
         }
     }
+
+    override func mouseDown(with event: NSEvent) {
+        super.mouseDown(with: event)
+        // Ensure clicking anywhere within the search field's bounds reliably claims focus
+        // away from the NSMenu tracker and re-engages the text editor cursor.
+        self.window?.makeFirstResponder(self)
+    }
 }
 
 /// Provides a smooth, animated background highlight when selecting filters.
@@ -804,7 +811,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
         } else {
             for (i, item) in history.enumerated() {
                 var displayText = item.text
-                var extraLabel: String? = nil
+                let extraLabel: String? = nil
 
                 let isFile = item.text.hasPrefix("file://") || item.text.hasPrefix("/")
                 if isFile {
