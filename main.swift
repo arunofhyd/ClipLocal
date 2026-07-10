@@ -53,6 +53,7 @@ class FilterButton: NSButton {
         wantsLayer = true
         layer?.cornerRadius = 5
         imageScaling = .scaleProportionallyDown
+        // Crucial: Prevents the button from stealing focus from the search bar when clicked
         refusesFirstResponder = true
     }
 
@@ -365,8 +366,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
         var imageToStore: Data? = nil
 
         if let fileURLs = pb.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL], let firstURL = fileURLs.first, firstURL.isFileURL {
-            // macOS often puts the file's icon in the pasteboard too. We must check for files FIRST.
-            textToStore = firstURL.path // Use neat /Users/... instead of file:///...
+            textToStore = firstURL.path
         } else if let img = NSImage(pasteboard: pb),
            let tiff = img.tiffRepresentation,
            let bitmap = NSBitmapImageRep(data: tiff),
@@ -563,8 +563,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
             // Check if the search field or its active field editor currently has focus
             let isFocused = (sf.window?.firstResponder == sf) || (sf.currentEditor() != nil && sf.window?.firstResponder == sf.currentEditor())
 
-            // Show the filters if we are typing OR if we have actively applied any filter.
-            let shouldShow = isFocused || !self.activeFilters.isEmpty
+            // Show the filters ONLY if we are actively focused in the search bar.
+            let shouldShow = isFocused
 
             if let item = self.filtersMenuItem {
                 if shouldShow && item.isHidden {
@@ -695,24 +695,32 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
         // --- Search and Filter UI ---
         let searchViewItem = NSMenuItem()
         let searchContainer = NSView(frame: NSRect(x: 0, y: 0, width: 300, height: 32))
-        searchContainer.autoresizingMask = [.width]
 
         // Using our subclass to fix NSMenu cursor bugs
-        let sf = MenuSearchField(frame: NSRect(x: 12, y: 5, width: 276, height: 22))
-        sf.autoresizingMask = [.width]
+        let sf = MenuSearchField(frame: .zero)
         sf.placeholderString = "Search history..."
         sf.delegate = self
         sf.focusRingType = .none
         sf.stringValue = currentSearchText
         self.searchField = sf
+
+        sf.translatesAutoresizingMaskIntoConstraints = false
         searchContainer.addSubview(sf)
+
+        NSLayoutConstraint.activate([
+            searchContainer.widthAnchor.constraint(equalToConstant: 300),
+            searchContainer.heightAnchor.constraint(equalToConstant: 32),
+            sf.leadingAnchor.constraint(equalTo: searchContainer.leadingAnchor, constant: 14),
+            sf.trailingAnchor.constraint(equalTo: searchContainer.trailingAnchor, constant: -14),
+            sf.centerYAnchor.constraint(equalTo: searchContainer.centerYAnchor),
+            sf.heightAnchor.constraint(equalToConstant: 22)
+        ])
 
         searchViewItem.view = searchContainer
         menu.addItem(searchViewItem)
 
         let filtersMenuItem = NSMenuItem()
         let filtersContainer = NSView(frame: NSRect(x: 0, y: 0, width: 300, height: 32))
-        filtersContainer.autoresizingMask = [.width]
 
         let filters = [
             ("code", "chevron.left.forwardslash.chevron.right"),
@@ -724,11 +732,22 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
             ("text", "text.alignleft")
         ]
 
-        let stack = NSStackView(frame: NSRect(x: 12, y: 5, width: 276, height: 22))
+        let stack = NSStackView(frame: .zero)
         stack.orientation = .horizontal
         stack.distribution = .equalSpacing
         stack.alignment = .centerY
-        stack.autoresizingMask = [.width]
+
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        filtersContainer.addSubview(stack)
+
+        NSLayoutConstraint.activate([
+            filtersContainer.widthAnchor.constraint(equalToConstant: 300),
+            filtersContainer.heightAnchor.constraint(equalToConstant: 32),
+            stack.leadingAnchor.constraint(equalTo: filtersContainer.leadingAnchor, constant: 14),
+            stack.trailingAnchor.constraint(equalTo: filtersContainer.trailingAnchor, constant: -14),
+            stack.centerYAnchor.constraint(equalTo: filtersContainer.centerYAnchor),
+            stack.heightAnchor.constraint(equalToConstant: 22)
+        ])
 
         // Pre-calculate which filters have items
         var categoryCounts: [String: Int] = [
@@ -766,11 +785,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
             let count = categoryCounts[filter.0] ?? 0
             btn.hasItems = count > 0
 
-            if activeFilters.contains(filter.0) {
-                btn.setSelected(true, animated: false)
-            } else {
-                btn.setSelected(false, animated: false)
-            }
+            let isSelected = activeFilters.contains(filter.0)
+            btn.state = isSelected ? .on : .off
+            btn.setSelected(isSelected, animated: false)
 
             btn.translatesAutoresizingMaskIntoConstraints = false
             btn.widthAnchor.constraint(equalToConstant: 28).isActive = true
@@ -778,7 +795,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
             stack.addView(btn, in: .leading)
         }
 
-        filtersContainer.addSubview(stack)
         filtersMenuItem.view = filtersContainer
         filtersMenuItem.isHidden = true
         self.filtersMenuItem = filtersMenuItem
@@ -806,7 +822,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
                         let dir = url.deletingLastPathComponent().path
                         // Minify path like /Users/arun/Desktop -> ~/Desktop
                         let home = FileManager.default.homeDirectoryForCurrentUser.path
-                        let miniDir = dir.hasPrefix(home) ? "~" + String(dir.dropFirst(home.count)) : dir
+                        var miniDir = dir.hasPrefix(home) ? "~" + String(dir.dropFirst(home.count)) : dir
+
+                        if miniDir.count > 25 {
+                            let prefix = String(miniDir.prefix(10))
+                            let suffix = String(miniDir.suffix(12))
+                            miniDir = "\(prefix)...\(suffix)"
+                        }
 
                         displayText = url.lastPathComponent
                         extraLabel = miniDir
@@ -820,8 +842,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
                     .replacingOccurrences(of: "\n", with: " ")
                     .trimmingCharacters(in: .whitespacesAndNewlines)
 
-                // Truncate dynamically so there is room for the extraLabel if present
-                let maxLen = extraLabel != nil ? 24 : 34
+                let maxLen = extraLabel != nil ? 20 : 34
                 let snippet = oneLine.count > maxLen ? String(oneLine.prefix(maxLen)) + "…" : oneLine
                 let shortcut = i < 9 ? "\(i + 1)" : ""
                 let mi = NSMenuItem(title: snippet,
@@ -969,6 +990,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
             if let tiff = img.tiffRepresentation {
                 pb.setData(tiff, forType: .tiff)
             }
+        } else if (item.text.hasPrefix("/") || item.text.hasPrefix("file://")) && FileManager.default.fileExists(atPath: item.text.hasPrefix("file://") ? String(item.text.dropFirst(7)) : item.text) {
+            let path = item.text.hasPrefix("file://") ? String(item.text.dropFirst(7)) : item.text
+            let url = URL(fileURLWithPath: path)
+            pb.writeObjects([url as NSURL])
+            pb.setString(item.text, forType: .string)
         } else {
             pb.setString(item.text, forType: .string)
         }
