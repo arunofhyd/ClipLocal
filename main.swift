@@ -54,12 +54,21 @@ enum KeyStore {
 }
 
 // MARK: - Data Models
-struct ClipItem: Codable, Identifiable {
-    var id: String { text + date.description }
+struct ClipItem: Codable, Identifiable, Hashable {
+    var id: String { text + String(date.timeIntervalSince1970) }
     let text: String
     let date: Date
     var pinned: Bool = false
     var imageData: Data?
+
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(text)
+        hasher.combine(date)
+    }
+
+    static func == (lhs: ClipItem, rhs: ClipItem) -> Bool {
+        return lhs.text == rhs.text && lhs.date == rhs.date
+    }
 }
 
 enum PrivacyMode: String {
@@ -78,22 +87,22 @@ class ClipboardManager: ObservableObject {
 
     var mode: PrivacyMode {
         get { PrivacyMode(rawValue: defaults.string(forKey: "mode") ?? "persistent") ?? .persistent }
-        set { defaults.set(newValue.rawValue, forKey: "mode"); persistIfNeeded() }
+        set { defaults.set(newValue.rawValue, forKey: "mode"); persistIfNeeded(); objectWillChange.send() }
     }
 
     var skipConcealed: Bool {
         get { defaults.object(forKey: "skipConcealed") == nil ? true : defaults.bool(forKey: "skipConcealed") }
-        set { defaults.set(newValue, forKey: "skipConcealed") }
+        set { defaults.set(newValue, forKey: "skipConcealed"); objectWillChange.send() }
     }
 
     var showImageDimensions: Bool {
         get { defaults.bool(forKey: "showImageDimensions") }
-        set { defaults.set(newValue, forKey: "showImageDimensions") }
+        set { defaults.set(newValue, forKey: "showImageDimensions"); objectWillChange.send() }
     }
 
     var maxItems: Int {
         get { let v = defaults.integer(forKey: "maxItems"); return v == 0 ? 50 : v }
-        set { defaults.set(newValue, forKey: "maxItems") }
+        set { defaults.set(newValue, forKey: "maxItems"); objectWillChange.send() }
     }
 
     var launchAtLoginEnabled: Bool {
@@ -257,13 +266,14 @@ struct ContentView: View {
                             hoverIdx = isHovered ? item.id : nil
                         }
                         .background(hoverIdx == item.id ? Color.accentColor.opacity(0.1) : Color.clear)
-                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                             Button(role: .destructive) {
                                 deleteItem(item)
                             } label: {
                                 Label("Delete", systemImage: "trash")
                             }
-
+                        }
+                        .swipeActions(edge: .leading, allowsFullSwipe: true) {
                             Button {
                                 togglePin(item)
                             } label: {
@@ -283,39 +293,39 @@ struct ContentView: View {
                 Menu {
                     Button("Clear History Now") { manager.clearNow() }
                     Divider()
-                    Menu("Preferences...") {
-                        Menu("History Storage") {
+                    Menu {
+                        Menu {
                             Button(action: { manager.mode = .session }) {
-                                HStack {
-                                    Text("Session-only (wiped on quit)")
-                                    if manager.mode == .session { Image(systemName: "checkmark") }
-                                }
+                                Label("Session-only (wiped on quit)", systemImage: manager.mode == .session ? "checkmark" : "")
                             }
                             Button(action: { manager.mode = .persistent }) {
-                                HStack {
-                                    Text("Persistent (kept on quit)")
-                                    if manager.mode == .persistent { Image(systemName: "checkmark") }
+                                Label("Persistent (kept on quit)", systemImage: manager.mode == .persistent ? "checkmark" : "")
+                            }
+                        } label: {
+                            Label("History Storage", systemImage: "lock.shield")
+                        }
+
+                        Menu {
+                            ForEach([10, 25, 50, 100, 200], id: \.self) { size in
+                                Button(action: { manager.maxItems = size }) {
+                                    Label("\(size) items", systemImage: manager.maxItems == size ? "checkmark" : "")
                                 }
                             }
+                        } label: {
+                            Label("Keep up to...", systemImage: "list.number")
                         }
+
                         Button(action: { manager.skipConcealed.toggle() }) {
-                            HStack {
-                                Text("Skip password-manager copies")
-                                if manager.skipConcealed { Image(systemName: "checkmark") }
-                            }
+                            Label("Skip password-manager copies", systemImage: manager.skipConcealed ? "checkmark" : "")
                         }
                         Button(action: { manager.showImageDimensions.toggle() }) {
-                            HStack {
-                                Text("Show image dimensions")
-                                if manager.showImageDimensions { Image(systemName: "checkmark") }
-                            }
+                            Label("Show image dimensions", systemImage: manager.showImageDimensions ? "checkmark" : "")
                         }
                         Button(action: { manager.toggleLaunchAtLogin() }) {
-                            HStack {
-                                Text("Launch at Login")
-                                if manager.launchAtLoginEnabled { Image(systemName: "checkmark") }
-                            }
+                            Label("Launch at Login", systemImage: manager.launchAtLoginEnabled ? "checkmark" : "")
                         }
+                    } label: {
+                        Label("Preferences...", systemImage: "gearshape")
                     }
                     Divider()
                     Button("Check for Updates...") {
@@ -379,7 +389,13 @@ struct ContentView: View {
         case "code":
             return text.contains("{") || text.contains("}") || text.contains("func ") || text.contains("var ") || text.contains("let ") || text.contains("class ") || text.contains("struct ") || text.contains("<") || text.contains(">") || text.contains(";")
         case "text":
-            return true
+            let isLink = text.hasPrefix("http://") || text.hasPrefix("https://") || text.hasPrefix("www.")
+            let parts = text.split(separator: "@")
+            let isEmail = parts.count == 2 && parts[1].contains(".") && !text.contains(" ")
+            let isNumber = text.range(of: "^[0-9 +().-]{5,}$", options: .regularExpression) != nil
+            let isFile = (text.hasPrefix("/") || text.hasPrefix("file://")) && !text.contains("\n")
+            let isCode = text.contains("{") || text.contains("}") || text.contains("func ") || text.contains("var ") || text.contains("let ") || text.contains("class ") || text.contains("struct ") || text.contains("<") || text.contains(">") || text.contains(";")
+            return !isLink && !isEmail && !isNumber && !isFile && !isCode
         default: return false
         }
     }
@@ -421,10 +437,12 @@ struct ContentView: View {
 
         manager.lastChangeCount = pb.changeCount
 
-        if let idx = manager.history.firstIndex(where: { $0.id == item.id }) {
+        let itemId = item.id
+        if let idx = manager.history.firstIndex(where: { $0.id == itemId }) {
             let pinned = manager.history[idx].pinned
             manager.history.remove(at: idx)
-            manager.history.insert(ClipItem(text: item.text, date: Date(), pinned: pinned, imageData: item.imageData), at: 0)
+            let newItem = ClipItem(text: item.text, date: Date(), pinned: pinned, imageData: item.imageData)
+            manager.history.insert(newItem, at: 0)
         }
 
         manager.persistIfNeeded()
@@ -432,14 +450,16 @@ struct ContentView: View {
     }
 
     func deleteItem(_ item: ClipItem) {
-        if let idx = manager.history.firstIndex(where: { $0.id == item.id }) {
+        let itemId = item.id
+        if let idx = manager.history.firstIndex(where: { $0.id == itemId }) {
             manager.history.remove(at: idx)
             manager.persistIfNeeded()
         }
     }
 
     func togglePin(_ item: ClipItem) {
-        if let idx = manager.history.firstIndex(where: { $0.id == item.id }) {
+        let itemId = item.id
+        if let idx = manager.history.firstIndex(where: { $0.id == itemId }) {
             manager.history[idx].pinned.toggle()
             manager.persistIfNeeded()
         }
@@ -655,17 +675,21 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         guard let text = newText else { return }
 
-        if let idx = clipboardManager.history.firstIndex(where: { $0.text == text && $0.imageData == newImage }) {
-            let pinned = clipboardManager.history[idx].pinned
-            clipboardManager.history.remove(at: idx)
-            clipboardManager.history.insert(ClipItem(text: text, date: Date(), pinned: pinned, imageData: newImage), at: 0)
-        } else {
-            clipboardManager.history.insert(ClipItem(text: text, date: Date(), pinned: false, imageData: newImage), at: 0)
-            showPreview(text)
+        // Needs to be run on main thread since it updates @Published history
+        DispatchQueue.main.async {
+            if let idx = self.clipboardManager.history.firstIndex(where: { $0.text == text && $0.imageData == newImage }) {
+                let pinned = self.clipboardManager.history[idx].pinned
+                self.clipboardManager.history.remove(at: idx)
+                let newItem = ClipItem(text: text, date: Date(), pinned: pinned, imageData: newImage)
+                self.clipboardManager.history.insert(newItem, at: 0)
+            } else {
+                let newItem = ClipItem(text: text, date: Date(), pinned: false, imageData: newImage)
+                self.clipboardManager.history.insert(newItem, at: 0)
+                self.showPreview(text)
+            }
+            self.clipboardManager.trimHistory()
+            self.clipboardManager.persistIfNeeded()
         }
-
-        clipboardManager.trimHistory()
-        clipboardManager.persistIfNeeded()
     }
 
     func showPreview(_ text: String) {
@@ -674,32 +698,43 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let width: CGFloat = 320, height: CGFloat = 66
         guard let screen = NSScreen.main else { return }
         let frame = screen.visibleFrame
-        let rect = NSRect(x: frame.maxX - width - 20, y: frame.minY + 20, width: width, height: height)
+        let x = frame.maxX - width - 20
+        let y = frame.minY + 20
 
-        let win = NSWindow(contentRect: rect, styleMask: [.borderless], backing: .buffered, defer: false)
-        win.backgroundColor = .clear
+        let win = NSWindow(contentRect: NSRect(x: x, y: y, width: width, height: height),
+                           styleMask: .borderless, backing: .buffered, defer: false)
         win.isOpaque = false
-        win.ignoresMouseEvents = true
+        win.isReleasedWhenClosed = false
+        win.backgroundColor = .clear
         win.level = .floating
+        win.ignoresMouseEvents = true
+        win.hasShadow = true
 
-        let v = NSVisualEffectView(frame: NSRect(x: 0, y: 0, width: width, height: height))
-        v.material = .popover
-        v.state = .active
-        v.wantsLayer = true
-        v.layer?.cornerRadius = 12
+        let container = NSVisualEffectView(frame: NSRect(x: 0, y: 0, width: width, height: height))
+        container.material = .hudWindow
+        container.state = .active
+        container.wantsLayer = true
+        container.layer?.cornerRadius = 12
+        container.layer?.masksToBounds = true
 
-        let label = NSTextField(labelWithString: "✓ Copied\n\(snippet)")
-        label.frame = NSRect(x: 16, y: 0, width: width - 32, height: height)
-        label.textColor = .labelColor
-        label.font = .systemFont(ofSize: 13)
-        label.cell?.truncatesLastVisibleLine = true
-        v.addSubview(label)
+        let title = NSTextField(labelWithString: "✓ Copied")
+        title.frame = NSRect(x: 14, y: height - 26, width: width - 28, height: 18)
+        title.font = NSFont.boldSystemFont(ofSize: 12)
+        title.textColor = .secondaryLabelColor
 
-        win.contentView = v
-        win.makeKeyAndOrderFront(nil)
+        let body = NSTextField(labelWithString: snippet)
+        body.frame = NSRect(x: 14, y: 8, width: width - 28, height: 30)
+        body.font = NSFont.systemFont(ofSize: 13)
+        body.lineBreakMode = .byTruncatingTail
+        body.maximumNumberOfLines = 2
+
+        container.addSubview(title)
+        container.addSubview(body)
+        win.contentView = container
+        win.alphaValue = 0
+        win.orderFront(nil)
         previewWindow = win
 
-        win.alphaValue = 0
         NSAnimationContext.runAnimationGroup { ctx in
             ctx.duration = 0.2
             win.animator().alphaValue = 1
