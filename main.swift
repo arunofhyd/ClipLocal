@@ -292,58 +292,71 @@ struct ContentView: View {
             HStack {
                 Menu {
                     Button(action: { manager.clearNow() }) {
-                        Label("Clear History Now", systemImage: "trash.fill")
+                        Text("Clear History Now")
+                        Image(systemName: "trash.fill")
                     }
                     Divider()
                     Menu {
                         Menu {
                             Button(action: { manager.mode = .session }) {
-                                Label("Session-only (wiped on quit)", systemImage: manager.mode == .session ? "checkmark" : "")
+                                Text("Session-only (wiped on quit)")
+                                if manager.mode == .session { Image(systemName: "checkmark") }
                             }
                             Button(action: { manager.mode = .persistent }) {
-                                Label("Persistent (kept on quit)", systemImage: manager.mode == .persistent ? "checkmark" : "")
+                                Text("Persistent (kept on quit)")
+                                if manager.mode == .persistent { Image(systemName: "checkmark") }
                             }
                         } label: {
-                            Label("History Storage", systemImage: "lock.shield")
+                            Text("History Storage")
+                            Image(systemName: "lock.shield")
                         }
 
                         Menu {
                             ForEach([10, 25, 50, 100, 200], id: \.self) { size in
                                 Button(action: { manager.maxItems = size }) {
-                                    Label("\(size) items", systemImage: manager.maxItems == size ? "checkmark" : "")
+                                    Text("\(size) items")
+                                    if manager.maxItems == size { Image(systemName: "checkmark") }
                                 }
                             }
                         } label: {
-                            Label("Keep up to...", systemImage: "list.number")
+                            Text("Keep up to...")
+                            Image(systemName: "list.number")
                         }
 
                         Button(action: { manager.skipConcealed.toggle() }) {
-                            Label("Skip password-manager copies", systemImage: manager.skipConcealed ? "checkmark" : "")
+                            Text("Skip password-manager copies")
+                            if manager.skipConcealed { Image(systemName: "checkmark") }
                         }
                         Button(action: { manager.showImageDimensions.toggle() }) {
-                            Label("Show image dimensions", systemImage: manager.showImageDimensions ? "checkmark" : "")
+                            Text("Show image dimensions")
+                            if manager.showImageDimensions { Image(systemName: "checkmark") }
                         }
                         Button(action: { manager.toggleLaunchAtLogin() }) {
-                            Label("Launch at Login", systemImage: manager.launchAtLoginEnabled ? "checkmark" : "")
+                            Text("Launch at Login")
+                            if manager.launchAtLoginEnabled { Image(systemName: "checkmark") }
                         }
                     } label: {
-                        Label("Preferences...", systemImage: "gearshape")
+                        Text("Preferences...")
+                        Image(systemName: "gearshape")
                     }
                     Divider()
                     Button(action: {
                         (NSApp.delegate as? AppDelegate)?.checkForUpdates(silentIfCurrent: false)
                     }) {
-                        Label("Check for Updates...", systemImage: "arrow.triangle.2.circlepath")
+                        Text("Check for Updates...")
+                        Image(systemName: "arrow.triangle.2.circlepath")
                     }
                     Button(action: {
                         (NSApp.delegate as? AppDelegate)?.showAbout(onLaunch: false)
                     }) {
-                        Label("About ClipLocal", systemImage: "info.circle")
+                        Text("About ClipLocal")
+                        Image(systemName: "info.circle")
                     }
                     Button(action: {
                         NSApp.terminate(nil)
                     }) {
-                        Label("Quit", systemImage: "xmark.circle")
+                        Text("Quit")
+                        Image(systemName: "xmark.circle")
                     }
                 } label: {
                     Image(systemName: "gearshape")
