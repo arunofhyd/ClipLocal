@@ -290,81 +290,17 @@ struct ContentView: View {
 
             // Footer / Settings
             HStack {
-                Menu {
-                    Button(action: { manager.clearNow() }) {
-                        Text("Clear History Now")
-                        Image(systemName: "trash.fill")
-                    }
-                    Divider()
-                    Menu {
-                        Menu {
-                            Button(action: { manager.mode = .session }) {
-                                Text(manager.mode == .session ? "✓ Session-only (wiped on quit)" : "    Session-only (wiped on quit)")
-                                Image(systemName: "lock")
-                            }
-                            Button(action: { manager.mode = .persistent }) {
-                                Text(manager.mode == .persistent ? "✓ Persistent (kept on quit)" : "    Persistent (kept on quit)")
-                                Image(systemName: "externaldrive.fill")
-                            }
-                        } label: {
-                            Text("History Storage")
-                            Image(systemName: "lock.shield")
-                        }
-
-                        Menu {
-                            ForEach([10, 25, 50, 100, 200], id: \.self) { size in
-                                Button(action: { manager.maxItems = size }) {
-                                    Text(manager.maxItems == size ? "✓ \(size) items" : "    \(size) items")
-                                }
-                            }
-                        } label: {
-                            Text("Keep up to...")
-                            Image(systemName: "list.number")
-                        }
-
-                        Button(action: { manager.skipConcealed.toggle() }) {
-                            Text(manager.skipConcealed ? "✓ Skip password-manager copies" : "    Skip password-manager copies")
-                            Image(systemName: "key.fill")
-                        }
-                        Button(action: { manager.showImageDimensions.toggle() }) {
-                            Text(manager.showImageDimensions ? "✓ Show image dimensions" : "    Show image dimensions")
-                            Image(systemName: "photo.on.rectangle.angled")
-                        }
-                        Button(action: { manager.toggleLaunchAtLogin() }) {
-                            Text(manager.launchAtLoginEnabled ? "✓ Launch at Login" : "    Launch at Login")
-                            Image(systemName: "power")
-                        }
-                    } label: {
-                        Text("Preferences...")
-                        Image(systemName: "gearshape")
-                    }
-                    Divider()
-                    Button(action: {
-                        (NSApp.delegate as? AppDelegate)?.checkForUpdates(silentIfCurrent: false)
-                    }) {
-                        Text("Check for Updates...")
-                        Image(systemName: "arrow.triangle.2.circlepath")
-                    }
-                    Button(action: {
-                        (NSApp.delegate as? AppDelegate)?.showAbout(onLaunch: false)
-                    }) {
-                        Text("About ClipLocal")
-                        Image(systemName: "info.circle")
-                    }
-                    Button(action: {
-                        NSApp.terminate(nil)
-                    }) {
-                        Text("Quit")
-                        Image(systemName: "xmark.circle")
-                    }
-                } label: {
+                Button(action: {
+                    (NSApp.delegate as? AppDelegate)?.showSettingsMenu()
+                }) {
                     Image(systemName: "gearshape")
                         .foregroundColor(.secondary)
+                        .padding(4)
                 }
-                .menuStyle(BorderlessButtonMenuStyle())
-                .frame(width: 30)
+                .buttonStyle(PlainButtonStyle())
 
                 Spacer()
+
                 Text("ClipLocal")
                     .font(.caption)
                     .foregroundColor(.secondary)
@@ -566,6 +502,108 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
     }
+
+    func icon(_ name: String) -> NSImage? {
+        return NSImage(systemSymbolName: name, accessibilityDescription: nil)?
+            .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 13, weight: .regular))
+    }
+
+    func showSettingsMenu() {
+        let menu = NSMenu()
+
+        let clear = NSMenuItem(title: "Clear History Now", action: #selector(clearHistoryNowMenu), keyEquivalent: "")
+        clear.image = icon("trash.fill")
+        clear.target = self
+        menu.addItem(clear)
+
+        menu.addItem(.separator())
+
+        let prefs = NSMenuItem(title: "Preferences...", action: nil, keyEquivalent: "")
+        prefs.image = icon("gearshape")
+        let prefsSub = NSMenu()
+
+        let privacy = NSMenuItem(title: "History Storage", action: nil, keyEquivalent: "")
+        privacy.image = icon("lock.shield")
+        let psub = NSMenu()
+
+        let sessionItem = NSMenuItem(title: "Session-only (wiped on quit)", action: #selector(setSessionMode), keyEquivalent: "")
+        sessionItem.image = icon("lock")
+        sessionItem.state = clipboardManager.mode == .session ? .on : .off
+        sessionItem.target = self
+
+        let persistItem = NSMenuItem(title: "Persistent (kept on quit)", action: #selector(setPersistentMode), keyEquivalent: "")
+        persistItem.image = icon("externaldrive.fill")
+        persistItem.state = clipboardManager.mode == .persistent ? .on : .off
+        persistItem.target = self
+
+        psub.addItem(sessionItem)
+        psub.addItem(persistItem)
+        privacy.submenu = psub
+        prefsSub.addItem(privacy)
+
+        let sizeTitle = NSMenuItem(title: "Keep up to...", action: nil, keyEquivalent: "")
+        sizeTitle.image = icon("list.number")
+        let sizeSub = NSMenu()
+        for n in [10, 25, 50, 100, 200] {
+            let opt = NSMenuItem(title: "\(n) items", action: #selector(setHistorySize(_:)), keyEquivalent: "")
+            opt.target = self
+            opt.tag = n
+            opt.state = clipboardManager.maxItems == n ? .on : .off
+            sizeSub.addItem(opt)
+        }
+        sizeTitle.submenu = sizeSub
+        prefsSub.addItem(sizeTitle)
+
+        let skip = NSMenuItem(title: "Skip password-manager copies", action: #selector(toggleSkipConcealedMenu), keyEquivalent: "")
+        skip.image = icon("key.fill")
+        skip.state = clipboardManager.skipConcealed ? .on : .off
+        skip.target = self
+        prefsSub.addItem(skip)
+
+        let showDims = NSMenuItem(title: "Show image dimensions", action: #selector(toggleShowDimsMenu), keyEquivalent: "")
+        showDims.image = icon("photo.on.rectangle.angled")
+        showDims.state = clipboardManager.showImageDimensions ? .on : .off
+        showDims.target = self
+        prefsSub.addItem(showDims)
+
+        let launch = NSMenuItem(title: "Launch at Login", action: #selector(toggleLaunchMenu), keyEquivalent: "")
+        launch.image = icon("power")
+        launch.state = clipboardManager.launchAtLoginEnabled ? .on : .off
+        launch.target = self
+        prefsSub.addItem(launch)
+
+        prefs.submenu = prefsSub
+        menu.addItem(prefs)
+
+        menu.addItem(.separator())
+
+        let updates = NSMenuItem(title: "Check for Updates...", action: #selector(checkUpdatesAction), keyEquivalent: "")
+        updates.image = icon("arrow.triangle.2.circlepath")
+        updates.target = self
+        menu.addItem(updates)
+
+        let about = NSMenuItem(title: "About ClipLocal", action: #selector(showAboutMenu), keyEquivalent: "")
+        about.image = icon("info.circle")
+        about.target = self
+        menu.addItem(about)
+
+        let quit = NSMenuItem(title: "Quit", action: #selector(quitAction), keyEquivalent: "")
+        quit.image = icon("xmark.circle")
+        quit.target = self
+        menu.addItem(quit)
+
+        menu.popUp(positioning: nil, at: NSEvent.mouseLocation, in: nil)
+    }
+
+    @objc func clearHistoryNowMenu() { clipboardManager.clearNow() }
+    @objc func setSessionMode() { clipboardManager.mode = .session }
+    @objc func setPersistentMode() { clipboardManager.mode = .persistent }
+    @objc func setHistorySize(_ sender: NSMenuItem) { clipboardManager.maxItems = sender.tag }
+    @objc func toggleSkipConcealedMenu() { clipboardManager.skipConcealed.toggle() }
+    @objc func toggleShowDimsMenu() { clipboardManager.showImageDimensions.toggle() }
+    @objc func toggleLaunchMenu() { clipboardManager.toggleLaunchAtLogin() }
+    @objc func checkUpdatesAction() { checkForUpdates(silentIfCurrent: false) }
+    @objc func quitAction() { NSApp.terminate(nil) }
 
     // MARK: - About window (privacy-first splash)
     var aboutWindow: NSWindow?
