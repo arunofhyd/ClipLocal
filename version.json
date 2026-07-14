@@ -1,94 +1,14 @@
 {
-  "version": "1.9",
+  "version": "1.0.0",
   "downloadURL": "https://cliplocal.vercel.app/#install",
   "changelog": [
     {
-      "version": "1.9",
+      "version": "1.0.0",
       "date": "August 2026",
-      "changes": [
-        "Fixed search and filter layout to span dynamically with perfect padding",
-        "Removed 'show full file paths' feature to simplify UI",
-        "Optimized dynamic filter icon hiding based on search bar focus"
-      ]
-    },
-    {
-      "version": "1.8",
-      "date": "August 2026",
-      "changes": [
-        "Added 'Code' smart icon category and filter",
-        "Added 'File' smart icon category and filter",
-        "Redesigned search and filter menu layout",
-        "Filters are now dynamically shown when searching",
-        "Filters are sorted alphabetically"
-      ]
-    },
-    {
-      "version": "1.7",
-      "date": "August 2026",
-      "changes": [
-        "Added support for copying and pasting images natively",
-        "Added inline image previews inside the history menu"
-      ]
-    },
-    {
-      "version": "1.6",
-      "date": "July 2026",
-      "changes": [
-        "Moved Launch at Login, Skip password-manager copies, and History Storage into a new Preferences submenu",
-        "Added \u2318, shortcut for accessing Preferences"
-      ]
-    },
-    {
-      "version": "1.5",
-      "date": "July 2026",
-      "changes": [
-        "Aligned \"Clear History Now\" and \"Quit\" shortcuts beautifully alongside history items."
-      ]
-    },
-    {
-      "version": "1.4",
-      "date": "July 2026",
-      "changes": [
-        "Pinned items are now kept safe \u2014 \u201cClear History Now\u201d no longer removes them",
-        "Renamed \u201cPersistent\u201d option to \u201ckeep on quit\u201d for clarity"
-      ]
-    },
-    {
-      "version": "1.3",
-      "date": "July 2026",
-      "changes": [
-        "New: choose how many items to keep (History Size \u2014 hover the top row)",
-        "Renamed \u201cPrivacy Mode\u201d to \u201cStorage History\u201d with clearer options",
-        "Smart icons now shown for links, emails, numbers, and notes"
-      ]
-    },
-    {
-      "version": "1.2",
-      "date": "July 2026",
-      "changes": [
-        "Reliable \u23181\u2013\u23189 shortcuts to copy history items from the menu",
-        "Refined menu icons and layout",
-        "Update downloads now open the ClipLocal website"
-      ]
-    },
-    {
-      "version": "1.1",
-      "date": "July 2026",
-      "changes": [
-        "Number shortcuts (1\u20139) to quickly copy history items",
-        "Relevant icons for each item and menu action",
-        "\u2318\u232b shortcut to clear history",
-        "\u201cDon\u2019t show again\u201d option for the welcome screen",
-        "Cleaner menu layout"
-      ]
-    },
-    {
-      "version": "1.0",
-      "date": "July 2026",
       "changes": [
         "First release of ClipLocal",
-        "100% on-device clipboard history \u2014 nothing ever leaves your Mac",
-        "Bottom-right \u201cCopied\u201d preview",
+        "100% on-device clipboard history — nothing ever leaves your Mac",
+        "Bottom-right \"Copied\" preview",
         "Session-only and encrypted Persistent privacy modes",
         "Skips password-manager copies by default",
         "Pin, delete, and re-copy items from the menu bar",
