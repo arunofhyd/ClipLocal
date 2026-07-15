@@ -303,7 +303,7 @@ struct ContentView: View {
                             .buttonStyle(PlainButtonStyle())
                             .keyboardShortcut(index < 9 && manager.currentSearchText.isEmpty && manager.activeFilters.isEmpty ? KeyboardShortcut(KeyEquivalent(Character("\(index + 1)")), modifiers: .command) : nil)
                         }
-                        .padding(.vertical, 0)
+                        .padding(.vertical, 4)
                         .padding(.horizontal, 4)
                         .contentShape(RoundedRectangle(cornerRadius: 8))
                         .onTapGesture(count: 2) {
@@ -338,7 +338,7 @@ struct ContentView: View {
                         }
 
                     }
-                    .listRowInsets(EdgeInsets(top: -4, leading: 12, bottom: -4, trailing: 12))
+                    .listRowInsets(EdgeInsets(top: 2, leading: 12, bottom: 2, trailing: 12))
                     .listRowSeparator(.hidden)
                 }
             }
