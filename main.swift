@@ -302,7 +302,7 @@ struct ContentView: View {
                             }
                             .buttonStyle(PlainButtonStyle())
                         }
-                        .padding(.vertical, 0)
+                        .padding(.vertical, 4)
                         .padding(.horizontal, 4)
                         .contentShape(RoundedRectangle(cornerRadius: 8))
                         .onTapGesture(count: 2) {
@@ -344,7 +344,7 @@ struct ContentView: View {
                         .opacity(0)
                         .frame(width: 0, height: 0)
                     }
-                    .listRowInsets(EdgeInsets(top: -4, leading: 12, bottom: -4, trailing: 12))
+                    .listRowInsets(EdgeInsets(top: 4, leading: 12, bottom: 4, trailing: 12))
                     .listRowSeparator(.visible)
                 }
             }
