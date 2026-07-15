@@ -339,7 +339,7 @@ struct ContentView: View {
 
                     }
                     .listRowInsets(EdgeInsets(top: 2, leading: 12, bottom: 2, trailing: 12))
-                    .listRowSeparator(.hidden)
+                    .listRowSeparator(.visible)
                 }
             }
             .listStyle(.plain)
