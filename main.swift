@@ -1,65 +1,67 @@
 import Cocoa
-import CryptoKit
-import ServiceManagement
 import SwiftUI
+import ServiceManagement
 
 // ============================================================
 //  ClipLocal — 100% on-device clipboard history, no third parties
 // ============================================================
 
-let appVersion = "1.9"
+let appVersion = "2.0.0"
 let updateCheckURL = "https://raw.githubusercontent.com/arunofhyd/ClipLocal/main/version.json"
 let downloadPageURL = "https://cliplocal.vercel.app/#install"
 
-// MARK: - Encryption key (stored in a protected local file)
-enum KeyStore {
-    static var keyURL: URL {
-        let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("ClipLocal")
+// MARK: - KeyStore
+struct KeyStore {
+    static let keyFile: URL = {
+        let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!.appendingPathComponent("ClipLocal")
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir.appendingPathComponent("key.bin")
+    }()
+
+    static func generateKey() -> Data {
+        var key = Data(count: 32)
+        let result = key.withUnsafeMutableBytes {
+            SecRandomCopyBytes(kSecRandomDefault, 32, $0.baseAddress!)
+        }
+        if result == errSecSuccess { return key }
+        fatalError("Failed to generate encryption key")
     }
 
-    static func loadOrCreateKey() -> SymmetricKey {
-        if let data = try? Data(contentsOf: keyURL), data.count == 32 {
-            return SymmetricKey(data: data)
+    static func loadOrCreateKey() -> Data {
+        if let data = try? Data(contentsOf: keyFile) {
+            return data
         }
-
-        let oldKeyURL = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("ClipLocal")
-            .appendingPathComponent("history.enc")
-
-        if FileManager.default.fileExists(atPath: oldKeyURL.path) {
-            let tag = "com.cliplocal.encryptionkey".data(using: .utf8)!
-            let query: [String: Any] = [
-                kSecClass as String: kSecClassKey,
-                kSecAttrApplicationTag as String: tag,
-                kSecReturnData as String: true
-            ]
-            var item: CFTypeRef?
-            if SecItemCopyMatching(query as CFDictionary, &item) == errSecSuccess,
-               let data = item as? Data {
-                let symKey = SymmetricKey(data: data)
-                let keyData = symKey.withUnsafeBytes { Data($0) }
-                try? keyData.write(to: keyURL, options: [.atomic, .completeFileProtection])
-                return symKey
-            }
-        }
-
-        let newKey = SymmetricKey(size: .bits256)
-        let keyData = newKey.withUnsafeBytes { Data($0) }
-        try? keyData.write(to: keyURL, options: [.atomic, .completeFileProtection])
+        let newKey = generateKey()
+        try? newKey.write(to: keyFile, options: .atomic)
         return newKey
     }
 }
 
-// MARK: - Data Models
+// MARK: - Crypto
+import CryptoKit
+
+struct CryptoHelper {
+    static func encrypt(_ data: Data, key: Data) throws -> Data {
+        let symKey = SymmetricKey(data: key)
+        let sealedBox = try AES.GCM.seal(data, using: symKey)
+        return sealedBox.combined!
+    }
+
+    static func decrypt(_ data: Data, key: Data) throws -> Data {
+        let symKey = SymmetricKey(data: key)
+        let sealedBox = try AES.GCM.SealedBox(combined: data)
+        return try AES.GCM.open(sealedBox, using: symKey)
+    }
+}
+
+// MARK: - Models
 struct ClipItem: Codable, Identifiable, Hashable {
     var id: String { text + String(date.timeIntervalSince1970) }
     let text: String
     let date: Date
     var pinned: Bool = false
     var imageData: Data?
+    var sourceAppBundleIdentifier: String?
 
     func hash(into hasher: inout Hasher) {
         hasher.combine(text)
@@ -76,6 +78,7 @@ enum PrivacyMode: String {
     case persistent
 }
 
+// MARK: - ClipboardManager
 class ClipboardManager: ObservableObject {
     @Published var history: [ClipItem] = []
     @Published var currentSearchText = ""
@@ -87,101 +90,69 @@ class ClipboardManager: ObservableObject {
 
     var mode: PrivacyMode {
         get { PrivacyMode(rawValue: defaults.string(forKey: "mode") ?? "persistent") ?? .persistent }
-        set { defaults.set(newValue.rawValue, forKey: "mode"); persistIfNeeded(); objectWillChange.send() }
-    }
-
-    var skipConcealed: Bool {
-        get { defaults.object(forKey: "skipConcealed") == nil ? true : defaults.bool(forKey: "skipConcealed") }
-        set { defaults.set(newValue, forKey: "skipConcealed"); objectWillChange.send() }
+        set { defaults.set(newValue.rawValue, forKey: "mode") }
     }
 
     var showImageDimensions: Bool {
-        get { defaults.bool(forKey: "showImageDimensions") }
-        set { defaults.set(newValue, forKey: "showImageDimensions"); objectWillChange.send() }
+        get { defaults.object(forKey: "showImageDimensions") as? Bool ?? false }
+        set { defaults.set(newValue, forKey: "showImageDimensions") }
     }
 
-    var maxItems: Int {
-        get { let v = defaults.integer(forKey: "maxItems"); return v == 0 ? 50 : v }
-        set { defaults.set(newValue, forKey: "maxItems"); objectWillChange.send() }
+    var skipConcealed: Bool {
+        get { defaults.object(forKey: "skipConcealed") as? Bool ?? true }
+        set { defaults.set(newValue, forKey: "skipConcealed") }
     }
 
-    var launchAtLoginEnabled: Bool {
-        return SMAppService.mainApp.status == .enabled
-    }
-
-    var storeURL: URL {
-        let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("ClipLocal")
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        return dir.appendingPathComponent("history.enc")
+    var maxHistorySize: Int {
+        get { defaults.object(forKey: "maxItems") as? Int ?? 200 }
+        set { defaults.set(newValue, forKey: "maxItems"); trimHistory() }
     }
 
     init() {
         if mode == .persistent { loadHistory() }
     }
 
-    func persistIfNeeded() { if mode == .persistent { saveHistory() } }
-
-    func saveHistory() {
-        do {
-            let data = try JSONEncoder().encode(history)
-            let sealed = try AES.GCM.seal(data, using: key)
-            if let combined = sealed.combined {
-                try combined.write(to: storeURL, options: .completeFileProtection)
-            }
-        } catch { }
+    var historyFile: URL {
+        let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!.appendingPathComponent("ClipLocal")
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir.appendingPathComponent("history.enc")
     }
 
     func loadHistory() {
-        guard let data = try? Data(contentsOf: storeURL) else { return }
-        do {
-            let box = try AES.GCM.SealedBox(combined: data)
-            let dec = try AES.GCM.open(box, using: key)
-            history = try JSONDecoder().decode([ClipItem].self, from: dec)
-        } catch { }
+        guard let enc = try? Data(contentsOf: historyFile),
+              let dec = try? CryptoHelper.decrypt(enc, key: key),
+              let arr = try? JSONDecoder().decode([ClipItem].self, from: dec) else { return }
+        self.history = arr
     }
 
-    func deleteStore() { try? FileManager.default.removeItem(at: storeURL) }
+    func saveHistory() {
+        guard let data = try? JSONEncoder().encode(history),
+              let enc = try? CryptoHelper.encrypt(data, key: key) else { return }
+        try? enc.write(to: historyFile, options: .atomic)
+    }
+
+    func clearHistoryFile() {
+        try? FileManager.default.removeItem(at: historyFile)
+    }
+
+    func persistIfNeeded() {
+        if mode == .persistent { saveHistory() }
+    }
 
     func trimHistory() {
-        let pinned = history.filter { $0.pinned }
-        let unpinned = history.filter { !$0.pinned }
-        if unpinned.count > maxItems {
-            let keptUnpinned = unpinned.prefix(maxItems)
-            var newHistory = pinned + keptUnpinned
-            newHistory.sort { $0.date > $1.date }
-            history = newHistory
+        let max = maxHistorySize
+        if history.count > max {
+            // Keep pinned items
+            let pinned = history.filter { $0.pinned }
+            let unpinned = history.filter { !$0.pinned }.prefix(Swift.max(0, max - pinned.count))
+            history = pinned + Array(unpinned)
+            // Sort back by date
+            history.sort { $0.date > $1.date }
         }
-    }
-
-    func clearNow() {
-        history = history.filter { $0.pinned }
-        if history.isEmpty {
-            deleteStore()
-        } else {
-            persistIfNeeded()
-        }
-    }
-
-    func toggleLaunchAtLogin() {
-        do {
-            if SMAppService.mainApp.status == .enabled {
-                try SMAppService.mainApp.unregister()
-            } else {
-                try SMAppService.mainApp.register()
-            }
-        } catch {
-            let alert = NSAlert()
-            alert.messageText = "Couldn't change Launch at Login"
-            alert.informativeText = "macOS blocked the change. You can also manage this in System Settings → General → Login Items."
-            alert.addButton(withTitle: "OK")
-            alert.runModal()
-        }
-        objectWillChange.send()
     }
 }
 
-// MARK: - Views
+// MARK: - SwiftUI Views
 struct ContentView: View {
     @ObservedObject var manager: ClipboardManager
     @State private var hoverIdx: String? = nil
@@ -192,10 +163,24 @@ struct ContentView: View {
             HStack {
                 Image(systemName: "magnifyingglass")
                     .foregroundColor(.secondary)
-                TextField("Search...", text: $manager.currentSearchText)
+                    .font(.system(size: 16))
+                TextField("Search Clipboard History", text: $manager.currentSearchText)
                     .textFieldStyle(PlainTextFieldStyle())
+                    .font(.system(size: 16))
+
+                Spacer()
+
+                Button(action: {
+                    (NSApp.delegate as? AppDelegate)?.showSettingsMenu()
+                }) {
+                    Image(systemName: "gearshape")
+                        .foregroundColor(.blue)
+                        .font(.system(size: 18))
+                }
+                .buttonStyle(PlainButtonStyle())
             }
-            .padding()
+            .padding(.horizontal, 12)
+            .padding(.vertical, 12)
             .background(Color(NSColor.controlBackgroundColor))
 
             Divider()
@@ -203,15 +188,31 @@ struct ContentView: View {
             // Filters
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack {
+                    Button(action: {
+                        manager.activeFilters.removeAll()
+                    }) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "square.grid.2x2")
+                            Text("All")
+                        }
+                        .font(.system(size: 13, weight: .semibold))
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(manager.activeFilters.isEmpty ? Color.blue : Color(NSColor.controlBackgroundColor))
+                        .foregroundColor(manager.activeFilters.isEmpty ? .white : .primary)
+                        .clipShape(Capsule())
+                    }
+                    .buttonStyle(PlainButtonStyle())
+
                     FilterButton(title: "Text", systemImage: "text.alignleft", filterType: "text", manager: manager)
-                    FilterButton(title: "Link", systemImage: "link", filterType: "link", manager: manager)
-                    FilterButton(title: "Image", systemImage: "photo", filterType: "image", manager: manager)
-                    FilterButton(title: "File", systemImage: "doc", filterType: "file", manager: manager)
+                    FilterButton(title: "Links", systemImage: "link", filterType: "link", manager: manager)
                     FilterButton(title: "Code", systemImage: "chevron.left.forwardslash.chevron.right", filterType: "code", manager: manager)
+                    FilterButton(title: "Images", systemImage: "photo", filterType: "image", manager: manager)
+                    FilterButton(title: "Files", systemImage: "doc", filterType: "file", manager: manager)
                     FilterButton(title: "Email", systemImage: "envelope", filterType: "email", manager: manager)
-                    FilterButton(title: "Number", systemImage: "number", filterType: "number", manager: manager)
+                    FilterButton(title: "Numbers", systemImage: "number", filterType: "number", manager: manager)
                 }
-                .padding(.horizontal)
+                .padding(.horizontal, 12)
                 .padding(.vertical, 8)
             }
             .background(Color(NSColor.controlBackgroundColor))
@@ -228,16 +229,18 @@ struct ContentView: View {
                 } else {
                     ForEach(Array(filteredHistory.enumerated()), id: \.element.id) { (index, item) in
                         Button(action: { copyItem(item) }) {
-                            HStack {
+                            HStack(alignment: .center, spacing: 16) {
                                 Image(systemName: item.pinned ? "pin.fill" : iconName(for: item.text))
-                                    .foregroundColor(item.pinned ? .accentColor : .primary)
-                                    .frame(width: 20)
+                                    .font(.system(size: 20, weight: .light))
+                                    .foregroundColor(item.pinned ? .orange : .secondary)
+                                    .frame(width: 32)
+                                    .rotationEffect(Angle(degrees: item.pinned ? 45 : 0))
 
-                                VStack(alignment: .leading, spacing: 2) {
+                                VStack(alignment: .leading, spacing: 4) {
                                     Text(snippet(for: item.text))
                                         .lineLimit(1)
                                         .truncationMode(.tail)
-                                        .font(.system(size: 13))
+                                        .font(.system(size: 14, weight: .semibold))
                                         .foregroundColor(.primary)
 
                                     if let imageData = item.imageData, let nsImage = NSImage(data: imageData) {
@@ -247,9 +250,51 @@ struct ContentView: View {
                                             .frame(height: 60)
                                             .cornerRadius(4)
                                     }
+
+                                    HStack(spacing: 4) {
+                                        if let bundleID = item.sourceAppBundleIdentifier,
+                                           let appURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) {
+                                            Image(nsImage: NSWorkspace.shared.icon(forFile: appURL.path))
+                                                .resizable()
+                                                .frame(width: 12, height: 12)
+                                                .clipShape(Circle())
+                                        } else {
+                                            Image(nsImage: NSWorkspace.shared.icon(forFile: "/System/Library/CoreServices/Finder.app"))
+                                                .resizable()
+                                                .frame(width: 12, height: 12)
+                                                .clipShape(Circle())
+                                        }
+                                        Text(typeString(for: item.text))
+                                            .font(.system(size: 11))
+                                            .foregroundColor(.secondary)
+                                        Text("·")
+                                            .font(.system(size: 11))
+                                            .foregroundColor(.secondary)
+                                        Text("Copied \(formatDate(item.date))")
+                                            .font(.system(size: 11))
+                                            .foregroundColor(.secondary)
+                                        if item.sourceAppBundleIdentifier != nil {
+                                            Image(systemName: "link")
+                                                .font(.system(size: 9))
+                                                .foregroundColor(.secondary)
+                                        }
+                                        Image(systemName: "clock")
+                                            .font(.system(size: 10))
+                                            .foregroundColor(.secondary)
+                                    }
                                 }
 
                                 Spacer()
+
+                                Button(action: { copyItem(item) }) {
+                                    Image(systemName: "doc.on.doc")
+                                        .font(.system(size: 16))
+                                        .foregroundColor(Color.primary.opacity(0.6))
+                                        .frame(width: 36, height: 36)
+                                        .background(Color.secondary.opacity(0.1))
+                                        .clipShape(Circle())
+                                }
+                                .buttonStyle(PlainButtonStyle())
 
                                 if index < 9 && manager.currentSearchText.isEmpty && manager.activeFilters.isEmpty {
                                     Text("⌘\(index + 1)")
@@ -284,30 +329,8 @@ struct ContentView: View {
                     }
                 }
             }
-            .listStyle(PlainListStyle())
-
-            Divider()
-
-            // Footer / Settings
-            HStack {
-                Button(action: {
-                    (NSApp.delegate as? AppDelegate)?.showSettingsMenu()
-                }) {
-                    Image(systemName: "gearshape")
-                        .foregroundColor(.secondary)
-                        .padding(4)
-                }
-                .buttonStyle(PlainButtonStyle())
-
-                Spacer()
-
-                Text("ClipLocal")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            }
-            .padding(8)
-            .background(Color(NSColor.controlBackgroundColor))
         }
+        .frame(width: 450, height: 500)
     }
 
     // MARK: - Helpers
@@ -315,56 +338,59 @@ struct ContentView: View {
         var result = manager.history
         if !manager.activeFilters.isEmpty {
             result = result.filter { item in
-                for filter in manager.activeFilters {
-                    if checkFilterMatch(item: item, filter: filter) { return true }
-                }
-                return false
+                let type = itemType(for: item.text)
+                return manager.activeFilters.contains(type)
             }
         }
         if !manager.currentSearchText.isEmpty {
-            let s = manager.currentSearchText.lowercased()
-            result = result.filter { $0.text.lowercased().contains(s) }
+            let lower = manager.currentSearchText.lowercased()
+            result = result.filter { $0.text.lowercased().contains(lower) }
         }
         return result
     }
 
-    func checkFilterMatch(item: ClipItem, filter: String) -> Bool {
-        if item.imageData != nil { return filter == "image" }
-        let text = item.text.trimmingCharacters(in: .whitespacesAndNewlines)
-        switch filter {
-        case "link":
-            return text.hasPrefix("http://") || text.hasPrefix("https://") || text.hasPrefix("www.")
-        case "email":
-            let parts = text.split(separator: "@")
-            return parts.count == 2 && parts[1].contains(".") && !text.contains(" ")
-        case "number":
-            let regex = "^[0-9 +().-]{5,}$"
-            return text.range(of: regex, options: .regularExpression) != nil
-        case "file":
-            return (text.hasPrefix("/") || text.hasPrefix("file://")) && !text.contains("\n")
-        case "code":
-            return text.contains("{") || text.contains("}") || text.contains("func ") || text.contains("var ") || text.contains("let ") || text.contains("class ") || text.contains("struct ") || text.contains("<") || text.contains(">") || text.contains(";")
-        case "text":
-            let isLink = text.hasPrefix("http://") || text.hasPrefix("https://") || text.hasPrefix("www.")
-            let parts = text.split(separator: "@")
-            let isEmail = parts.count == 2 && parts[1].contains(".") && !text.contains(" ")
-            let isNumber = text.range(of: "^[0-9 +().-]{5,}$", options: .regularExpression) != nil
-            let isFile = (text.hasPrefix("/") || text.hasPrefix("file://")) && !text.contains("\n")
-            let isCode = text.contains("{") || text.contains("}") || text.contains("func ") || text.contains("var ") || text.contains("let ") || text.contains("class ") || text.contains("struct ") || text.contains("<") || text.contains(">") || text.contains(";")
-            return !isLink && !isEmail && !isNumber && !isFile && !isCode
-        default: return false
+    func itemType(for text: String) -> String {
+        let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if t.hasPrefix("http://") || t.hasPrefix("https://") || t.hasPrefix("www.") { return "link" }
+        let parts = t.split(separator: "@")
+        if parts.count == 2 && parts[1].contains(".") && !t.contains(" ") { return "email" }
+        if t.range(of: "^[0-9 +().-]{5,}$", options: .regularExpression) != nil { return "number" }
+        if (t.hasPrefix("/") || t.hasPrefix("file://")) && !t.contains("\n") { return "file" }
+        if t.hasPrefix("[Image") && t.hasSuffix("]") { return "image" }
+        if t.contains("{") || t.contains("}") || t.contains("func ") || t.contains("var ") || t.contains("let ") || t.contains("class ") || t.contains("struct ") || t.contains("<") || t.contains(">") || t.contains(";") { return "code" }
+        return "text"
+    }
+
+    func formatDate(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "d MMM yyyy 'at' h:mm a"
+        return formatter.string(from: date)
+    }
+
+    func typeString(for text: String) -> String {
+        let type = itemType(for: text)
+        switch type {
+        case "code": return "Code"
+        case "email": return "Email"
+        case "file": return "File"
+        case "image": return "Image"
+        case "link": return "Link"
+        case "number": return "Number"
+        default: return "Text"
         }
     }
 
     func iconName(for text: String) -> String {
-        let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        if t.hasPrefix("http://") || t.hasPrefix("https://") || t.hasPrefix("www.") { return "link" }
-        let parts = t.split(separator: "@")
-        if parts.count == 2 && parts[1].contains(".") && !t.contains(" ") { return "envelope" }
-        if t.range(of: "^[0-9 +().-]{5,}$", options: .regularExpression) != nil { return "number" }
-        if (t.hasPrefix("/") || t.hasPrefix("file://")) && !t.contains("\n") { return "doc" }
-        if t.contains("{") || t.contains("}") || t.contains("func ") || t.contains("var ") || t.contains("let ") || t.contains("class ") || t.contains("struct ") || t.contains("<") || t.contains(">") || t.contains(";") { return "chevron.left.forwardslash.chevron.right" }
-        return "text.alignleft"
+        let type = itemType(for: text)
+        switch type {
+        case "code": return "chevron.left.forwardslash.chevron.right"
+        case "email": return "envelope"
+        case "file": return "doc"
+        case "image": return "photo"
+        case "link": return "link"
+        case "number": return "number"
+        default: return "text.alignleft"
+        }
     }
 
     func snippet(for text: String) -> String {
@@ -378,49 +404,47 @@ struct ContentView: View {
         pb.clearContents()
 
         if let data = item.imageData, let img = NSImage(data: data) {
-            pb.setData(data, forType: .png)
-            if let tiff = img.tiffRepresentation {
-                pb.setData(tiff, forType: .tiff)
-            }
-        } else if (item.text.hasPrefix("/") || item.text.hasPrefix("file://")) && FileManager.default.fileExists(atPath: item.text.hasPrefix("file://") ? String(item.text.dropFirst(7)) : item.text) {
-            let path = item.text.hasPrefix("file://") ? String(item.text.dropFirst(7)) : item.text
+            pb.writeObjects([img])
+        } else if item.text.hasPrefix("file://") {
+            let path = String(item.text.dropFirst(7))
             let url = URL(fileURLWithPath: path)
             pb.writeObjects([url as NSURL])
-            pb.setString(item.text, forType: .string)
         } else {
             pb.setString(item.text, forType: .string)
         }
 
         manager.lastChangeCount = pb.changeCount
 
-        let itemId = item.id
-        if let idx = manager.history.firstIndex(where: { $0.id == itemId }) {
-            let pinned = manager.history[idx].pinned
+        if let idx = manager.history.firstIndex(where: { $0.id == item.id }) {
+            var updated = item
+            updated.date = Date() // Refresh date
             manager.history.remove(at: idx)
-            let newItem = ClipItem(text: item.text, date: Date(), pinned: pinned, imageData: item.imageData)
-            manager.history.insert(newItem, at: 0)
+            manager.history.insert(updated, at: 0)
         }
 
         manager.persistIfNeeded()
-        (NSApp.delegate as? AppDelegate)?.popover.performClose(nil)
+        (NSApp.delegate as? AppDelegate)?.closePopover()
+        (NSApp.delegate as? AppDelegate)?.showPreview(item.text)
+    }
+
+    func togglePin(_ item: ClipItem) {
+        if let idx = manager.history.firstIndex(where: { $0.id == item.id }) {
+            manager.history[idx].pinned.toggle()
+            manager.history.sort {
+                if $0.pinned == $1.pinned { return $0.date > $1.date }
+                return $0.pinned && !$1.pinned
+            }
+            manager.persistIfNeeded()
+        }
     }
 
     func deleteItem(_ item: ClipItem) {
-        let itemId = item.id
-        if let idx = manager.history.firstIndex(where: { $0.id == itemId }) {
+        if let idx = manager.history.firstIndex(where: { $0.id == item.id }) {
             manager.history.remove(at: idx)
             manager.persistIfNeeded()
         }
     }
-
-    func togglePin(_ item: ClipItem) {
-        let itemId = item.id
-        if let idx = manager.history.firstIndex(where: { $0.id == itemId }) {
-            manager.history[idx].pinned.toggle()
-            manager.persistIfNeeded()
-        }
-    }
-} // End of ContentView
+}
 
 struct FilterButton: View {
     let title: String
@@ -444,11 +468,16 @@ struct FilterButton: View {
                 Image(systemName: systemImage)
                 Text(title)
             }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .background(isSelected ? Color.accentColor : Color.secondary.opacity(0.1))
+            .font(.system(size: 13, weight: .semibold))
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .background(isSelected ? Color.blue : Color(NSColor.controlBackgroundColor))
             .foregroundColor(isSelected ? .white : .primary)
-            .cornerRadius(6)
+            .clipShape(Capsule())
+            .overlay(
+                Capsule()
+                    .stroke(Color.secondary.opacity(0.2), lineWidth: isSelected ? 0 : 1)
+            )
         }
         .buttonStyle(PlainButtonStyle())
     }
@@ -462,6 +491,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var previewWindow: NSWindow?
     let clipboardManager = ClipboardManager()
     let defaults = UserDefaults.standard
+    var aboutWindow: NSWindow?
+    var settingsMenu: NSMenu!
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         if defaults.object(forKey: "hasLaunchedBefore") == nil {
@@ -473,198 +504,225 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         let contentView = ContentView(manager: clipboardManager)
         popover = NSPopover()
-        popover.contentSize = NSSize(width: 320, height: 450)
+        popover.contentSize = NSSize(width: 450, height: 500)
         popover.behavior = .transient
         popover.contentViewController = NSHostingController(rootView: contentView)
 
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        if let button = statusItem.button {
-            button.image = NSImage(systemSymbolName: "doc.on.clipboard",
-                                   accessibilityDescription: "ClipLocal")
-            button.action = #selector(togglePopover(_:))
-            button.target = self
+        if let btn = statusItem.button {
+            let img = NSImage(systemSymbolName: "paperclip.circle", accessibilityDescription: "ClipLocal")
+            img?.isTemplate = true
+            btn.image = img
+            btn.action = #selector(togglePopover(_:))
         }
 
-        showAbout(onLaunch: true)
-        checkForUpdates(silentIfCurrent: true)
+        buildSettingsMenu()
+
         timer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
             self?.checkClipboard()
         }
+        RunLoop.main.add(timer!, forMode: .common)
+
+        if !defaults.bool(forKey: "hideAbout") { showAbout() }
+        checkForUpdates(silentIfCurrent: true)
     }
 
-    @objc func togglePopover(_ sender: Any?) {
-        if let button = statusItem.button {
-            if popover.isShown {
-                popover.performClose(sender)
-            } else {
-                popover.show(relativeTo: button.bounds, of: button, preferredEdge: NSRectEdge.minY)
-                NSApp.activate(ignoringOtherApps: true)
-            }
+    @objc func togglePopover(_ sender: AnyObject?) {
+        if popover.isShown {
+            closePopover()
+        } else {
+            showPopover(sender)
         }
     }
 
-    func icon(_ name: String) -> NSImage? {
-        return NSImage(systemSymbolName: name, accessibilityDescription: nil)?
-            .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 13, weight: .regular))
+    func showPopover(_ sender: AnyObject?) {
+        if let btn = statusItem.button {
+            popover.show(relativeTo: btn.bounds, of: btn, preferredEdge: .minY)
+            NSApp.activate(ignoringOtherApps: true)
+        }
+    }
+
+    func closePopover() {
+        popover.performClose(nil)
     }
 
     func showSettingsMenu() {
+        buildSettingsMenu() // Refresh states
+        settingsMenu.popUp(positioning: nil, at: NSEvent.mouseLocation, in: nil)
+    }
+
+    func buildSettingsMenu() {
         let menu = NSMenu()
 
-        let clear = NSMenuItem(title: "Clear History Now", action: #selector(clearHistoryNowMenu), keyEquivalent: "")
-        clear.image = icon("trash.fill")
+        func icon(_ name: String) -> NSImage? {
+            let i = NSImage(systemSymbolName: name, accessibilityDescription: nil)
+            i?.isTemplate = true
+            return i
+        }
+
+        let clear = NSMenuItem(title: "Clear History", action: #selector(clearHistory), keyEquivalent: "")
+        clear.image = icon("trash")
         clear.target = self
         menu.addItem(clear)
 
         menu.addItem(.separator())
 
-        let prefs = NSMenuItem(title: "Preferences...", action: nil, keyEquivalent: "")
-        prefs.image = icon("gearshape")
-        let prefsSub = NSMenu()
-
         let privacy = NSMenuItem(title: "History Storage", action: nil, keyEquivalent: "")
         privacy.image = icon("lock.shield")
         let psub = NSMenu()
 
-        let sessionItem = NSMenuItem(title: "Session-only (wiped on quit)", action: #selector(setSessionMode), keyEquivalent: "")
+        let sessionItem = NSMenuItem(title: (clipboardManager.mode == .session ? "✓ " : "   ") + "Session-only (wiped on quit)", action: #selector(setSessionMode), keyEquivalent: "")
         sessionItem.image = icon("lock")
-        sessionItem.state = clipboardManager.mode == .session ? .on : .off
         sessionItem.target = self
 
-        let persistItem = NSMenuItem(title: "Persistent (kept on quit)", action: #selector(setPersistentMode), keyEquivalent: "")
+        let persistItem = NSMenuItem(title: (clipboardManager.mode == .persistent ? "✓ " : "   ") + "Persistent (kept on quit)", action: #selector(setPersistentMode), keyEquivalent: "")
         persistItem.image = icon("externaldrive.fill")
-        persistItem.state = clipboardManager.mode == .persistent ? .on : .off
         persistItem.target = self
 
         psub.addItem(sessionItem)
         psub.addItem(persistItem)
         privacy.submenu = psub
-        prefsSub.addItem(privacy)
+        menu.addItem(privacy)
 
-        let sizeTitle = NSMenuItem(title: "Keep up to...", action: nil, keyEquivalent: "")
-        sizeTitle.image = icon("list.number")
-        let sizeSub = NSMenu()
-        for n in [10, 25, 50, 100, 200] {
-            let opt = NSMenuItem(title: "\(n) items", action: #selector(setHistorySize(_:)), keyEquivalent: "")
-            opt.target = self
-            opt.tag = n
-            opt.state = clipboardManager.maxItems == n ? .on : .off
-            sizeSub.addItem(opt)
+        let maxItems = NSMenuItem(title: "Keep up to...", action: nil, keyEquivalent: "")
+        maxItems.image = icon("list.number")
+        let msub = NSMenu()
+        let limits = [50, 100, 200, 500]
+        for limit in limits {
+            let item = NSMenuItem(title: (clipboardManager.maxHistorySize == limit ? "✓ " : "   ") + "\(limit) Items", action: #selector(setMaxItems(_:)), keyEquivalent: "")
+            item.tag = limit
+            item.target = self
+            msub.addItem(item)
         }
-        sizeTitle.submenu = sizeSub
-        prefsSub.addItem(sizeTitle)
+        maxItems.submenu = msub
+        menu.addItem(maxItems)
 
-        let skip = NSMenuItem(title: "Skip password-manager copies", action: #selector(toggleSkipConcealedMenu), keyEquivalent: "")
-        skip.image = icon("key.fill")
-        skip.state = clipboardManager.skipConcealed ? .on : .off
-        skip.target = self
-        prefsSub.addItem(skip)
+        let concealItem = NSMenuItem(title: (clipboardManager.skipConcealed ? "✓ " : "   ") + "Skip password-manager copies", action: #selector(toggleConcealed), keyEquivalent: "")
+        concealItem.image = icon("eye.slash")
+        concealItem.target = self
+        menu.addItem(concealItem)
 
-        let showDims = NSMenuItem(title: "Show image dimensions", action: #selector(toggleShowDimsMenu), keyEquivalent: "")
-        showDims.image = icon("photo.on.rectangle.angled")
-        showDims.state = clipboardManager.showImageDimensions ? .on : .off
-        showDims.target = self
-        prefsSub.addItem(showDims)
+        let imgItem = NSMenuItem(title: (clipboardManager.showImageDimensions ? "✓ " : "   ") + "Show image dimensions", action: #selector(toggleImageDim), keyEquivalent: "")
+        imgItem.image = icon("photo")
+        imgItem.target = self
+        menu.addItem(imgItem)
 
-        let launch = NSMenuItem(title: "Launch at Login", action: #selector(toggleLaunchMenu), keyEquivalent: "")
-        launch.image = icon("power")
-        launch.state = clipboardManager.launchAtLoginEnabled ? .on : .off
-        launch.target = self
-        prefsSub.addItem(launch)
-
-        prefs.submenu = prefsSub
-        menu.addItem(prefs)
+        let launchItem = NSMenuItem(title: (SMAppService.mainApp.status == .enabled ? "✓ " : "   ") + "Launch at Login", action: #selector(toggleLaunch), keyEquivalent: "")
+        launchItem.image = icon("macwindow")
+        launchItem.target = self
+        menu.addItem(launchItem)
 
         menu.addItem(.separator())
 
-        let updates = NSMenuItem(title: "Check for Updates...", action: #selector(checkUpdatesAction), keyEquivalent: "")
-        updates.image = icon("arrow.triangle.2.circlepath")
-        updates.target = self
-        menu.addItem(updates)
-
-        let about = NSMenuItem(title: "About ClipLocal", action: #selector(showAboutMenu), keyEquivalent: "")
+        let about = NSMenuItem(title: "About ClipLocal", action: #selector(showAbout), keyEquivalent: "")
         about.image = icon("info.circle")
         about.target = self
         menu.addItem(about)
 
-        let quit = NSMenuItem(title: "Quit", action: #selector(quitAction), keyEquivalent: "")
-        quit.image = icon("xmark.circle")
+        let update = NSMenuItem(title: "Check for Updates...", action: #selector(manualUpdateCheck), keyEquivalent: "")
+        update.image = icon("arrow.triangle.2.circlepath")
+        update.target = self
+        menu.addItem(update)
+
+        let quit = NSMenuItem(title: "Quit", action: #selector(quitApp), keyEquivalent: "q")
+        quit.image = icon("power")
         quit.target = self
         menu.addItem(quit)
 
-        menu.popUp(positioning: nil, at: NSEvent.mouseLocation, in: nil)
+        settingsMenu = menu
     }
 
-    @objc func clearHistoryNowMenu() { clipboardManager.clearNow() }
-    @objc func setSessionMode() { clipboardManager.mode = .session }
-    @objc func setPersistentMode() { clipboardManager.mode = .persistent }
-    @objc func setHistorySize(_ sender: NSMenuItem) { clipboardManager.maxItems = sender.tag }
-    @objc func toggleSkipConcealedMenu() { clipboardManager.skipConcealed.toggle() }
-    @objc func toggleShowDimsMenu() { clipboardManager.showImageDimensions.toggle() }
-    @objc func toggleLaunchMenu() { clipboardManager.toggleLaunchAtLogin() }
-    @objc func checkUpdatesAction() { checkForUpdates(silentIfCurrent: false) }
-    @objc func quitAction() { NSApp.terminate(nil) }
+    @objc func clearHistory() {
+        clipboardManager.history.removeAll()
+        clipboardManager.clearHistoryFile()
+    }
 
-    // MARK: - About window (privacy-first splash)
-    var aboutWindow: NSWindow?
+    @objc func setSessionMode() {
+        clipboardManager.mode = .session
+        clipboardManager.clearHistoryFile()
+    }
 
-    @objc func showAboutMenu() { showAbout(onLaunch: false) }
+    @objc func setPersistentMode() {
+        clipboardManager.mode = .persistent
+        clipboardManager.saveHistory()
+    }
 
-    func showAbout(onLaunch: Bool) {
-        if onLaunch && defaults.bool(forKey: "hideAbout") { return }
+    @objc func toggleConcealed() { clipboardManager.skipConcealed.toggle() }
+    @objc func toggleImageDim() { clipboardManager.showImageDimensions.toggle() }
 
-        aboutWindow?.close()
-        let width: CGFloat = 460, height: CGFloat = 700
-        let win = NSWindow(contentRect: NSRect(x: 0, y: 0, width: width, height: height),
+    @objc func setMaxItems(_ sender: NSMenuItem) {
+        clipboardManager.maxHistorySize = sender.tag
+    }
+
+    @objc func toggleLaunch() {
+        let service = SMAppService.mainApp
+        if service.status == .enabled {
+            try? service.unregister()
+        } else {
+            try? service.register()
+        }
+    }
+
+    @objc func manualUpdateCheck() { checkForUpdates(silentIfCurrent: false) }
+    @objc func quitApp() { NSApp.terminate(nil) }
+
+    @objc func showAbout() {
+        if let existing = aboutWindow {
+            existing.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            return
+        }
+
+        let width: CGFloat = 360, height: CGFloat = 460
+        guard let screen = NSScreen.main else { return }
+        let frame = screen.visibleFrame
+        let x = frame.minX + (frame.width - width) / 2
+        let y = frame.minY + (frame.height - height) / 2
+
+        let win = NSWindow(contentRect: NSRect(x: x, y: y, width: width, height: height),
                            styleMask: [.titled, .closable, .fullSizeContentView],
                            backing: .buffered, defer: false)
-        win.title = "ClipLocal"
-        win.isReleasedWhenClosed = false
+        win.title = "About"
         win.titlebarAppearsTransparent = true
         win.titleVisibility = .hidden
         win.isMovableByWindowBackground = true
-        win.center()
         win.level = .floating
 
         let bg = NSVisualEffectView(frame: NSRect(x: 0, y: 0, width: width, height: height))
-        bg.material = .underWindowBackground
+        bg.material = .windowBackground
         bg.state = .active
-        bg.wantsLayer = true
 
-        let icon = NSImageView(frame: NSRect(x: (width - 100) / 2, y: height - 140, width: 100, height: 100))
-        icon.image = NSImage(named: "NSApplicationIcon")
-        icon.imageScaling = .scaleProportionallyUpOrDown
-        bg.addSubview(icon)
+        let img = NSImageView(frame: NSRect(x: (width - 80) / 2, y: height - 120, width: 80, height: 80))
+        img.image = NSImage(named: NSImage.applicationIconName) ?? NSImage(systemSymbolName: "paperclip.circle", accessibilityDescription: nil)
+        bg.addSubview(img)
 
         let title = NSTextField(labelWithString: "ClipLocal")
-        title.frame = NSRect(x: 0, y: height - 190, width: width, height: 40)
+        title.frame = NSRect(x: 0, y: height - 160, width: width, height: 30)
         title.alignment = .center
-        title.font = NSFont.systemFont(ofSize: 32, weight: .bold)
+        title.font = NSFont.systemFont(ofSize: 24, weight: .bold)
         bg.addSubview(title)
 
         let ver = NSTextField(labelWithString: "Version \(appVersion)")
-        ver.frame = NSRect(x: 0, y: height - 210, width: width, height: 20)
+        ver.frame = NSRect(x: 0, y: height - 180, width: width, height: 20)
         ver.alignment = .center
-        ver.font = NSFont.systemFont(ofSize: 13, weight: .medium)
+        ver.font = NSFont.systemFont(ofSize: 13)
         ver.textColor = .secondaryLabelColor
         bg.addSubview(ver)
 
-        let features = [
-            ("lock.shield", "100% On-Device & Private", "Your clipboard data never leaves your Mac. No cloud, no tracking, no accounts."),
-            ("key.fill", "Skips Secrets", "By default, passwords copied from 1Password, Bitwarden, etc., are completely ignored."),
-            ("eye.slash", "No Analytics", "Zero telemetry. The app only connects to GitHub manually when you check for updates."),
-            ("externaldrive.fill", "Encrypted Storage", "In Persistent mode, your history is encrypted (AES-GCM) on disk. Only your Mac account can read it.")
+        let fts = [
+            ("lock.shield", "100% On-Device", "Your clipboard data never leaves your Mac. No tracking, no analytics, no cloud syncing."),
+            ("eye.slash", "Password Safe", "Automatically ignores sensitive copies from 1Password, Bitwarden, and Keychain."),
+            ("bolt.fill", "Instant Search", "Find any link, image, or text instantly with keyboard shortcuts.")
         ]
 
-        var currentY: CGFloat = height - 280
-        for (iconName, ft, desc) in features {
-            let imgView = NSImageView(frame: NSRect(x: 40, y: currentY - 20, width: 32, height: 32))
-            imgView.image = NSImage(systemSymbolName: iconName, accessibilityDescription: nil)?
-                .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 24, weight: .regular))
-            imgView.contentTintColor = .controlAccentColor
-            bg.addSubview(imgView)
+        var currentY = height - 240
+        for (iconName, ftString, desc) in fts {
+            let iv = NSImageView(frame: NSRect(x: 40, y: currentY - 6, width: 32, height: 32))
+            iv.image = NSImage(systemSymbolName: iconName, accessibilityDescription: nil)
+            iv.contentTintColor = .controlAccentColor
+            bg.addSubview(iv)
 
-            let ftLabel = NSTextField(labelWithString: ft)
+            let ftLabel = NSTextField(labelWithString: ftString)
             ftLabel.frame = NSRect(x: 90, y: currentY, width: width - 130, height: 20)
             ftLabel.font = NSFont.systemFont(ofSize: 14, weight: .bold)
             bg.addSubview(ftLabel)
@@ -717,6 +775,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         var newText: String?
         var newImage: Data?
+        let sourceApp = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
 
         if let urls = pb.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL], let first = urls.first {
             newText = "file://" + first.path
@@ -738,10 +797,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             if let idx = self.clipboardManager.history.firstIndex(where: { $0.text == text && $0.imageData == newImage }) {
                 let pinned = self.clipboardManager.history[idx].pinned
                 self.clipboardManager.history.remove(at: idx)
-                let newItem = ClipItem(text: text, date: Date(), pinned: pinned, imageData: newImage)
+                let newItem = ClipItem(text: text, date: Date(), pinned: pinned, imageData: newImage, sourceAppBundleIdentifier: sourceApp)
                 self.clipboardManager.history.insert(newItem, at: 0)
             } else {
-                let newItem = ClipItem(text: text, date: Date(), pinned: false, imageData: newImage)
+                let newItem = ClipItem(text: text, date: Date(), pinned: false, imageData: newImage, sourceAppBundleIdentifier: sourceApp)
                 self.clipboardManager.history.insert(newItem, at: 0)
                 self.showPreview(text)
             }
