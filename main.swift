@@ -692,7 +692,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     @objc func quitApp() { NSApp.terminate(nil) }
 
     // MARK: - About window (privacy-first splash)
-    var aboutWindow: NSWindow?
 
     @objc func showAboutMenu() { showAbout(onLaunch: false) }
 
