@@ -301,8 +301,9 @@ struct ContentView: View {
                                     .clipShape(Circle())
                             }
                             .buttonStyle(PlainButtonStyle())
+                            .keyboardShortcut(index < 9 && manager.currentSearchText.isEmpty && manager.activeFilters.isEmpty ? KeyboardShortcut(KeyEquivalent(Character("\(index + 1)")), modifiers: .command) : nil)
                         }
-                        .padding(.vertical, 4)
+                        .padding(.vertical, 0)
                         .padding(.horizontal, 4)
                         .contentShape(RoundedRectangle(cornerRadius: 8))
                         .onTapGesture(count: 2) {
@@ -336,16 +337,9 @@ struct ContentView: View {
                             .tint(.orange)
                         }
 
-                        // Hidden button for keyboard shortcut
-                        Button("") {
-                            copyItem(item)
-                        }
-                        .keyboardShortcut(index < 9 && manager.currentSearchText.isEmpty && manager.activeFilters.isEmpty ? KeyboardShortcut(KeyEquivalent(Character("\(index + 1)")), modifiers: .command) : nil)
-                        .opacity(0)
-                        .frame(width: 0, height: 0)
                     }
-                    .listRowInsets(EdgeInsets(top: 4, leading: 12, bottom: 4, trailing: 12))
-                    .listRowSeparator(.visible)
+                    .listRowInsets(EdgeInsets(top: -4, leading: 12, bottom: -4, trailing: 12))
+                    .listRowSeparator(.hidden)
                 }
             }
             .listStyle(.plain)
