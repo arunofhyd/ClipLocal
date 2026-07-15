@@ -1,13 +1,26 @@
-# Install Rec via Homebrew
+# Install ClipLocal via Homebrew
 
-To install Rec on a brand new Mac, you can run the following combined command in your Terminal. This will install Homebrew (if you don't already have it), add the custom repository, and install the Rec application:
+To install ClipLocal on a brand new Mac, you can run the following combined command in your Terminal. This will install Homebrew (if you don't already have it), add the custom repository, and install the Rec application:
 
 ```bash
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" && brew tap arunofhyd/cliplocal && brew trust arunofhyd/cliplocal && brew install --cask cliplocal
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+```
+
+**If you are installing Homebrew for the first time (especially on Apple Silicon Macs), you may need to add it to your PATH.** After the installation script finishes, follow the "Next steps" instructions in the terminal, or run the following commands:
+
+```bash
+echo 'eval "$(/opt/homebrew/bin/brew shellenv)"' >> ~/.zprofile
+eval "$(/opt/homebrew/bin/brew shellenv)"
+```
+
+Then, add the repository and install ClipLocal:
+
+```bash
+brew tap arunofhyd/cliplocal && brew trust arunofhyd/cliplocal && brew install --cask cliplocal
 ```
 
 ### Important Note for New Users:
-Because this application is not yet notarized with an Apple Developer certificate, macOS Gatekeeper will block it the very first time you try to open it, showing a message that Apple could not verify "Rec" is free of malware.
+Because this application is not yet notarized with an Apple Developer certificate, macOS Gatekeeper will block it the very first time you try to open it, showing a message that Apple could not verify "ClipLocal" is free of malware.
 
 To open the app for the first time:
 1. Try to open the **Rec** app from your Applications folder.
