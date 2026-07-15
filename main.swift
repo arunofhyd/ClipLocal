@@ -156,6 +156,7 @@ class ClipboardManager: ObservableObject {
 struct ContentView: View {
     @ObservedObject var manager: ClipboardManager
     @State private var hoverIdx: String? = nil
+    @State private var expandedIdx: String? = nil
 
     var body: some View {
         VStack(spacing: 0) {
@@ -204,13 +205,13 @@ struct ContentView: View {
                     }
                     .buttonStyle(PlainButtonStyle())
 
-                    FilterButton(title: "Text", systemImage: "text.alignleft", filterType: "text", manager: manager)
-                    FilterButton(title: "Links", systemImage: "link", filterType: "link", manager: manager)
                     FilterButton(title: "Code", systemImage: "chevron.left.forwardslash.chevron.right", filterType: "code", manager: manager)
-                    FilterButton(title: "Images", systemImage: "photo", filterType: "image", manager: manager)
-                    FilterButton(title: "Files", systemImage: "doc", filterType: "file", manager: manager)
                     FilterButton(title: "Email", systemImage: "envelope", filterType: "email", manager: manager)
+                    FilterButton(title: "Files", systemImage: "doc", filterType: "file", manager: manager)
+                    FilterButton(title: "Images", systemImage: "photo", filterType: "image", manager: manager)
+                    FilterButton(title: "Links", systemImage: "link", filterType: "link", manager: manager)
                     FilterButton(title: "Numbers", systemImage: "number", filterType: "number", manager: manager)
+                    FilterButton(title: "Text", systemImage: "text.alignleft", filterType: "text", manager: manager)
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
@@ -228,89 +229,97 @@ struct ContentView: View {
                         .padding()
                 } else {
                     ForEach(Array(filteredHistory.enumerated()), id: \.element.id) { (index, item) in
-                        Button(action: { copyItem(item) }) {
-                            HStack(alignment: .center, spacing: 16) {
-                                Image(systemName: item.pinned ? "pin.fill" : iconName(for: item.text))
-                                    .font(.system(size: 20, weight: .light))
-                                    .foregroundColor(item.pinned ? .orange : .secondary)
-                                    .frame(width: 32)
-                                    .rotationEffect(Angle(degrees: item.pinned ? 45 : 0))
+                        HStack(alignment: .center, spacing: 16) {
+                            Image(systemName: item.pinned ? "pin.fill" : iconName(for: item.text))
+                                .font(.system(size: 20, weight: .light))
+                                .foregroundColor(item.pinned ? .orange : .secondary)
+                                .frame(width: 32)
+                                .rotationEffect(Angle(degrees: item.pinned ? 45 : 0))
 
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text(snippet(for: item.text))
-                                        .lineLimit(1)
-                                        .truncationMode(.tail)
-                                        .font(.system(size: 14, weight: .semibold))
-                                        .foregroundColor(.primary)
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(snippet(for: item.text))
+                                    .lineLimit(expandedIdx == item.id ? 4 : 1)
+                                    .truncationMode(.tail)
+                                    .font(.system(size: 14, weight: .semibold))
+                                    .foregroundColor(.primary)
 
-                                    if let imageData = item.imageData, let nsImage = NSImage(data: imageData) {
-                                        Image(nsImage: nsImage)
+                                if let imageData = item.imageData, let nsImage = NSImage(data: imageData) {
+                                    Image(nsImage: nsImage)
+                                        .resizable()
+                                        .aspectRatio(contentMode: .fit)
+                                        .frame(height: 60)
+                                        .cornerRadius(4)
+                                }
+
+                                HStack(spacing: 4) {
+                                    if let bundleID = item.sourceAppBundleIdentifier,
+                                       let appURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) {
+                                        Image(nsImage: NSWorkspace.shared.icon(forFile: appURL.path))
                                             .resizable()
-                                            .aspectRatio(contentMode: .fit)
-                                            .frame(height: 60)
-                                            .cornerRadius(4)
+                                            .frame(width: 12, height: 12)
+                                            .clipShape(Circle())
+                                    } else {
+                                        Image(nsImage: NSWorkspace.shared.icon(forFile: "/System/Library/CoreServices/Finder.app"))
+                                            .resizable()
+                                            .frame(width: 12, height: 12)
+                                            .clipShape(Circle())
                                     }
-
-                                    HStack(spacing: 4) {
-                                        if let bundleID = item.sourceAppBundleIdentifier,
-                                           let appURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) {
-                                            Image(nsImage: NSWorkspace.shared.icon(forFile: appURL.path))
-                                                .resizable()
-                                                .frame(width: 12, height: 12)
-                                                .clipShape(Circle())
-                                        } else {
-                                            Image(nsImage: NSWorkspace.shared.icon(forFile: "/System/Library/CoreServices/Finder.app"))
-                                                .resizable()
-                                                .frame(width: 12, height: 12)
-                                                .clipShape(Circle())
-                                        }
-                                        Text(typeString(for: item.text))
-                                            .font(.system(size: 11))
-                                            .foregroundColor(.secondary)
-                                        Text("·")
-                                            .font(.system(size: 11))
-                                            .foregroundColor(.secondary)
-                                        Text("Copied \(formatDate(item.date))")
-                                            .font(.system(size: 11))
-                                            .foregroundColor(.secondary)
-                                        if item.sourceAppBundleIdentifier != nil {
-                                            Image(systemName: "link")
-                                                .font(.system(size: 9))
-                                                .foregroundColor(.secondary)
-                                        }
-                                        Image(systemName: "clock")
-                                            .font(.system(size: 10))
-                                            .foregroundColor(.secondary)
-                                    }
-                                }
-
-                                Spacer()
-
-                                Button(action: { copyItem(item) }) {
-                                    Image(systemName: "doc.on.doc")
-                                        .font(.system(size: 16))
-                                        .foregroundColor(Color.primary.opacity(0.6))
-                                        .frame(width: 36, height: 36)
-                                        .background(Color.secondary.opacity(0.1))
-                                        .clipShape(Circle())
-                                }
-                                .buttonStyle(PlainButtonStyle())
-
-                                if index < 9 && manager.currentSearchText.isEmpty && manager.activeFilters.isEmpty {
-                                    Text("⌘\(index + 1)")
-                                        .foregroundColor(.secondary)
+                                    Text(typeString(for: item.text))
                                         .font(.system(size: 11))
+                                        .foregroundColor(.secondary)
+                                    Text("·")
+                                        .font(.system(size: 11))
+                                        .foregroundColor(.secondary)
+                                    Text("Copied \(formatDate(item.date))")
+                                        .font(.system(size: 11))
+                                        .foregroundColor(.secondary)
+                                    if item.sourceAppBundleIdentifier != nil {
+                                        Image(systemName: "link")
+                                            .font(.system(size: 9))
+                                            .foregroundColor(.secondary)
+                                    }
+                                    Image(systemName: "clock")
+                                        .font(.system(size: 10))
+                                        .foregroundColor(.secondary)
                                 }
                             }
-                            .padding(.vertical, 4)
-                            .contentShape(Rectangle())
+
+                            Spacer()
+
+                            if index < 9 && manager.currentSearchText.isEmpty && manager.activeFilters.isEmpty {
+                                Text("⌘\(index + 1)")
+                                    .foregroundColor(.secondary)
+                                    .font(.system(size: 11))
+                            }
+
+                            Button(action: { copyItem(item) }) {
+                                Image(systemName: "doc.on.doc")
+                                    .font(.system(size: 16))
+                                    .foregroundColor(Color.primary.opacity(0.6))
+                                    .frame(width: 36, height: 36)
+                                    .background(Color.secondary.opacity(0.1))
+                                    .clipShape(Circle())
+                            }
+                            .buttonStyle(PlainButtonStyle())
                         }
-                        .buttonStyle(PlainButtonStyle())
-                        .keyboardShortcut(index < 9 && manager.currentSearchText.isEmpty && manager.activeFilters.isEmpty ? KeyboardShortcut(KeyEquivalent(Character("\(index + 1)")), modifiers: .command) : nil)
+                        .padding(.vertical, 4)
+                        .padding(.horizontal, 4)
+                        .contentShape(RoundedRectangle(cornerRadius: 8))
+                        .onTapGesture(count: 2) {
+                            copyItem(item)
+                        }
+                        .onTapGesture {
+                            if expandedIdx == item.id {
+                                expandedIdx = nil
+                            } else {
+                                expandedIdx = item.id
+                            }
+                        }
+                        .background(hoverIdx == item.id ? Color.accentColor.opacity(0.1) : Color.clear)
+                        .cornerRadius(8)
                         .onHover { isHovered in
                             hoverIdx = isHovered ? item.id : nil
                         }
-                        .background(hoverIdx == item.id ? Color.accentColor.opacity(0.1) : Color.clear)
                         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                             Button(role: .destructive) {
                                 deleteItem(item)
@@ -326,9 +335,20 @@ struct ContentView: View {
                             }
                             .tint(.orange)
                         }
+
+                        // Hidden button for keyboard shortcut
+                        Button("") {
+                            copyItem(item)
+                        }
+                        .keyboardShortcut(index < 9 && manager.currentSearchText.isEmpty && manager.activeFilters.isEmpty ? KeyboardShortcut(KeyEquivalent(Character("\(index + 1)")), modifiers: .command) : nil)
+                        .opacity(0)
+                        .frame(width: 0, height: 0)
                     }
+                    .listRowInsets(EdgeInsets(top: 4, leading: 12, bottom: 4, trailing: 12))
+                    .listRowSeparator(.visible)
                 }
             }
+            .listStyle(.plain)
         }
         .frame(width: 450, height: 500)
     }
@@ -346,7 +366,12 @@ struct ContentView: View {
             let lower = manager.currentSearchText.lowercased()
             result = result.filter { $0.text.lowercased().contains(lower) }
         }
-        return result
+
+        return result.sorted {
+            if $0.pinned && !$1.pinned { return true }
+            if !$0.pinned && $1.pinned { return false }
+            return $0.date > $1.date
+        }
     }
 
     func itemType(for text: String) -> String {
@@ -523,7 +548,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
         RunLoop.main.add(timer!, forMode: .common)
 
-        if !defaults.bool(forKey: "hideAbout") { showAbout() }
+        if !defaults.bool(forKey: "hideAbout") { showAbout(onLaunch: true) }
         checkForUpdates(silentIfCurrent: true)
     }
 
@@ -614,7 +639,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         menu.addItem(.separator())
 
-        let about = NSMenuItem(title: "About ClipLocal", action: #selector(showAbout), keyEquivalent: "")
+        let about = NSMenuItem(title: "About ClipLocal", action: #selector(showAboutMenu), keyEquivalent: "")
         about.image = icon("info.circle")
         about.target = self
         menu.addItem(about)
@@ -666,101 +691,203 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     @objc func manualUpdateCheck() { checkForUpdates(silentIfCurrent: false) }
     @objc func quitApp() { NSApp.terminate(nil) }
 
-    @objc func showAbout() {
-        if let existing = aboutWindow {
-            existing.makeKeyAndOrderFront(nil)
-            NSApp.activate(ignoringOtherApps: true)
-            return
-        }
+    // MARK: - About window (privacy-first splash)
+    var aboutWindow: NSWindow?
 
-        let width: CGFloat = 360, height: CGFloat = 460
-        guard let screen = NSScreen.main else { return }
-        let frame = screen.visibleFrame
-        let x = frame.minX + (frame.width - width) / 2
-        let y = frame.minY + (frame.height - height) / 2
+    @objc func showAboutMenu() { showAbout(onLaunch: false) }
 
-        let win = NSWindow(contentRect: NSRect(x: x, y: y, width: width, height: height),
+    func showAbout(onLaunch: Bool = false) {
+        if onLaunch && defaults.bool(forKey: "hideAbout") { return }
+
+        aboutWindow?.close()
+        let width: CGFloat = 460, height: CGFloat = 700
+        let win = NSWindow(contentRect: NSRect(x: 0, y: 0, width: width, height: height),
                            styleMask: [.titled, .closable, .fullSizeContentView],
                            backing: .buffered, defer: false)
-        win.title = "About"
+        win.title = "ClipLocal"
+        win.isReleasedWhenClosed = false
         win.titlebarAppearsTransparent = true
         win.titleVisibility = .hidden
         win.isMovableByWindowBackground = true
+        win.center()
         win.level = .floating
 
         let bg = NSVisualEffectView(frame: NSRect(x: 0, y: 0, width: width, height: height))
-        bg.material = .windowBackground
+        bg.material = .underWindowBackground
         bg.state = .active
+        bg.wantsLayer = true
 
-        let img = NSImageView(frame: NSRect(x: (width - 80) / 2, y: height - 120, width: 80, height: 80))
-        img.image = NSImage(named: NSImage.applicationIconName) ?? NSImage(systemSymbolName: "paperclip.circle", accessibilityDescription: nil)
-        bg.addSubview(img)
+        let icon = NSImageView(frame: NSRect(x: (width - 72)/2, y: height - 120, width: 72, height: 72))
+        let cfg = NSImage.SymbolConfiguration(pointSize: 60, weight: .regular)
+        icon.image = NSImage(systemSymbolName: "lock.doc.fill", accessibilityDescription: nil)?
+            .withSymbolConfiguration(cfg)
+        icon.contentTintColor = NSColor.controlAccentColor
+        bg.addSubview(icon)
 
-        let title = NSTextField(labelWithString: "ClipLocal")
-        title.frame = NSRect(x: 0, y: height - 160, width: width, height: 30)
-        title.alignment = .center
-        title.font = NSFont.systemFont(ofSize: 24, weight: .bold)
-        bg.addSubview(title)
+        let name = NSTextField(labelWithString: "ClipLocal")
+        name.frame = NSRect(x: 0, y: height - 164, width: width, height: 32)
+        name.alignment = .center
+        name.font = NSFont.systemFont(ofSize: 26, weight: .bold)
+        bg.addSubview(name)
 
-        let ver = NSTextField(labelWithString: "Version \(appVersion)")
-        ver.frame = NSRect(x: 0, y: height - 180, width: width, height: 20)
-        ver.alignment = .center
-        ver.font = NSFont.systemFont(ofSize: 13)
-        ver.textColor = .secondaryLabelColor
-        bg.addSubview(ver)
+        let version = NSTextField(labelWithString: "Version \(appVersion)")
+        version.frame = NSRect(x: 0, y: height - 186, width: width, height: 16)
+        version.alignment = .center
+        version.font = NSFont.systemFont(ofSize: 11, weight: .medium)
+        version.textColor = .tertiaryLabelColor
+        bg.addSubview(version)
 
-        let fts = [
-            ("lock.shield", "100% On-Device", "Your clipboard data never leaves your Mac. No tracking, no analytics, no cloud syncing."),
-            ("eye.slash", "Password Safe", "Automatically ignores sensitive copies from 1Password, Bitwarden, and Keychain."),
-            ("bolt.fill", "Instant Search", "Find any link, image, or text instantly with keyboard shortcuts.")
+        let tagline = NSTextField(labelWithString: "Your clipboard. Yours alone.")
+        tagline.frame = NSRect(x: 0, y: height - 210, width: width, height: 18)
+        tagline.alignment = .center
+        tagline.font = NSFont.systemFont(ofSize: 13, weight: .medium)
+        tagline.textColor = .secondaryLabelColor
+        bg.addSubview(tagline)
+
+        let features = [
+            ("lock.shield", "100% On-Device & Private", "Your clipboard data never leaves your Mac. No cloud, no tracking, no accounts."),
+            ("key", "Skips Secrets", "By default, passwords copied from 1Password, Bitwarden, etc., are completely ignored."),
+            ("eye.slash", "No Analytics", "Zero telemetry. The app only connects to GitHub manually when you check for updates."),
+            ("externaldrive.fill", "Encrypted Storage", "In Persistent mode, your history is encrypted (AES-GCM) on disk. Only your Mac account can read it.")
         ]
 
-        var currentY = height - 240
-        for (iconName, ftString, desc) in fts {
-            let iv = NSImageView(frame: NSRect(x: 40, y: currentY - 6, width: 32, height: 32))
-            iv.image = NSImage(systemSymbolName: iconName, accessibilityDescription: nil)
-            iv.contentTintColor = .controlAccentColor
-            bg.addSubview(iv)
+        let bodyWidth = width - 80
+        let textWidth = bodyWidth - 44
+        let para = NSMutableParagraphStyle()
+        para.lineSpacing = 2
+        let textFont = NSFont.systemFont(ofSize: 12.5)
+        let titleFont = NSFont.systemFont(ofSize: 13.5, weight: .bold)
 
-            let ftLabel = NSTextField(labelWithString: ftString)
-            ftLabel.frame = NSRect(x: 90, y: currentY, width: width - 130, height: 20)
-            ftLabel.font = NSFont.systemFont(ofSize: 14, weight: .bold)
-            bg.addSubview(ftLabel)
+        var featureHeights: [CGFloat] = []
+        var totalFeaturesHeight: CGFloat = 0
+        for f in features {
+            let attr = NSAttributedString(string: f.2, attributes: [
+                .font: textFont,
+                .paragraphStyle: para
+            ])
+            let measured = attr.boundingRect(
+                with: NSSize(width: textWidth, height: .greatestFiniteMagnitude),
+                options: [.usesLineFragmentOrigin, .usesFontLeading])
+            let h = ceil(measured.height) + 24 // title height + spacing
+            featureHeights.append(h)
+            totalFeaturesHeight += h + 20 // item spacing
+        }
+        totalFeaturesHeight -= 20 // remove last spacing
 
-            let descLabel = NSTextField(wrappingLabelWithString: desc)
-            descLabel.frame = NSRect(x: 90, y: currentY - 40, width: width - 130, height: 36)
-            descLabel.font = NSFont.systemFont(ofSize: 13)
-            descLabel.textColor = .secondaryLabelColor
+        let textTop = (height - 210) - 24
+        let bottomSpaceNeeded: CGFloat = 160
+        let newHeight = (height - textTop) + totalFeaturesHeight + bottomSpaceNeeded
+        let finalHeight = max(height, newHeight)
+
+        let oldFrame = win.frame
+        win.setFrame(NSRect(x: oldFrame.minX, y: oldFrame.maxY - finalHeight, width: width, height: finalHeight), display: true)
+        bg.frame = NSRect(x: 0, y: 0, width: width, height: finalHeight)
+
+        icon.frame.origin.y = finalHeight - 120
+        name.frame.origin.y = finalHeight - 164
+        version.frame.origin.y = finalHeight - 186
+        tagline.frame.origin.y = finalHeight - 210
+        let newTextTop = (finalHeight - 210) - 24
+
+        var currentY = newTextTop
+        for (i, f) in features.enumerated() {
+            let itemH = featureHeights[i]
+            let itemY = currentY - itemH
+
+            let iconSize: CGFloat = 32
+            let iconY = itemY + (itemH - iconSize) / 2
+            let iconView = NSImageView(frame: NSRect(x: 40, y: iconY, width: iconSize, height: iconSize))
+            let iconCfg = NSImage.SymbolConfiguration(pointSize: 22, weight: .regular)
+            iconView.image = NSImage(systemSymbolName: f.0, accessibilityDescription: nil)?
+                .withSymbolConfiguration(iconCfg)
+            iconView.contentTintColor = NSColor.controlAccentColor
+            bg.addSubview(iconView)
+
+            let titleLabel = NSTextField(labelWithString: f.1)
+            titleLabel.frame = NSRect(x: 84, y: itemY + itemH - 22, width: textWidth, height: 18)
+            titleLabel.font = titleFont
+            titleLabel.textColor = .labelColor
+            titleLabel.isEditable = false
+            titleLabel.drawsBackground = false
+            titleLabel.isBordered = false
+            bg.addSubview(titleLabel)
+
+            let attr = NSAttributedString(string: f.2, attributes: [
+                .font: textFont,
+                .foregroundColor: NSColor.secondaryLabelColor,
+                .paragraphStyle: para
+            ])
+            let descLabel = NSTextField(labelWithAttributedString: attr)
+            descLabel.frame = NSRect(x: 84, y: itemY, width: textWidth, height: itemH - 24)
+            descLabel.lineBreakMode = .byWordWrapping
+            descLabel.maximumNumberOfLines = 0
+            descLabel.isEditable = false
+            descLabel.drawsBackground = false
+            descLabel.isBordered = false
             bg.addSubview(descLabel)
 
-            currentY -= 80
+            currentY = itemY - 20
         }
 
-        let link = NSTextField(labelWithString: "GitHub: arunofhyd/ClipLocal")
-        link.frame = NSRect(x: 0, y: 70, width: width, height: 20)
-        link.alignment = .center
-        link.font = NSFont.systemFont(ofSize: 13, weight: .medium)
-        link.textColor = .linkColor
-        let tap = NSClickGestureRecognizer(target: self, action: #selector(openGitHub))
-        link.addGestureRecognizer(tap)
-        bg.addSubview(link)
+        let credit = NSTextField(labelWithString: "Built by Arun Thomas")
+        credit.frame = NSRect(x: 0, y: currentY - 34, width: width, height: 18)
+        credit.alignment = .center
+        credit.font = NSFont.systemFont(ofSize: 12, weight: .semibold)
+        credit.textColor = .secondaryLabelColor
+        bg.addSubview(credit)
 
-        let btn = NSButton(title: "Got it", target: self, action: #selector(closeAbout))
-        btn.frame = NSRect(x: (width - 120) / 2, y: 20, width: 120, height: 32)
-        btn.bezelStyle = .rounded
-        btn.controlSize = .large
-        btn.keyEquivalent = "\r"
-        bg.addSubview(btn)
+        let dontShow = NSButton(checkboxWithTitle: "Don't show again",
+                                target: self, action: #selector(toggleHideAbout(_:)))
+        dontShow.font = NSFont.systemFont(ofSize: 11)
+        dontShow.sizeToFit()
+        let dsW = dontShow.frame.width
+        let dontShowY = credit.frame.minY - 40
+        dontShow.frame = NSRect(x: (width - dsW)/2, y: dontShowY, width: dsW, height: 20)
+        dontShow.state = defaults.bool(forKey: "hideAbout") ? .on : .off
+        bg.addSubview(dontShow)
+
+        let contact = NSButton(title: "Contact", target: self, action: #selector(contactDeveloper))
+        let buttonsY = dontShow.frame.minY - 48
+        contact.frame = NSRect(x: 40, y: buttonsY, width: 100, height: 32)
+        contact.bezelStyle = .rounded
+        contact.wantsLayer = true
+        contact.layer?.cornerRadius = 16
+        contact.layer?.masksToBounds = true
+        bg.addSubview(contact)
+
+        let close = NSButton(title: "Get Started", target: self, action: #selector(closeAbout))
+        close.frame = NSRect(x: width - 160, y: buttonsY, width: 120, height: 32)
+        close.bezelStyle = .rounded
+        close.wantsLayer = true
+        close.layer?.cornerRadius = 16
+        close.layer?.masksToBounds = true
+        close.keyEquivalent = "\r"
+        close.bezelColor = NSColor.controlAccentColor
+        close.attributedTitle = NSAttributedString(string: "Get Started", attributes: [
+            .foregroundColor: NSColor.white,
+            .font: NSFont.systemFont(ofSize: 13, weight: .medium)
+        ])
+        bg.addSubview(close)
 
         win.contentView = bg
         win.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
-        aboutWindow = win
+        self.aboutWindow = win
     }
 
-    @objc func openGitHub() { NSWorkspace.shared.open(URL(string: "https://github.com/arunofhyd/ClipLocal")!) }
-    @objc func closeAbout() { defaults.set(true, forKey: "hideAbout"); aboutWindow?.close() }
+    @objc func contactDeveloper() {
+        let subject = "ClipLocal feedback"
+        let encoded = subject.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? subject
+        if let url = URL(string: "mailto:arunthomas04042001@gmail.com?subject=\(encoded)") {
+            NSWorkspace.shared.open(url)
+        }
+    }
 
+    @objc func toggleHideAbout(_ sender: NSButton) {
+        defaults.set(sender.state == .on, forKey: "hideAbout")
+    }
+
+    @objc func closeAbout() { aboutWindow?.close(); aboutWindow = nil }
 
     func checkClipboard() {
         let pb = NSPasteboard.general
