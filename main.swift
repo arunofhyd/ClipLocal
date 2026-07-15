@@ -58,7 +58,7 @@ struct CryptoHelper {
 struct ClipItem: Codable, Identifiable, Hashable {
     var id: String { text + String(date.timeIntervalSince1970) }
     let text: String
-    let date: Date
+    var date: Date
     var pinned: Bool = false
     var imageData: Data?
     var sourceAppBundleIdentifier: String?
