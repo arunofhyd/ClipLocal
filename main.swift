@@ -235,9 +235,10 @@ struct ContentView: View {
                         .frame(maxWidth: .infinity, alignment: .center)
                         .padding()
                 } else {
-                    ForEach(Array(filteredHistory.enumerated()), id: \.1.id) { (index, item) in
+                    ForEach(filteredHistory) { item in
                         VStack(spacing: 0) {
                             HStack(alignment: .center, spacing: 16) {
+                                let index = filteredHistory.firstIndex(of: item) ?? 99
                                 Image(systemName: item.pinned ? "pin.fill" : iconName(for: item.text))
                                     .font(.system(size: 16, weight: .light))
                                     .foregroundColor(item.pinned ? .orange : .secondary)
@@ -245,18 +246,11 @@ struct ContentView: View {
                                     .rotationEffect(Angle(degrees: item.pinned ? 45 : 0))
 
                                 VStack(alignment: .leading, spacing: 6) {
-                                    if expandedIdx == item.id {
-                                        Text(snippet(for: item.text))
-                                            .font(.system(size: 14, weight: .semibold))
-                                            .foregroundColor(.primary)
-                                            .fixedSize(horizontal: false, vertical: true)
-                                    } else {
-                                        Text(snippet(for: item.text))
-                                            .lineLimit(1)
-                                            .truncationMode(.tail)
-                                            .font(.system(size: 14, weight: .semibold))
-                                            .foregroundColor(.primary)
-                                    }
+                                    Text(snippet(for: item.text))
+                                        .lineLimit(expandedIdx == item.id ? 5 : 1)
+                                        .truncationMode(.tail)
+                                        .font(.system(size: 14, weight: .semibold))
+                                        .foregroundColor(.primary)
 
                                     if let imageData = item.imageData, let nsImage = NSImage(data: imageData) {
                                         Image(nsImage: nsImage)
@@ -337,12 +331,10 @@ struct ContentView: View {
                         copyItem(item)
                     }
                     .onTapGesture {
-                        withAnimation(.easeInOut(duration: 0.25)) {
-                            if expandedIdx == item.id {
-                                expandedIdx = nil
-                            } else {
-                                expandedIdx = item.id
-                            }
+                        if expandedIdx == item.id {
+                            expandedIdx = nil
+                        } else {
+                            expandedIdx = item.id
                         }
                     }
                     .onHover { isHovered in
@@ -508,24 +500,20 @@ struct ContentView: View {
     }
 
     func togglePin(_ item: ClipItem) {
-        withAnimation {
-            if let idx = manager.history.firstIndex(where: { $0.id == item.id }) {
-                manager.history[idx].pinned.toggle()
-                manager.history.sort {
-                    if $0.pinned == $1.pinned { return $0.date > $1.date }
-                    return $0.pinned && !$1.pinned
-                }
-                manager.persistIfNeeded()
+        if let idx = manager.history.firstIndex(where: { $0.id == item.id }) {
+            manager.history[idx].pinned.toggle()
+            manager.history.sort {
+                if $0.pinned == $1.pinned { return $0.date > $1.date }
+                return $0.pinned && !$1.pinned
             }
+            manager.persistIfNeeded()
         }
     }
 
     func deleteItem(_ item: ClipItem) {
-        withAnimation {
-            if let idx = manager.history.firstIndex(where: { $0.id == item.id }) {
-                manager.history.remove(at: idx)
-                manager.persistIfNeeded()
-            }
+        if let idx = manager.history.firstIndex(where: { $0.id == item.id }) {
+            manager.history.remove(at: idx)
+            manager.persistIfNeeded()
         }
     }
 }
