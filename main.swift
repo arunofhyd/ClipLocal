@@ -182,7 +182,7 @@ struct ContentView: View {
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 12)
-            .background(Color(NSColor.controlBackgroundColor))
+            .background(Color.clear)
 
             Divider()
 
@@ -194,14 +194,19 @@ struct ContentView: View {
                     }) {
                         HStack(spacing: 4) {
                             Image(systemName: "square.grid.2x2")
+                                .font(.system(size: 11))
                             Text("All")
                         }
-                        .font(.system(size: 13, weight: .semibold))
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                        .background(manager.activeFilters.isEmpty ? Color.blue : Color(NSColor.controlBackgroundColor))
+                        .font(.system(size: 12, weight: .semibold))
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 4)
+                        .background(manager.activeFilters.isEmpty ? Color.blue : Color.secondary.opacity(0.1))
                         .foregroundColor(manager.activeFilters.isEmpty ? .white : .primary)
                         .clipShape(Capsule())
+                        .overlay(
+                            Capsule()
+                                .stroke(Color.secondary.opacity(0.2), lineWidth: manager.activeFilters.isEmpty ? 0 : 1)
+                        )
                     }
                     .buttonStyle(PlainButtonStyle())
 
@@ -216,7 +221,7 @@ struct ContentView: View {
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
             }
-            .background(Color(NSColor.controlBackgroundColor))
+            .background(Color.clear)
 
             Divider()
 
@@ -307,12 +312,6 @@ struct ContentView: View {
                         .padding(.vertical, 8)
                         .padding(.horizontal, 4)
                         .contentShape(RoundedRectangle(cornerRadius: 8))
-                        .overlay(
-                            Rectangle()
-                                .frame(height: 1)
-                                .foregroundColor(Color.secondary.opacity(0.1)),
-                            alignment: .bottom
-                        )
                         .onTapGesture(count: 2) {
                             copyItem(item)
                         }
@@ -347,11 +346,14 @@ struct ContentView: View {
                     }
                     .listRowInsets(EdgeInsets(top: 2, leading: 12, bottom: 2, trailing: 12))
                     .listRowSeparator(.visible)
+                    .alignmentGuide(.listRowSeparatorLeading) { _ in -12 }
                 }
             }
             .listStyle(.plain)
+            .background(Color.clear)
         }
         .frame(width: 450, height: 500)
+        .background(Color.clear)
     }
 
     // MARK: - Helpers
@@ -498,7 +500,7 @@ struct FilterButton: View {
             .font(.system(size: 12, weight: .semibold))
             .padding(.horizontal, 10)
             .padding(.vertical, 4)
-            .background(isSelected ? Color.blue : Color(NSColor.controlBackgroundColor))
+            .background(isSelected ? Color.blue : Color.secondary.opacity(0.1))
             .foregroundColor(isSelected ? .white : .primary)
             .clipShape(Capsule())
             .overlay(
