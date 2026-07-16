@@ -234,29 +234,37 @@ struct ContentView: View {
                         .padding()
                 } else {
                     ForEach(Array(filteredHistory.enumerated()), id: \.1.id) { (index, item) in
-                        HStack(alignment: .center, spacing: 16) {
-                            Image(systemName: item.pinned ? "pin.fill" : iconName(for: item.text))
-                                .font(.system(size: 16, weight: .light))
-                                .foregroundColor(item.pinned ? .orange : .secondary)
-                                .frame(width: 24)
-                                .rotationEffect(Angle(degrees: item.pinned ? 45 : 0))
+                        VStack(spacing: 0) {
+                            HStack(alignment: .center, spacing: 16) {
+                                Image(systemName: item.pinned ? "pin.fill" : iconName(for: item.text))
+                                    .font(.system(size: 16, weight: .light))
+                                    .foregroundColor(item.pinned ? .orange : .secondary)
+                                    .frame(width: 24)
+                                    .rotationEffect(Angle(degrees: item.pinned ? 45 : 0))
 
-                            VStack(alignment: .leading, spacing: 6) {
-                                Text(snippet(for: item.text))
-                                    .lineLimit(expandedIdx == item.id ? 4 : 1)
-                                    .truncationMode(.tail)
-                                    .font(.system(size: 14, weight: .semibold))
-                                    .foregroundColor(.primary)
+                                VStack(alignment: .leading, spacing: 6) {
+                                    if expandedIdx == item.id {
+                                        Text(snippet(for: item.text))
+                                            .font(.system(size: 14, weight: .semibold))
+                                            .foregroundColor(.primary)
+                                            .fixedSize(horizontal: false, vertical: true)
+                                    } else {
+                                        Text(snippet(for: item.text))
+                                            .lineLimit(1)
+                                            .truncationMode(.tail)
+                                            .font(.system(size: 14, weight: .semibold))
+                                            .foregroundColor(.primary)
+                                    }
 
-                                if let imageData = item.imageData, let nsImage = NSImage(data: imageData) {
-                                    Image(nsImage: nsImage)
-                                        .resizable()
-                                        .aspectRatio(contentMode: .fit)
-                                        .frame(height: 60)
-                                        .cornerRadius(4)
-                                }
+                                    if let imageData = item.imageData, let nsImage = NSImage(data: imageData) {
+                                        Image(nsImage: nsImage)
+                                            .resizable()
+                                            .scaledToFill()
+                                            .frame(width: 48, height: 48)
+                                            .clipShape(RoundedRectangle(cornerRadius: 4))
+                                    }
 
-                                HStack(spacing: 4) {
+                                    HStack(spacing: 4) {
                                     if let bundleID = item.sourceAppBundleIdentifier,
                                        let appURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) {
                                         Image(nsImage: NSWorkspace.shared.icon(forFile: appURL.path))
@@ -278,12 +286,8 @@ struct ContentView: View {
                                     Text("Copied \(formatDate(item.date))")
                                         .font(.system(size: 11))
                                         .foregroundColor(.secondary)
-                                    if item.sourceAppBundleIdentifier != nil {
-                                        Image(systemName: "link")
-                                            .font(.system(size: 9))
-                                            .foregroundColor(.secondary)
-                                    }
-                                    Image(systemName: "clock")
+
+                                    Image(systemName: "macbook.and.iphone")
                                         .font(.system(size: 10))
                                         .foregroundColor(.secondary)
                                 }
@@ -320,45 +324,47 @@ struct ContentView: View {
                             )
                         }
                         .padding(.vertical, 8)
-                        .padding(.horizontal, 16)
-                        .contentShape(Rectangle())
-                        .onTapGesture(count: 2) {
-                            copyItem(item)
-                        }
-                        .onTapGesture {
-                            withAnimation(.easeInOut(duration: 0.2)) {
-                                if expandedIdx == item.id {
-                                    expandedIdx = nil
-                                } else {
-                                    expandedIdx = item.id
-                                }
-                            }
-                        }
-                        .onHover { isHovered in
-                            hoverIdx = isHovered ? item.id : nil
-                        }
-                        .listRowBackground(hoverIdx == item.id ? Color.accentColor.opacity(0.1) : Color.clear)
-                        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                            Button(role: .destructive) {
-                                deleteItem(item)
-                            } label: {
-                                Label("Delete", systemImage: "trash")
-                            }
-                        }
-                        .swipeActions(edge: .leading, allowsFullSwipe: true) {
-                            Button {
-                                togglePin(item)
-                            } label: {
-                                Label(item.pinned ? "Unpin" : "Pin", systemImage: item.pinned ? "pin.slash" : "pin")
-                            }
-                            .tint(.orange)
-                        }
+                        .padding(.horizontal, 12)
 
+                        Divider()
+                            .padding(.horizontal, 12)
+                    }
+                    .contentShape(Rectangle())
+                    .onTapGesture(count: 2) {
+                        copyItem(item)
+                    }
+                    .onTapGesture {
+                        withAnimation(.easeInOut(duration: 0.25)) {
+                            if expandedIdx == item.id {
+                                expandedIdx = nil
+                            } else {
+                                expandedIdx = item.id
+                            }
+                        }
+                    }
+                    .onHover { isHovered in
+                        hoverIdx = isHovered ? item.id : nil
+                    }
+                    .listRowBackground(hoverIdx == item.id ? Color.accentColor.opacity(0.1) : Color.clear)
+                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                        Button(role: .destructive) {
+                            deleteItem(item)
+                        } label: {
+                            Label("Delete", systemImage: "trash")
+                        }
+                    }
+                    .swipeActions(edge: .leading, allowsFullSwipe: true) {
+                        Button {
+                            togglePin(item)
+                        } label: {
+                            Label(item.pinned ? "Unpin" : "Pin", systemImage: item.pinned ? "pin.slash" : "pin")
+                        }
+                        .tint(.orange)
                     }
                     .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
-                    .listRowSeparator(.visible)
-                    .alignmentGuide(.listRowSeparatorLeading) { d in d[.leading] }
+                    .listRowSeparator(.hidden)
                 }
+            }
             }
             .listStyle(.plain)
             .background(Color.clear)
