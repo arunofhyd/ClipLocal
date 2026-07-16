@@ -212,6 +212,7 @@ struct ContentView: View {
                     }
                     .buttonStyle(PlainButtonStyle())
 
+                    FilterButton(title: "Pinned", systemImage: "pin.fill", filterType: "pinned", manager: manager)
                     FilterButton(title: "Code", systemImage: "chevron.left.forwardslash.chevron.right", filterType: "code", manager: manager)
                     FilterButton(title: "Email", systemImage: "envelope", filterType: "email", manager: manager)
                     FilterButton(title: "Files", systemImage: "doc", filterType: "file", manager: manager)
@@ -234,132 +235,45 @@ struct ContentView: View {
                         .foregroundColor(.secondary)
                         .frame(maxWidth: .infinity, alignment: .center)
                         .padding()
+                } else if manager.activeFilters.isEmpty && manager.currentSearchText.isEmpty {
+                    let pinned = filteredHistory.filter { $0.pinned }
+                    let recent = filteredHistory.filter { !$0.pinned }
+
+                    if !pinned.isEmpty {
+                        Text("Pinned")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundColor(.secondary)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 4)
+                            .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
+                            .listRowSeparator(.hidden)
+                            .listRowBackground(Color.clear)
+
+                        ForEach(pinned) { item in
+                            clipItemRow(item, shortcutIndex: nil)
+                        }
+                    }
+
+                    if !recent.isEmpty {
+                        Text("Recent")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundColor(.secondary)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 4)
+                            .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
+                            .listRowSeparator(.hidden)
+                            .listRowBackground(Color.clear)
+
+                        ForEach(recent) { item in
+                            let idx = recent.firstIndex(of: item) ?? 99
+                            clipItemRow(item, shortcutIndex: idx < 9 ? idx : nil)
+                        }
+                    }
                 } else {
                     ForEach(filteredHistory) { item in
-                        VStack(spacing: 0) {
-                            HStack(alignment: .center, spacing: 16) {
-                                let index = filteredHistory.firstIndex(of: item) ?? 99
-                                Image(systemName: item.pinned ? "pin.fill" : iconName(for: item.text))
-                                    .font(.system(size: 16, weight: .light))
-                                    .foregroundColor(item.pinned ? .orange : .secondary)
-                                    .frame(width: 24)
-                                    .rotationEffect(Angle(degrees: item.pinned ? 45 : 0))
-
-                                VStack(alignment: .leading, spacing: 6) {
-                                    Text(snippet(for: item.text))
-                                        .lineLimit(expandedIdx == item.id ? 5 : 1)
-                                        .truncationMode(.tail)
-                                        .font(.system(size: 14, weight: .semibold))
-                                        .foregroundColor(.primary)
-
-                                    if let imageData = item.imageData, let nsImage = NSImage(data: imageData) {
-                                        Image(nsImage: nsImage)
-                                            .resizable()
-                                            .scaledToFill()
-                                            .frame(width: 48, height: 48)
-                                            .clipShape(RoundedRectangle(cornerRadius: 4))
-                                    }
-
-                                    HStack(spacing: 4) {
-                                    if let bundleID = item.sourceAppBundleIdentifier,
-                                       let appURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) {
-                                        Image(nsImage: NSWorkspace.shared.icon(forFile: appURL.path))
-                                            .resizable()
-                                            .frame(width: 12, height: 12)
-                                            .clipShape(Circle())
-                                    } else {
-                                        Image(nsImage: NSWorkspace.shared.icon(forFile: "/System/Library/CoreServices/Finder.app"))
-                                            .resizable()
-                                            .frame(width: 12, height: 12)
-                                            .clipShape(Circle())
-                                    }
-                                    Text(typeString(for: item.text))
-                                        .font(.system(size: 11))
-                                        .foregroundColor(.secondary)
-                                    Text("·")
-                                        .font(.system(size: 11))
-                                        .foregroundColor(.secondary)
-                                    Text("Copied \(formatDate(item.date))")
-                                        .font(.system(size: 11))
-                                        .foregroundColor(.secondary)
-
-                                    if item.isRemote == true {
-                                        Image(systemName: "macbook.and.iphone")
-                                            .font(.system(size: 10))
-                                            .foregroundColor(.secondary)
-                                    }
-                                }
-                            }
-
-                            Spacer(minLength: 8)
-
-                            if index < 9 && manager.currentSearchText.isEmpty && manager.activeFilters.isEmpty {
-                                Text("⌘\(index + 1)")
-                                    .foregroundColor(.secondary)
-                                    .font(.system(size: 11))
-                                    .padding(.trailing, 2)
-                            }
-
-                            Button(action: { copyItem(item) }) {
-                                Image(systemName: copiedItemId == item.id ? "checkmark.circle.fill" : "doc.on.doc")
-                                    .font(.system(size: 16))
-                                    .foregroundColor(copiedItemId == item.id ? .white : Color.primary.opacity(0.6))
-                                    .frame(width: 36, height: 36)
-                                    .background(copiedItemId == item.id ? Color.blue : Color.secondary.opacity(0.1))
-                                    .clipShape(Circle())
-                            }
-                            .buttonStyle(PlainButtonStyle())
-                            .background(
-                                Group {
-                                    if index < 9 && manager.currentSearchText.isEmpty && manager.activeFilters.isEmpty {
-                                        let shortcutString = String(index + 1)
-                                        let keyEq = KeyEquivalent(Character(shortcutString))
-                                        Button("") { copyItem(item) }
-                                            .keyboardShortcut(keyEq, modifiers: .command)
-                                            .opacity(0)
-                                    }
-                                }
-                            )
-                        }
-                        .padding(.vertical, 8)
-                        .padding(.horizontal, 12)
-
-                        Divider()
+                        clipItemRow(item, shortcutIndex: nil)
                     }
-                    .contentShape(Rectangle())
-                    .onTapGesture(count: 2) {
-                        copyItem(item)
-                    }
-                    .onTapGesture {
-                        if expandedIdx == item.id {
-                            expandedIdx = nil
-                        } else {
-                            expandedIdx = item.id
-                        }
-                    }
-                    .onHover { isHovered in
-                        hoverIdx = isHovered ? item.id : nil
-                    }
-                    .listRowBackground(hoverIdx == item.id ? Color.accentColor.opacity(0.1) : Color.clear)
-                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                        Button(role: .destructive) {
-                            deleteItem(item)
-                        } label: {
-                            Label("Delete", systemImage: "trash")
-                        }
-                    }
-                    .swipeActions(edge: .leading, allowsFullSwipe: true) {
-                        Button {
-                            togglePin(item)
-                        } label: {
-                            Label(item.pinned ? "Unpin" : "Pin", systemImage: item.pinned ? "pin.slash" : "pin")
-                        }
-                        .tint(.orange)
-                    }
-                    .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
-                    .listRowSeparator(.hidden)
                 }
-            }
             }
             .listStyle(.plain)
             .background(Color.clear)
@@ -368,15 +282,152 @@ struct ContentView: View {
         .background(Color.clear)
     }
 
+    @ViewBuilder
+    func clipItemRow(_ item: ClipItem, shortcutIndex: Int?) -> some View {
+        VStack(spacing: 0) {
+            HStack(alignment: .center, spacing: 16) {
+                Image(systemName: iconName(for: item.text))
+                    .font(.system(size: 16, weight: .light))
+                    .foregroundColor(.secondary)
+                    .frame(width: 24)
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(snippet(for: item.text))
+                        .lineLimit(expandedIdx == item.id ? 5 : 1)
+                        .truncationMode(.tail)
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(.primary)
+
+                    if let imageData = item.imageData, let nsImage = NSImage(data: imageData) {
+                        Image(nsImage: nsImage)
+                            .resizable()
+                            .scaledToFill()
+                            .frame(width: 48, height: 48)
+                            .clipShape(RoundedRectangle(cornerRadius: 4))
+                    }
+
+                    HStack(spacing: 4) {
+                    if let bundleID = item.sourceAppBundleIdentifier,
+                       let appURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) {
+                        Image(nsImage: NSWorkspace.shared.icon(forFile: appURL.path))
+                            .resizable()
+                            .frame(width: 12, height: 12)
+                            .clipShape(Circle())
+                    } else {
+                        Image(nsImage: NSWorkspace.shared.icon(forFile: "/System/Library/CoreServices/Finder.app"))
+                            .resizable()
+                            .frame(width: 12, height: 12)
+                            .clipShape(Circle())
+                    }
+                    Text(typeString(for: item.text))
+                        .font(.system(size: 11))
+                        .foregroundColor(.secondary)
+                    Text("·")
+                        .font(.system(size: 11))
+                        .foregroundColor(.secondary)
+                    Text("Copied \(formatDate(item.date))")
+                        .font(.system(size: 11))
+                        .foregroundColor(.secondary)
+
+                    if item.isRemote == true {
+                        Image(systemName: "macbook.and.iphone")
+                            .font(.system(size: 10))
+                            .foregroundColor(.secondary)
+                    }
+                }
+            }
+
+            Spacer(minLength: 8)
+
+            if item.pinned {
+                Image(systemName: "pin.fill")
+                    .font(.system(size: 12))
+                    .foregroundColor(.orange)
+                    .rotationEffect(Angle(degrees: 45))
+                    .padding(.trailing, 4)
+            } else if let sIdx = shortcutIndex {
+                Text("⌘\(sIdx + 1)")
+                    .foregroundColor(.secondary)
+                    .font(.system(size: 11))
+                    .padding(.trailing, 2)
+            }
+
+            Button(action: { copyItem(item) }) {
+                Image(systemName: copiedItemId == item.id ? "checkmark.circle.fill" : "doc.on.doc")
+                    .font(.system(size: 16))
+                    .foregroundColor(copiedItemId == item.id ? .white : Color.primary.opacity(0.6))
+                    .frame(width: 36, height: 36)
+                    .background(copiedItemId == item.id ? Color.blue : Color.secondary.opacity(0.1))
+                    .clipShape(Circle())
+            }
+            .buttonStyle(PlainButtonStyle())
+            .background(
+                Group {
+                    if let sIdx = shortcutIndex {
+                        let shortcutString = String(sIdx + 1)
+                        let keyEq = KeyEquivalent(Character(shortcutString))
+                        Button("") { copyItem(item) }
+                            .keyboardShortcut(keyEq, modifiers: .command)
+                            .opacity(0)
+                    }
+                }
+            )
+        }
+        .padding(.vertical, 8)
+        .padding(.horizontal, 12)
+
+        Divider()
+        }
+        .contentShape(Rectangle())
+        .onTapGesture(count: 2) {
+            copyItem(item)
+        }
+        .onTapGesture {
+            if expandedIdx == item.id {
+                expandedIdx = nil
+            } else {
+                expandedIdx = item.id
+            }
+        }
+        .onHover { isHovered in
+            hoverIdx = isHovered ? item.id : nil
+        }
+        .listRowBackground(hoverIdx == item.id ? Color.accentColor.opacity(0.1) : Color.clear)
+        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+            Button(role: .destructive) {
+                deleteItem(item)
+            } label: {
+                Label("Delete", systemImage: "trash")
+            }
+        }
+        .swipeActions(edge: .leading, allowsFullSwipe: true) {
+            Button {
+                togglePin(item)
+            } label: {
+                Label(item.pinned ? "Unpin" : "Pin", systemImage: item.pinned ? "pin.slash" : "pin")
+            }
+            .tint(.orange)
+        }
+        .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
+        .listRowSeparator(.hidden)
+    }
+
     // MARK: - Helpers
     var filteredHistory: [ClipItem] {
         var result = manager.history
-        if !manager.activeFilters.isEmpty {
+
+        if manager.activeFilters.contains("pinned") {
+            result = result.filter { $0.pinned }
+        }
+
+        let typeFilters = manager.activeFilters.subtracting(["pinned"])
+        if !typeFilters.isEmpty {
             result = result.filter { item in
                 let type = itemType(for: item.text)
-                return manager.activeFilters.contains(type)
+                return typeFilters.contains(type)
             }
         }
+
         if !manager.currentSearchText.isEmpty {
             let lower = manager.currentSearchText.lowercased()
             result = result.filter { $0.text.lowercased().contains(lower) }
@@ -500,20 +551,27 @@ struct ContentView: View {
     }
 
     func togglePin(_ item: ClipItem) {
-        if let idx = manager.history.firstIndex(where: { $0.id == item.id }) {
-            manager.history[idx].pinned.toggle()
-            manager.history.sort {
-                if $0.pinned == $1.pinned { return $0.date > $1.date }
-                return $0.pinned && !$1.pinned
+        // Defer mutation slightly to allow swipe action to complete
+        // without crashing the SwiftUI list layout engine.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+            if let idx = manager.history.firstIndex(where: { $0.id == item.id }) {
+                manager.history[idx].pinned.toggle()
+                manager.history.sort {
+                    if $0.pinned == $1.pinned { return $0.date > $1.date }
+                    return $0.pinned && !$1.pinned
+                }
+                manager.persistIfNeeded()
             }
-            manager.persistIfNeeded()
         }
     }
 
     func deleteItem(_ item: ClipItem) {
-        if let idx = manager.history.firstIndex(where: { $0.id == item.id }) {
-            manager.history.remove(at: idx)
-            manager.persistIfNeeded()
+        // Defer mutation slightly to allow swipe action to complete
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+            if let idx = manager.history.firstIndex(where: { $0.id == item.id }) {
+                manager.history.remove(at: idx)
+                manager.persistIfNeeded()
+            }
         }
     }
 }
