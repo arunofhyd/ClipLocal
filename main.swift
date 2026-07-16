@@ -233,7 +233,7 @@ struct ContentView: View {
                         .frame(maxWidth: .infinity, alignment: .center)
                         .padding()
                 } else {
-                    ForEach(Array(filteredHistory.enumerated()), id: \.element.id) { (index, item) in
+                    ForEach(Array(filteredHistory.enumerated()), id: \.1.id) { (index, item) in
                         HStack(alignment: .center, spacing: 16) {
                             Image(systemName: item.pinned ? "pin.fill" : iconName(for: item.text))
                                 .font(.system(size: 16, weight: .light))
@@ -307,11 +307,19 @@ struct ContentView: View {
                                     .clipShape(Circle())
                             }
                             .buttonStyle(PlainButtonStyle())
-                            .keyboardShortcut(index < 9 && manager.currentSearchText.isEmpty && manager.activeFilters.isEmpty ? KeyboardShortcut(KeyEquivalent(Character("\(index + 1)")), modifiers: .command) : nil)
+                            .background(
+                                Group {
+                                    if index < 9 && manager.currentSearchText.isEmpty && manager.activeFilters.isEmpty {
+                                        Button("") { copyItem(item) }
+                                            .keyboardShortcut(KeyboardShortcut(KeyEquivalent(Character("\(index + 1)")), modifiers: .command))
+                                            .opacity(0)
+                                    }
+                                }
+                            )
                         }
                         .padding(.vertical, 8)
                         .padding(.horizontal, 4)
-                        .contentShape(RoundedRectangle(cornerRadius: 8))
+                        .contentShape(Rectangle())
                         .onTapGesture(count: 2) {
                             copyItem(item)
                         }
@@ -322,8 +330,6 @@ struct ContentView: View {
                                 expandedIdx = item.id
                             }
                         }
-                        .background(hoverIdx == item.id ? Color.accentColor.opacity(0.1) : Color.clear)
-                        .cornerRadius(8)
                         .onHover { isHovered in
                             hoverIdx = isHovered ? item.id : nil
                         }
@@ -344,6 +350,7 @@ struct ContentView: View {
                         }
 
                     }
+                    .listRowBackground(hoverIdx == item.id ? Color.accentColor.opacity(0.1) : Color.clear)
                     .listRowInsets(EdgeInsets(top: 2, leading: 12, bottom: 2, trailing: 12))
                     .listRowSeparator(.visible)
                     .alignmentGuide(.listRowSeparatorLeading) { _ in -12 }
