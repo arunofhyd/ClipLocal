@@ -62,6 +62,7 @@ struct ClipItem: Codable, Identifiable, Hashable {
     var pinned: Bool = false
     var imageData: Data?
     var sourceAppBundleIdentifier: String?
+    var isRemote: Bool?
 
     func hash(into hasher: inout Hasher) {
         hasher.combine(text)
@@ -157,6 +158,7 @@ struct ContentView: View {
     @ObservedObject var manager: ClipboardManager
     @State private var hoverIdx: String? = nil
     @State private var expandedIdx: String? = nil
+    @State private var copiedItemId: String? = nil
 
     var body: some View {
         VStack(spacing: 0) {
@@ -287,9 +289,11 @@ struct ContentView: View {
                                         .font(.system(size: 11))
                                         .foregroundColor(.secondary)
 
-                                    Image(systemName: "macbook.and.iphone")
-                                        .font(.system(size: 10))
-                                        .foregroundColor(.secondary)
+                                    if item.isRemote == true {
+                                        Image(systemName: "macbook.and.iphone")
+                                            .font(.system(size: 10))
+                                            .foregroundColor(.secondary)
+                                    }
                                 }
                             }
 
@@ -303,11 +307,11 @@ struct ContentView: View {
                             }
 
                             Button(action: { copyItem(item) }) {
-                                Image(systemName: "doc.on.doc")
+                                Image(systemName: copiedItemId == item.id ? "checkmark.circle.fill" : "doc.on.doc")
                                     .font(.system(size: 16))
-                                    .foregroundColor(Color.primary.opacity(0.6))
+                                    .foregroundColor(copiedItemId == item.id ? .white : Color.primary.opacity(0.6))
                                     .frame(width: 36, height: 36)
-                                    .background(Color.secondary.opacity(0.1))
+                                    .background(copiedItemId == item.id ? Color.blue : Color.secondary.opacity(0.1))
                                     .clipShape(Circle())
                             }
                             .buttonStyle(PlainButtonStyle())
@@ -327,7 +331,6 @@ struct ContentView: View {
                         .padding(.horizontal, 12)
 
                         Divider()
-                            .padding(.horizontal, 12)
                     }
                     .contentShape(Rectangle())
                     .onTapGesture(count: 2) {
@@ -460,33 +463,69 @@ struct ContentView: View {
 
         manager.lastChangeCount = pb.changeCount
 
+        var newId: String? = nil
         if let idx = manager.history.firstIndex(where: { $0.id == item.id }) {
             var updated = item
             updated.date = Date() // Refresh date
+            newId = updated.id
             manager.history.remove(at: idx)
             manager.history.insert(updated, at: 0)
         }
 
         manager.persistIfNeeded()
-        (NSApp.delegate as? AppDelegate)?.closePopover()
-        (NSApp.delegate as? AppDelegate)?.showPreview(item.text)
+
+        if let theNewId = newId {
+            withAnimation {
+                copiedItemId = theNewId
+            }
+
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                withAnimation {
+                    if copiedItemId == theNewId {
+                        copiedItemId = nil
+                    }
+                }
+            }
+        } else {
+            withAnimation {
+                copiedItemId = item.id
+            }
+
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                withAnimation {
+                    if copiedItemId == item.id {
+                        copiedItemId = nil
+                    }
+                }
+            }
+        }
+
+        // Delay closing the popover slightly so the user can see the checkmark animation
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+            (NSApp.delegate as? AppDelegate)?.closePopover()
+            (NSApp.delegate as? AppDelegate)?.showPreview(item.text)
+        }
     }
 
     func togglePin(_ item: ClipItem) {
-        if let idx = manager.history.firstIndex(where: { $0.id == item.id }) {
-            manager.history[idx].pinned.toggle()
-            manager.history.sort {
-                if $0.pinned == $1.pinned { return $0.date > $1.date }
-                return $0.pinned && !$1.pinned
+        withAnimation {
+            if let idx = manager.history.firstIndex(where: { $0.id == item.id }) {
+                manager.history[idx].pinned.toggle()
+                manager.history.sort {
+                    if $0.pinned == $1.pinned { return $0.date > $1.date }
+                    return $0.pinned && !$1.pinned
+                }
+                manager.persistIfNeeded()
             }
-            manager.persistIfNeeded()
         }
     }
 
     func deleteItem(_ item: ClipItem) {
-        if let idx = manager.history.firstIndex(where: { $0.id == item.id }) {
-            manager.history.remove(at: idx)
-            manager.persistIfNeeded()
+        withAnimation {
+            if let idx = manager.history.firstIndex(where: { $0.id == item.id }) {
+                manager.history.remove(at: idx)
+                manager.persistIfNeeded()
+            }
         }
     }
 }
@@ -939,15 +978,17 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         guard let text = newText else { return }
 
+        let isRemote = pb.types?.contains(NSPasteboard.PasteboardType("com.apple.is-remote-clipboard")) ?? false
+
         // Needs to be run on main thread since it updates @Published history
         DispatchQueue.main.async {
             if let idx = self.clipboardManager.history.firstIndex(where: { $0.text == text && $0.imageData == newImage }) {
                 let pinned = self.clipboardManager.history[idx].pinned
                 self.clipboardManager.history.remove(at: idx)
-                let newItem = ClipItem(text: text, date: Date(), pinned: pinned, imageData: newImage, sourceAppBundleIdentifier: sourceApp)
+                let newItem = ClipItem(text: text, date: Date(), pinned: pinned, imageData: newImage, sourceAppBundleIdentifier: sourceApp, isRemote: isRemote)
                 self.clipboardManager.history.insert(newItem, at: 0)
             } else {
-                let newItem = ClipItem(text: text, date: Date(), pinned: false, imageData: newImage, sourceAppBundleIdentifier: sourceApp)
+                let newItem = ClipItem(text: text, date: Date(), pinned: false, imageData: newImage, sourceAppBundleIdentifier: sourceApp, isRemote: isRemote)
                 self.clipboardManager.history.insert(newItem, at: 0)
                 self.showPreview(text)
             }
