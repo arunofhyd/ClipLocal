@@ -231,12 +231,12 @@ struct ContentView: View {
                     ForEach(Array(filteredHistory.enumerated()), id: \.element.id) { (index, item) in
                         HStack(alignment: .center, spacing: 16) {
                             Image(systemName: item.pinned ? "pin.fill" : iconName(for: item.text))
-                                .font(.system(size: 20, weight: .light))
+                                .font(.system(size: 16, weight: .light))
                                 .foregroundColor(item.pinned ? .orange : .secondary)
-                                .frame(width: 32)
+                                .frame(width: 24)
                                 .rotationEffect(Angle(degrees: item.pinned ? 45 : 0))
 
-                            VStack(alignment: .leading, spacing: 4) {
+                            VStack(alignment: .leading, spacing: 6) {
                                 Text(snippet(for: item.text))
                                     .lineLimit(expandedIdx == item.id ? 4 : 1)
                                     .truncationMode(.tail)
@@ -284,12 +284,13 @@ struct ContentView: View {
                                 }
                             }
 
-                            Spacer()
+                            Spacer(minLength: 8)
 
                             if index < 9 && manager.currentSearchText.isEmpty && manager.activeFilters.isEmpty {
                                 Text("⌘\(index + 1)")
                                     .foregroundColor(.secondary)
                                     .font(.system(size: 11))
+                                    .padding(.trailing, 2)
                             }
 
                             Button(action: { copyItem(item) }) {
@@ -303,9 +304,15 @@ struct ContentView: View {
                             .buttonStyle(PlainButtonStyle())
                             .keyboardShortcut(index < 9 && manager.currentSearchText.isEmpty && manager.activeFilters.isEmpty ? KeyboardShortcut(KeyEquivalent(Character("\(index + 1)")), modifiers: .command) : nil)
                         }
-                        .padding(.vertical, 4)
+                        .padding(.vertical, 8)
                         .padding(.horizontal, 4)
                         .contentShape(RoundedRectangle(cornerRadius: 8))
+                        .overlay(
+                            Rectangle()
+                                .frame(height: 1)
+                                .foregroundColor(Color.secondary.opacity(0.1)),
+                            alignment: .bottom
+                        )
                         .onTapGesture(count: 2) {
                             copyItem(item)
                         }
@@ -485,11 +492,12 @@ struct FilterButton: View {
         }) {
             HStack(spacing: 4) {
                 Image(systemName: systemImage)
+                    .font(.system(size: 11))
                 Text(title)
             }
-            .font(.system(size: 13, weight: .semibold))
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
+            .font(.system(size: 12, weight: .semibold))
+            .padding(.horizontal, 10)
+            .padding(.vertical, 4)
             .background(isSelected ? Color.blue : Color(NSColor.controlBackgroundColor))
             .foregroundColor(isSelected ? .white : .primary)
             .clipShape(Capsule())
