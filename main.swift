@@ -320,16 +320,18 @@ struct ContentView: View {
                             )
                         }
                         .padding(.vertical, 8)
-                        .padding(.horizontal, 4)
+                        .padding(.horizontal, 16)
                         .contentShape(Rectangle())
                         .onTapGesture(count: 2) {
                             copyItem(item)
                         }
                         .onTapGesture {
-                            if expandedIdx == item.id {
-                                expandedIdx = nil
-                            } else {
-                                expandedIdx = item.id
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                if expandedIdx == item.id {
+                                    expandedIdx = nil
+                                } else {
+                                    expandedIdx = item.id
+                                }
                             }
                         }
                         .onHover { isHovered in
@@ -353,9 +355,9 @@ struct ContentView: View {
                         }
 
                     }
-                    .listRowInsets(EdgeInsets(top: 2, leading: 12, bottom: 2, trailing: 12))
+                    .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
                     .listRowSeparator(.visible)
-                    .alignmentGuide(.listRowSeparatorLeading) { _ in -12 }
+                    .alignmentGuide(.listRowSeparatorLeading) { d in d[.leading] }
                 }
             }
             .listStyle(.plain)
