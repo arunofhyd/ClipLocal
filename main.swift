@@ -310,8 +310,10 @@ struct ContentView: View {
                             .background(
                                 Group {
                                     if index < 9 && manager.currentSearchText.isEmpty && manager.activeFilters.isEmpty {
+                                        let shortcutString = String(index + 1)
+                                        let keyEq = KeyEquivalent(Character(shortcutString))
                                         Button("") { copyItem(item) }
-                                            .keyboardShortcut(KeyboardShortcut(KeyEquivalent(Character("\(index + 1)")), modifiers: .command))
+                                            .keyboardShortcut(keyEq, modifiers: .command)
                                             .opacity(0)
                                     }
                                 }
@@ -333,6 +335,7 @@ struct ContentView: View {
                         .onHover { isHovered in
                             hoverIdx = isHovered ? item.id : nil
                         }
+                        .listRowBackground(hoverIdx == item.id ? Color.accentColor.opacity(0.1) : Color.clear)
                         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                             Button(role: .destructive) {
                                 deleteItem(item)
@@ -350,7 +353,6 @@ struct ContentView: View {
                         }
 
                     }
-                    .listRowBackground(hoverIdx == item.id ? Color.accentColor.opacity(0.1) : Color.clear)
                     .listRowInsets(EdgeInsets(top: 2, leading: 12, bottom: 2, trailing: 12))
                     .listRowSeparator(.visible)
                     .alignmentGuide(.listRowSeparatorLeading) { _ in -12 }
