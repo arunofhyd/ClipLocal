@@ -107,9 +107,9 @@ if let shineGrad = NSGradient(colors: [shine0, shine1, shine1, shine0], atLocati
 }
 NSGraphicsContext.restoreGraphicsState()
 
-// White lock-on-document glyph, centered.
-let cfg = NSImage.SymbolConfiguration(pointSize: 560, weight: .regular)
-if let sym = NSImage(systemSymbolName: "lock.doc.fill", accessibilityDescription: nil)?
+// White paperclip-in-circle glyph, centered.
+let cfg = NSImage.SymbolConfiguration(pointSize: 560, weight: .semibold)
+if let sym = NSImage(systemSymbolName: "paperclip.circle", accessibilityDescription: nil)?
         .withSymbolConfiguration(cfg) {
     let s = sym.size
     let tinted = NSImage(size: s)

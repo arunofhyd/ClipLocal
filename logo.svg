@@ -13,13 +13,10 @@
   </defs>
   <rect x="0" y="0" width="120" height="120" rx="27" ry="27" fill="url(#bg)"/>
   <rect x="1" y="1" width="118" height="118" rx="26" ry="26" fill="none" stroke="url(#shine)" stroke-width="2"/>
-  <!-- Document with folded corner -->
-  <path d="M42 28 h24 l14 14 v34 a4 4 0 0 1 -4 4 H42 a4 4 0 0 1 -4 -4 V32 a4 4 0 0 1 4 -4 z"
-        fill="#ffffff"/>
-  <path d="M66 28 v14 h14 z" fill="#cfe3ff"/>
-  <!-- Lock body -->
-  <rect x="49" y="58" width="22" height="17" rx="3" fill="#0066F2"/>
-  <!-- Lock shackle -->
-  <path d="M53 58 v-4 a7 7 0 0 1 14 0 v4"
-        fill="none" stroke="#0066F2" stroke-width="4" stroke-linecap="round"/>
+  <!-- Paperclip Circle -->
+  <circle cx="60" cy="60" r="34" fill="none" stroke="#ffffff" stroke-width="6"/>
+  <g transform="translate(60,60) rotate(45) translate(-60,-60)">
+    <path d="M54 50 v20 a 6 6 0 0 0 12 0 v-28 a 10 10 0 0 0 -20 0 v32 a 14 14 0 0 0 28 0 v-28"
+          fill="none" stroke="#ffffff" stroke-width="5" stroke-linecap="round"/>
+  </g>
 </svg>
