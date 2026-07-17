@@ -872,7 +872,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         let icon = NSImageView(frame: NSRect(x: (width - 72)/2, y: height - 120, width: 72, height: 72))
         let cfg = NSImage.SymbolConfiguration(pointSize: 60, weight: .regular)
-        icon.image = NSImage(systemSymbolName: "lock.doc.fill", accessibilityDescription: nil)?
+        icon.image = NSImage(systemSymbolName: "paperclip.circle", accessibilityDescription: nil)?
             .withSymbolConfiguration(cfg)
         icon.contentTintColor = NSColor.controlAccentColor
         bg.addSubview(icon)
