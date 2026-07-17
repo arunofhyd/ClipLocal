@@ -58,7 +58,7 @@ Install by running the installer in **Terminal**:
 
 > **First time only:** The installer may ask to install Apple's Command Line Tools (a small, official Apple download). Click **Install**, wait, then continue. This lets your Mac build the app locally — which is why macOS trusts it and never shows a "damaged app" warning.
 
-After installing, look for the **clipboard icon in your menu bar** (top-right).
+After installing, look for the **paperclip icon in your menu bar** (top-right).
 
 ## ⚙️ How It Works
 
