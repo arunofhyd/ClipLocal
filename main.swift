@@ -244,20 +244,10 @@ struct ContentView: View {
                     ForEach(filteredHistory) { item in
                         let idx = filteredHistory.firstIndex(of: item) ?? 99
                         clipItemRow(item, shortcutIndex: idx < 9 ? idx : nil)
-                        if item.id != filteredHistory.last?.id {
-                            Divider()
-                                .listRowInsets(EdgeInsets())
-                                .listRowSeparator(.hidden)
-                        }
                     }
                 } else {
                     ForEach(filteredHistory) { item in
                         clipItemRow(item, shortcutIndex: nil)
-                        if item.id != filteredHistory.last?.id {
-                            Divider()
-                                .listRowInsets(EdgeInsets())
-                                .listRowSeparator(.hidden)
-                        }
                     }
                 }
             }
