@@ -1,138 +1,77 @@
 import Cocoa
-import CryptoKit
+import SwiftUI
 import ServiceManagement
 
 // ============================================================
 //  ClipLocal — 100% on-device clipboard history, no third parties
 // ============================================================
 
-let appVersion = "1.0.0"
+let appVersion = "2.0.0"
 let updateCheckURL = "https://raw.githubusercontent.com/arunofhyd/ClipLocal/main/version.json"
 let downloadPageURL = "https://cliplocal.vercel.app/#install"
 
-// MARK: - Custom UI Components
-
-/// Ensures the NSSearchField reliably grabs focus and shows the blinking cursor inside an NSMenu.
-class MenuSearchField: NSSearchField {
-    override func viewDidMoveToWindow() {
-        super.viewDidMoveToWindow()
-        if window != nil {
-            // Attempt to grab focus immediately when added to the window
-            self.window?.makeFirstResponder(self)
-
-            // Dispatch asynchronously to guarantee it catches the cursor blink
-            // after the menu has fully transitioned onto the screen.
-            DispatchQueue.main.async { [weak self] in
-                guard let self = self, let win = self.window else { return }
-                win.makeFirstResponder(self)
-                self.currentEditor()?.moveToEndOfLine(nil)
-            }
-        }
-    }
-
-    override func mouseDown(with event: NSEvent) {
-        super.mouseDown(with: event)
-        // Ensure clicking anywhere within the search field's bounds reliably claims focus
-        // away from the NSMenu tracker and re-engages the text editor cursor.
-        self.window?.makeFirstResponder(self)
-    }
-}
-
-/// Provides a smooth, animated background highlight when selecting filters.
-class FilterButton: NSButton {
-    var hasItems: Bool = false {
-        didSet { updateVisuals(animated: false) }
-    }
-
-    override init(frame frameRect: NSRect) {
-        super.init(frame: frameRect)
-        setup()
-    }
-
-    required init?(coder: NSCoder) {
-        super.init(coder: coder)
-        setup()
-    }
-
-    private func setup() {
-        setButtonType(.toggle)
-        isBordered = false
-        wantsLayer = true
-        layer?.cornerRadius = 5
-        imageScaling = .scaleProportionallyDown
-        // Crucial: Prevents the button from stealing focus from the search bar when clicked
-        refusesFirstResponder = true
-    }
-
-    func setSelected(_ selected: Bool, animated: Bool = true) {
-        self.state = selected ? .on : .off
-        updateVisuals(animated: animated)
-    }
-
-    private func updateVisuals(animated: Bool) {
-        let selected = self.state == .on
-        let updateUI = {
-            self.layer?.borderWidth = 0
-
-            if selected {
-                self.contentTintColor = .white
-                self.layer?.backgroundColor = NSColor.controlAccentColor.cgColor
-                self.animator().alphaValue = 1.0
-            } else {
-                self.layer?.backgroundColor = NSColor.clear.cgColor
-
-                if self.hasItems {
-                    self.contentTintColor = .labelColor
-                    self.animator().alphaValue = 1.0
-                } else {
-                    self.contentTintColor = .tertiaryLabelColor
-                    self.animator().alphaValue = 0.2
-                }
-            }
-        }
-
-        if animated {
-            NSAnimationContext.runAnimationGroup { ctx in
-                ctx.duration = 0.15
-                ctx.allowsImplicitAnimation = true
-                updateUI()
-            }
-        } else {
-            updateUI()
-        }
-    }
-}
-
-// MARK: - Encryption key (stored in a protected local file)
-enum KeyStore {
-    static var keyURL: URL {
-        let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("ClipLocal")
+// MARK: - KeyStore
+struct KeyStore {
+    static let keyFile: URL = {
+        let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!.appendingPathComponent("ClipLocal")
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir.appendingPathComponent("key.bin")
-    }
+    }()
 
-    static func loadOrCreateKey() -> SymmetricKey {
-        if let data = try? Data(contentsOf: keyURL), data.count == 32 {
-            return SymmetricKey(data: data)
+    static func generateKey() -> Data {
+        var key = Data(count: 32)
+        let result = key.withUnsafeMutableBytes {
+            SecRandomCopyBytes(kSecRandomDefault, 32, $0.baseAddress!)
         }
-        let key = SymmetricKey(size: .bits256)
-        let data = key.withUnsafeBytes { Data($0) }
-        try? data.write(to: keyURL, options: .completeFileProtection)
-        try? FileManager.default.setAttributes([.posixPermissions: 0o600],
-                                               ofItemAtPath: keyURL.path)
-        return key
+        if result == errSecSuccess { return key }
+        fatalError("Failed to generate encryption key")
     }
 
-    static func deleteKey() { try? FileManager.default.removeItem(at: keyURL) }
+    static func loadOrCreateKey() -> Data {
+        if let data = try? Data(contentsOf: keyFile) {
+            return data
+        }
+        let newKey = generateKey()
+        try? newKey.write(to: keyFile, options: .atomic)
+        return newKey
+    }
 }
 
-// MARK: - A single clipboard entry
-struct ClipItem: Codable {
+// MARK: - Crypto
+import CryptoKit
+
+struct CryptoHelper {
+    static func encrypt(_ data: Data, key: Data) throws -> Data {
+        let symKey = SymmetricKey(data: key)
+        let sealedBox = try AES.GCM.seal(data, using: symKey)
+        return sealedBox.combined!
+    }
+
+    static func decrypt(_ data: Data, key: Data) throws -> Data {
+        let symKey = SymmetricKey(data: key)
+        let sealedBox = try AES.GCM.SealedBox(combined: data)
+        return try AES.GCM.open(sealedBox, using: symKey)
+    }
+}
+
+// MARK: - Models
+struct ClipItem: Codable, Identifiable, Hashable {
+    var id: String { text + String(date.timeIntervalSince1970) }
     let text: String
-    let date: Date
+    var date: Date
     var pinned: Bool = false
     var imageData: Data?
+    var sourceAppBundleIdentifier: String?
+    var isRemote: Bool?
+
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(text)
+        hasher.combine(date)
+    }
+
+    static func == (lhs: ClipItem, rhs: ClipItem) -> Bool {
+        return lhs.text == rhs.text && lhs.date == rhs.date
+    }
 }
 
 enum PrivacyMode: String {
@@ -140,41 +79,586 @@ enum PrivacyMode: String {
     case persistent
 }
 
-// MARK: - The app
-class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFieldDelegate {
-    var statusItem: NSStatusItem!
-    var timer: Timer?
-    var lastChangeCount = NSPasteboard.general.changeCount
-    var history: [ClipItem] = []
+// MARK: - ClipboardManager
+class ClipboardManager: ObservableObject {
+    @Published var history: [ClipItem] = []
+    @Published var currentSearchText = ""
+    @Published var activeFilters: Set<String> = []
+    @Published var resizableMenu: Bool
+    @Published var menuHeight: Double
+    @Published var pinFlash: Bool = false
+
     let key = KeyStore.loadOrCreateKey()
     let defaults = UserDefaults.standard
-    var previewWindow: NSWindow?
-
-    var isMenuOpen = false
-    var currentSearchText = ""
-    var activeFilters: Set<String> = []
-    var historyMenuItems: [NSMenuItem] = []
-    var searchField: NSSearchField?
-    var needsRebuildAfterClose = false
-    var filtersMenuItem: NSMenuItem?
-    var focusTimer: Timer?
+    var lastChangeCount = NSPasteboard.general.changeCount
 
     var mode: PrivacyMode {
         get { PrivacyMode(rawValue: defaults.string(forKey: "mode") ?? "persistent") ?? .persistent }
-        set { defaults.set(newValue.rawValue, forKey: "mode"); persistIfNeeded(); rebuildMenu() }
+        set { defaults.set(newValue.rawValue, forKey: "mode") }
     }
-    var skipConcealed: Bool {
-        get { defaults.object(forKey: "skipConcealed") == nil ? true : defaults.bool(forKey: "skipConcealed") }
-        set { defaults.set(newValue, forKey: "skipConcealed"); rebuildMenu() }
-    }
+
     var showImageDimensions: Bool {
-        get { defaults.bool(forKey: "showImageDimensions") }
-        set { defaults.set(newValue, forKey: "showImageDimensions"); rebuildMenu() }
+        get { defaults.object(forKey: "showImageDimensions") as? Bool ?? false }
+        set { defaults.set(newValue, forKey: "showImageDimensions") }
     }
-    var maxItems: Int {
-        get { let v = defaults.integer(forKey: "maxItems"); return v == 0 ? 50 : v }
-        set { defaults.set(newValue, forKey: "maxItems"); rebuildMenu() }
+
+    var skipConcealed: Bool {
+        get { defaults.object(forKey: "skipConcealed") as? Bool ?? true }
+        set { defaults.set(newValue, forKey: "skipConcealed") }
     }
+
+    var maxHistorySize: Int {
+        get { defaults.object(forKey: "maxItems") as? Int ?? 200 }
+        set { defaults.set(newValue, forKey: "maxItems"); trimHistory() }
+    }
+
+    init() {
+        self.resizableMenu = UserDefaults.standard.object(forKey: "resizableMenu") as? Bool ?? false
+        self.menuHeight = UserDefaults.standard.object(forKey: "menuHeight") as? Double ?? 500.0
+        if mode == .persistent { loadHistory() }
+    }
+
+    var historyFile: URL {
+        let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!.appendingPathComponent("ClipLocal")
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir.appendingPathComponent("history.enc")
+    }
+
+    func loadHistory() {
+        guard let enc = try? Data(contentsOf: historyFile),
+              let dec = try? CryptoHelper.decrypt(enc, key: key),
+              let arr = try? JSONDecoder().decode([ClipItem].self, from: dec) else { return }
+        self.history = arr
+    }
+
+    func saveHistory() {
+        guard let data = try? JSONEncoder().encode(history),
+              let enc = try? CryptoHelper.encrypt(data, key: key) else { return }
+        try? enc.write(to: historyFile, options: .atomic)
+    }
+
+    func clearHistoryFile() {
+        try? FileManager.default.removeItem(at: historyFile)
+    }
+
+    func persistIfNeeded() {
+        if mode == .persistent { saveHistory() }
+    }
+
+    func trimHistory() {
+        let max = maxHistorySize
+        if history.count > max {
+            // Keep pinned items
+            let pinned = history.filter { $0.pinned }
+            let unpinned = history.filter { !$0.pinned }.prefix(Swift.max(0, max - pinned.count))
+            history = pinned + Array(unpinned)
+            // Sort back by date
+            history.sort { $0.date > $1.date }
+        }
+    }
+}
+
+// MARK: - SwiftUI Views
+struct ContentView: View {
+    @ObservedObject var manager: ClipboardManager
+    @State private var hoverIdx: String? = nil
+    @State private var expandedIdx: String? = nil
+    @State private var copiedItemId: String? = nil
+    @State private var dragStartHeight: Double? = nil
+
+    var body: some View {
+        VStack(spacing: 0) {
+            // Header
+            HStack {
+                Image(systemName: "magnifyingglass")
+                    .foregroundColor(.secondary)
+                    .font(.system(size: 16))
+                TextField("Search Clipboard History", text: $manager.currentSearchText)
+                    .textFieldStyle(PlainTextFieldStyle())
+                    .font(.system(size: 16))
+
+                Spacer()
+
+                Button(action: {
+                    (NSApp.delegate as? AppDelegate)?.showSettingsMenu()
+                }) {
+                    Image(systemName: "gearshape")
+                        .foregroundColor(.blue)
+                        .font(.system(size: 18))
+                }
+                .buttonStyle(PlainButtonStyle())
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 12)
+            .background(Color.clear)
+
+            Divider()
+
+            // Filters
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack {
+                    Button(action: {
+                        manager.activeFilters.removeAll()
+                    }) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "square.grid.2x2")
+                                .font(.system(size: 11))
+                            Text("All")
+                        }
+                        .font(.system(size: 12, weight: .semibold))
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 4)
+                        .background(manager.activeFilters.isEmpty ? Color.blue : Color.secondary.opacity(0.1))
+                        .foregroundColor(manager.activeFilters.isEmpty ? .white : .primary)
+                        .clipShape(Capsule())
+                        .overlay(
+                            Capsule()
+                                .stroke(Color.secondary.opacity(0.2), lineWidth: manager.activeFilters.isEmpty ? 0 : 1)
+                        )
+                    }
+                    .buttonStyle(PlainButtonStyle())
+
+                    FilterButton(title: nil, systemImage: "pin.fill", filterType: "pinned", manager: manager)
+                    FilterButton(title: "Code", systemImage: "chevron.left.forwardslash.chevron.right", filterType: "code", manager: manager)
+                    FilterButton(title: "Email", systemImage: "envelope", filterType: "email", manager: manager)
+                    FilterButton(title: "Files", systemImage: "doc", filterType: "file", manager: manager)
+                    FilterButton(title: "Images", systemImage: "photo", filterType: "image", manager: manager)
+                    FilterButton(title: "Links", systemImage: "link", filterType: "link", manager: manager)
+                    FilterButton(title: "Numbers", systemImage: "number", filterType: "number", manager: manager)
+                    FilterButton(title: "Text", systemImage: "text.alignleft", filterType: "text", manager: manager)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+            }
+            .background(Color.clear)
+
+            Divider()
+
+            // List
+            List {
+                if filteredHistory.isEmpty {
+                    Text("— empty —")
+                        .foregroundColor(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .center)
+                        .padding()
+                } else if manager.activeFilters.isEmpty && manager.currentSearchText.isEmpty {
+                    ForEach(filteredHistory) { item in
+                        let idx = filteredHistory.firstIndex(of: item) ?? 99
+                        clipItemRow(item, shortcutIndex: idx < 9 ? idx : nil)
+                    }
+                } else {
+                    ForEach(filteredHistory) { item in
+                        clipItemRow(item, shortcutIndex: nil)
+                    }
+                }
+            }
+            .listStyle(.plain)
+            .background(Color.clear)
+
+            if manager.resizableMenu {
+                VStack(spacing: 0) {
+                    Divider()
+                    HStack {
+                        Spacer()
+                        Image(systemName: "line.3.horizontal")
+                            .font(.system(size: 14))
+                            .foregroundColor(.secondary)
+                            .padding(.vertical, 4)
+                        Spacer()
+                    }
+                    .contentShape(Rectangle())
+                    .gesture(
+                        DragGesture()
+                            .onChanged { value in
+                                if dragStartHeight == nil {
+                                    dragStartHeight = manager.menuHeight
+                                    if let appDelegate = NSApp.delegate as? AppDelegate {
+                                        appDelegate.popover.animates = false
+                                    }
+                                }
+                                if let start = dragStartHeight {
+                                    let newHeight = max(300, min(1000, start + Double(value.translation.height)))
+                                    manager.menuHeight = newHeight
+                                    if let appDelegate = NSApp.delegate as? AppDelegate {
+                                        appDelegate.popover.contentSize = NSSize(width: 450, height: newHeight)
+                                    }
+                                }
+                            }
+                            .onEnded { _ in
+                                dragStartHeight = nil
+                                manager.defaults.set(manager.menuHeight, forKey: "menuHeight")
+                                if let appDelegate = NSApp.delegate as? AppDelegate {
+                                    appDelegate.popover.animates = true
+                                }
+                            }
+                    )
+                    .onHover { isHovering in
+                        if isHovering {
+                            NSCursor.resizeUpDown.push()
+                        } else {
+                            NSCursor.pop()
+                        }
+                    }
+                }
+                .background(Color(NSColor.windowBackgroundColor))
+            }
+        }
+        .frame(width: 450, height: CGFloat(manager.menuHeight))
+        .background(Color.clear)
+    }
+
+    @ViewBuilder
+    func clipItemRow(_ item: ClipItem, shortcutIndex: Int?) -> some View {
+        HStack(alignment: .center, spacing: 16) {
+            Image(systemName: iconName(for: item.text))
+                    .font(.system(size: 16, weight: .light))
+                    .foregroundColor(.secondary)
+                    .frame(width: 24)
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(snippet(for: item.text))
+                        .lineLimit(expandedIdx == item.id ? 5 : 1)
+                        .truncationMode(.tail)
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(.primary)
+
+                    if let imageData = item.imageData, let nsImage = NSImage(data: imageData) {
+                        Image(nsImage: nsImage)
+                            .resizable()
+                            .scaledToFill()
+                            .frame(width: 48, height: 48)
+                            .clipShape(RoundedRectangle(cornerRadius: 4))
+                    }
+
+                    HStack(spacing: 4) {
+                    if let bundleID = item.sourceAppBundleIdentifier,
+                       let appURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) {
+                        Image(nsImage: NSWorkspace.shared.icon(forFile: appURL.path))
+                            .resizable()
+                            .frame(width: 12, height: 12)
+                            .clipShape(Circle())
+                    } else {
+                        Image(nsImage: NSWorkspace.shared.icon(forFile: "/System/Library/CoreServices/Finder.app"))
+                            .resizable()
+                            .frame(width: 12, height: 12)
+                            .clipShape(Circle())
+                    }
+                    Text(typeString(for: item.text))
+                        .font(.system(size: 11))
+                        .foregroundColor(.secondary)
+                    Text("·")
+                        .font(.system(size: 11))
+                        .foregroundColor(.secondary)
+                    Text("Copied \(formatDate(item.date))")
+                        .font(.system(size: 11))
+                        .foregroundColor(.secondary)
+
+                    if item.isRemote == true {
+                        Image(systemName: "macbook.and.iphone")
+                            .font(.system(size: 10))
+                            .foregroundColor(.secondary)
+                    }
+                }
+            }
+
+            Spacer(minLength: 8)
+
+            if item.pinned {
+                Image(systemName: "pin.fill")
+                    .font(.system(size: 12))
+                    .foregroundColor(.orange)
+                    .rotationEffect(Angle(degrees: 45))
+                    .padding(.trailing, 4)
+            } else if let sIdx = shortcutIndex {
+                Text("⌘\(sIdx + 1)")
+                    .foregroundColor(.secondary)
+                    .font(.system(size: 11))
+                    .padding(.trailing, 2)
+            }
+
+            Button(action: { copyItem(item) }) {
+                Image(systemName: copiedItemId == item.id ? "checkmark.circle.fill" : "doc.on.doc")
+                    .font(.system(size: 16))
+                    .foregroundColor(copiedItemId == item.id ? .white : Color.primary.opacity(0.6))
+                    .frame(width: 36, height: 36)
+                    .background(copiedItemId == item.id ? Color.green : Color.secondary.opacity(0.1))
+                    .clipShape(Circle())
+                    .scaleEffect(copiedItemId == item.id ? 0.85 : 1.0)
+                    .shadow(color: copiedItemId == item.id ? Color.green.opacity(0.5) : Color.clear, radius: copiedItemId == item.id ? 4 : 0)
+                    .animation(.spring(response: 0.3, dampingFraction: 0.5), value: copiedItemId)
+            }
+            .buttonStyle(PlainButtonStyle())
+            .background(
+                Group {
+                    if let sIdx = shortcutIndex {
+                        let shortcutString = String(sIdx + 1)
+                        let keyEq = KeyEquivalent(Character(shortcutString))
+                        Button("") { copyItem(item) }
+                            .keyboardShortcut(keyEq, modifiers: .command)
+                            .opacity(0)
+                    }
+                }
+            )
+        }
+        .padding(.vertical, 8)
+        .padding(.horizontal, 12)
+        .contentShape(Rectangle())
+        .onTapGesture(count: 2) {
+            copyItem(item)
+        }
+        .onTapGesture {
+            if expandedIdx == item.id {
+                expandedIdx = nil
+            } else {
+                expandedIdx = item.id
+            }
+        }
+        .onHover { isHovered in
+            hoverIdx = isHovered ? item.id : nil
+        }
+        .listRowBackground(hoverIdx == item.id ? Color.accentColor.opacity(0.1) : Color.clear)
+        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+            Button(role: .destructive) {
+                deleteItem(item)
+            } label: {
+                Label("Delete", systemImage: "trash")
+            }
+        }
+        .swipeActions(edge: .leading, allowsFullSwipe: true) {
+            Button {
+                togglePin(item)
+            } label: {
+                Label(item.pinned ? "Unpin" : "Pin", systemImage: item.pinned ? "pin.slash" : "pin")
+            }
+            .tint(.orange)
+        }
+        .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
+        .listRowSeparator(.hidden)
+    }
+
+    // MARK: - Helpers
+    var filteredHistory: [ClipItem] {
+        var result = manager.history
+
+        if manager.activeFilters.contains("pinned") {
+            result = result.filter { $0.pinned }
+        } else {
+            result = result.filter { !$0.pinned }
+        }
+
+        let typeFilters = manager.activeFilters.subtracting(["pinned"])
+        if !typeFilters.isEmpty {
+            result = result.filter { item in
+                let type = itemType(for: item.text)
+                return typeFilters.contains(type)
+            }
+        }
+
+        if !manager.currentSearchText.isEmpty {
+            let lower = manager.currentSearchText.lowercased()
+            result = result.filter { $0.text.lowercased().contains(lower) }
+        }
+
+        return result.sorted {
+            if $0.pinned && !$1.pinned { return true }
+            if !$0.pinned && $1.pinned { return false }
+            return $0.date > $1.date
+        }
+    }
+
+    func itemType(for text: String) -> String {
+        let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if t.hasPrefix("http://") || t.hasPrefix("https://") || t.hasPrefix("www.") { return "link" }
+        let parts = t.split(separator: "@")
+        if parts.count == 2 && parts[1].contains(".") && !t.contains(" ") { return "email" }
+        if t.range(of: "^[0-9 +().-]{5,}$", options: .regularExpression) != nil { return "number" }
+        if (t.hasPrefix("/") || t.hasPrefix("file://")) && !t.contains("\n") { return "file" }
+        if t.hasPrefix("[Image") && t.hasSuffix("]") { return "image" }
+        if t.contains("{") || t.contains("}") || t.contains("func ") || t.contains("var ") || t.contains("let ") || t.contains("class ") || t.contains("struct ") || t.contains("<") || t.contains(">") || t.contains(";") { return "code" }
+        return "text"
+    }
+
+    func formatDate(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "d MMM yyyy 'at' h:mm a"
+        return formatter.string(from: date)
+    }
+
+    func typeString(for text: String) -> String {
+        let type = itemType(for: text)
+        switch type {
+        case "code": return "Code"
+        case "email": return "Email"
+        case "file": return "File"
+        case "image": return "Image"
+        case "link": return "Link"
+        case "number": return "Number"
+        default: return "Text"
+        }
+    }
+
+    func iconName(for text: String) -> String {
+        let type = itemType(for: text)
+        switch type {
+        case "code": return "chevron.left.forwardslash.chevron.right"
+        case "email": return "envelope"
+        case "file": return "doc"
+        case "image": return "photo"
+        case "link": return "link"
+        case "number": return "number"
+        default: return "text.alignleft"
+        }
+    }
+
+    func snippet(for text: String) -> String {
+        let oneLine = text.replacingOccurrences(of: "\n", with: " ↵ ").trimmingCharacters(in: .whitespacesAndNewlines)
+        return oneLine
+    }
+
+    // MARK: - Actions
+    func copyItem(_ item: ClipItem) {
+        let pb = NSPasteboard.general
+        pb.clearContents()
+
+        if let data = item.imageData, let img = NSImage(data: data) {
+            pb.writeObjects([img])
+        } else if item.text.hasPrefix("file://") {
+            let path = String(item.text.dropFirst(7))
+            let url = URL(fileURLWithPath: path)
+            pb.writeObjects([url as NSURL])
+        } else {
+            pb.setString(item.text, forType: .string)
+        }
+
+        manager.lastChangeCount = pb.changeCount
+        NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .default)
+
+        withAnimation {
+            copiedItemId = item.id
+        }
+
+        // Delay closing the popover slightly so the user can see the checkmark animation
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+            (NSApp.delegate as? AppDelegate)?.closePopover()
+            (NSApp.delegate as? AppDelegate)?.showPreview(item.text)
+            
+            // Reorder the item to the top in the background *after* the popover is gone
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                if let idx = self.manager.history.firstIndex(where: { $0.id == item.id }) {
+                    var updated = item
+                    updated.date = Date() // Refresh date
+                    self.manager.history.remove(at: idx)
+                    self.manager.history.insert(updated, at: 0)
+                    
+                    self.manager.history.sort {
+                        if $0.pinned == $1.pinned { return $0.date > $1.date }
+                        return $0.pinned && !$1.pinned
+                    }
+                    self.manager.persistIfNeeded()
+                }
+                
+                if self.copiedItemId == item.id {
+                    self.copiedItemId = nil
+                }
+            }
+        }
+    }
+
+    func togglePin(_ item: ClipItem) {
+        NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .default)
+        // Defer mutation slightly to allow swipe action to complete
+        // without crashing the SwiftUI list layout engine.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+            if let idx = self.manager.history.firstIndex(where: { $0.id == item.id }) {
+                withAnimation {
+                    self.manager.history[idx].pinned.toggle()
+                    let wasPinned = self.manager.history[idx].pinned
+                    self.manager.history.sort {
+                        if $0.pinned == $1.pinned { return $0.date > $1.date }
+                        return $0.pinned && !$1.pinned
+                    }
+                    self.manager.persistIfNeeded()
+                    
+                    if wasPinned {
+                        self.manager.pinFlash = true
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                            self.manager.pinFlash = false
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    func deleteItem(_ item: ClipItem) {
+        NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .default)
+        // Defer mutation slightly to allow swipe action to complete
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+            if let idx = manager.history.firstIndex(where: { $0.id == item.id }) {
+                manager.history.remove(at: idx)
+                manager.persistIfNeeded()
+            }
+        }
+    }
+}
+
+struct FilterButton: View {
+    let title: String?
+    let systemImage: String
+    let filterType: String
+    @ObservedObject var manager: ClipboardManager
+
+    var isSelected: Bool {
+        manager.activeFilters.contains(filterType)
+    }
+    
+    var isFlashing: Bool {
+        filterType == "pinned" && manager.pinFlash
+    }
+
+    var body: some View {
+        Button(action: {
+            if isSelected {
+                manager.activeFilters.remove(filterType)
+            } else {
+                manager.activeFilters.insert(filterType)
+            }
+        }) {
+            HStack(spacing: 4) {
+                Image(systemName: systemImage)
+                    .font(.system(size: 11))
+                if let title = title, !title.isEmpty {
+                    Text(title)
+                }
+            }
+            .font(.system(size: 12, weight: .semibold))
+            .padding(.horizontal, 10)
+            .padding(.vertical, 4)
+            .background(isSelected ? Color.blue : (isFlashing ? Color.orange.opacity(0.9) : Color.secondary.opacity(0.1)))
+            .foregroundColor(isSelected || isFlashing ? .white : .primary)
+            .clipShape(Capsule())
+            .overlay(
+                Capsule()
+                    .stroke(isFlashing ? Color.orange : Color.secondary.opacity(0.2), lineWidth: (isSelected || isFlashing) ? 0 : 1)
+            )
+            .scaleEffect(isFlashing ? 1.15 : 1.0)
+            .shadow(color: isFlashing ? Color.orange.opacity(0.6) : Color.clear, radius: isFlashing ? 4 : 0)
+            .animation(.spring(response: 0.3, dampingFraction: 0.5), value: isFlashing)
+        }
+        .buttonStyle(PlainButtonStyle())
+    }
+}
+
+// MARK: - App Delegate
+class AppDelegate: NSObject, NSApplicationDelegate {
+    var statusItem: NSStatusItem!
+    var popover: NSPopover!
+    var timer: Timer?
+    var previewWindow: NSWindow?
+    let clipboardManager = ClipboardManager()
+    let defaults = UserDefaults.standard
+    var aboutWindow: NSWindow?
+    var settingsMenu: NSMenu!
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         if defaults.object(forKey: "hasLaunchedBefore") == nil {
@@ -182,27 +666,222 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
             try? SMAppService.mainApp.register()
         }
 
-        NSApp.setActivationPolicy(.accessory) // menu-bar only, no dock icon
+        NSApp.setActivationPolicy(.accessory)
+
+        let contentView = ContentView(manager: clipboardManager)
+        popover = NSPopover()
+        popover.contentSize = NSSize(width: 450, height: clipboardManager.menuHeight)
+        popover.behavior = .transient
+        popover.contentViewController = NSHostingController(rootView: contentView)
+
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        if let button = statusItem.button {
-            button.image = NSImage(systemSymbolName: "doc.on.clipboard",
-                                   accessibilityDescription: "ClipLocal")
+        if let btn = statusItem.button {
+            let config = NSImage.SymbolConfiguration(pointSize: 18, weight: .medium)
+            let img = NSImage(systemSymbolName: "paperclip.circle", accessibilityDescription: "ClipLocal")?.withSymbolConfiguration(config)
+            img?.isTemplate = true
+            btn.image = img
+            btn.action = #selector(togglePopover(_:))
+            btn.sendAction(on: [.leftMouseUp, .rightMouseUp])
         }
-        if mode == .persistent { loadHistory() }
-        rebuildMenu()
-        showAbout(onLaunch: true)
-        checkForUpdates(silentIfCurrent: true)
+
+        buildSettingsMenu()
+
         timer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
             self?.checkClipboard()
         }
+        RunLoop.main.add(timer!, forMode: .common)
+
+        if !defaults.bool(forKey: "hideAbout") { showAbout(onLaunch: true) }
+        checkForUpdates(silentIfCurrent: true)
     }
 
+    @objc func togglePopover(_ sender: AnyObject?) {
+        if let event = NSApp.currentEvent, event.type == .rightMouseUp || (event.type == .leftMouseUp && event.modifierFlags.contains(.control)) {
+            showSettingsMenu()
+            return
+        }
+
+        if popover.isShown {
+            closePopover()
+        } else {
+            showPopover(sender)
+        }
+    }
+
+    func showPopover(_ sender: AnyObject?) {
+        if let btn = statusItem.button {
+            popover.show(relativeTo: btn.bounds, of: btn, preferredEdge: .minY)
+            NSApp.activate(ignoringOtherApps: true)
+        }
+    }
+
+    func closePopover() {
+        popover.performClose(nil)
+    }
+
+    func showSettingsMenu() {
+        buildSettingsMenu() // Refresh states
+        settingsMenu.popUp(positioning: nil, at: NSEvent.mouseLocation, in: nil)
+    }
+
+    func buildSettingsMenu() {
+        let menu = NSMenu()
+
+        func icon(_ name: String) -> NSImage? {
+            let i = NSImage(systemSymbolName: name, accessibilityDescription: nil)
+            i?.isTemplate = true
+            return i
+        }
+
+        let clear = NSMenuItem(title: "Clear History", action: #selector(clearHistory), keyEquivalent: "")
+        clear.image = icon("trash")
+        clear.target = self
+        menu.addItem(clear)
+        
+        let unpin = NSMenuItem(title: "Unpin All", action: #selector(unpinAll), keyEquivalent: "")
+        unpin.image = icon("pin.slash")
+        unpin.target = self
+        menu.addItem(unpin)
+
+        menu.addItem(.separator())
+
+        let privacy = NSMenuItem(title: "History Storage", action: nil, keyEquivalent: "")
+        privacy.image = icon("lock.shield")
+        let psub = NSMenu()
+
+        let sessionItem = NSMenuItem(title: "Session-only (wiped on quit)", action: #selector(setSessionMode), keyEquivalent: "")
+        sessionItem.state = clipboardManager.mode == .session ? .on : .off
+        sessionItem.image = icon("lock")
+        sessionItem.target = self
+
+        let persistItem = NSMenuItem(title: "Persistent (kept on quit)", action: #selector(setPersistentMode), keyEquivalent: "")
+        persistItem.state = clipboardManager.mode == .persistent ? .on : .off
+        persistItem.image = icon("externaldrive.fill")
+        persistItem.target = self
+
+        psub.addItem(sessionItem)
+        psub.addItem(persistItem)
+        privacy.submenu = psub
+        menu.addItem(privacy)
+
+        let maxItems = NSMenuItem(title: "Keep up to...", action: nil, keyEquivalent: "")
+        maxItems.image = icon("list.number")
+        let msub = NSMenu()
+        let limits = [50, 100, 200, 500]
+        for limit in limits {
+            let item = NSMenuItem(title: "\(limit) Items", action: #selector(setMaxItems(_:)), keyEquivalent: "")
+            item.state = clipboardManager.maxHistorySize == limit ? .on : .off
+            item.tag = limit
+            item.target = self
+            msub.addItem(item)
+        }
+        maxItems.submenu = msub
+        menu.addItem(maxItems)
+
+        let concealItem = NSMenuItem(title: "Skip password-manager copies", action: #selector(toggleConcealed), keyEquivalent: "")
+        concealItem.state = clipboardManager.skipConcealed ? .on : .off
+        concealItem.image = icon("eye.slash")
+        concealItem.target = self
+        menu.addItem(concealItem)
+
+        let imgItem = NSMenuItem(title: "Show image dimensions", action: #selector(toggleImageDim), keyEquivalent: "")
+        imgItem.state = clipboardManager.showImageDimensions ? .on : .off
+        imgItem.image = icon("photo")
+        imgItem.target = self
+        menu.addItem(imgItem)
+
+        let launchItem = NSMenuItem(title: "Launch at Login", action: #selector(toggleLaunch), keyEquivalent: "")
+        launchItem.state = SMAppService.mainApp.status == .enabled ? .on : .off
+        launchItem.image = icon("macwindow")
+        launchItem.target = self
+        menu.addItem(launchItem)
+
+        let resizeItem = NSMenuItem(title: "Resizable Menu", action: #selector(toggleResizableMenu), keyEquivalent: "")
+        resizeItem.state = clipboardManager.resizableMenu ? .on : .off
+        resizeItem.image = icon("arrow.up.and.down")
+        resizeItem.target = self
+        menu.addItem(resizeItem)
+
+        menu.addItem(.separator())
+
+        let about = NSMenuItem(title: "About ClipLocal", action: #selector(showAboutMenu), keyEquivalent: "")
+        about.image = icon("info.circle")
+        about.target = self
+        menu.addItem(about)
+
+        let update = NSMenuItem(title: "Check for Updates...", action: #selector(manualUpdateCheck), keyEquivalent: "")
+        update.image = icon("arrow.triangle.2.circlepath")
+        update.target = self
+        menu.addItem(update)
+
+        let quit = NSMenuItem(title: "Quit", action: #selector(quitApp), keyEquivalent: "q")
+        quit.image = icon("power")
+        quit.target = self
+        menu.addItem(quit)
+
+        settingsMenu = menu
+    }
+
+    @objc func clearHistory() {
+        NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .default)
+        clipboardManager.history.removeAll()
+        clipboardManager.clearHistoryFile()
+    }
+    
+    @objc func unpinAll() {
+        NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .default)
+        var didChange = false
+        for i in 0..<clipboardManager.history.count {
+            if clipboardManager.history[i].pinned {
+                clipboardManager.history[i].pinned = false
+                didChange = true
+            }
+        }
+        if didChange {
+            clipboardManager.history.sort { $0.date > $1.date }
+            clipboardManager.persistIfNeeded()
+        }
+    }
+
+    @objc func setSessionMode() {
+        clipboardManager.mode = .session
+        clipboardManager.clearHistoryFile()
+    }
+
+    @objc func setPersistentMode() {
+        clipboardManager.mode = .persistent
+        clipboardManager.saveHistory()
+    }
+
+    @objc func toggleConcealed() { clipboardManager.skipConcealed.toggle() }
+    @objc func toggleImageDim() { clipboardManager.showImageDimensions.toggle() }
+
+    @objc func setMaxItems(_ sender: NSMenuItem) {
+        clipboardManager.maxHistorySize = sender.tag
+    }
+
+    @objc func toggleLaunch() {
+        let service = SMAppService.mainApp
+        if service.status == .enabled {
+            try? service.unregister()
+        } else {
+            try? service.register()
+        }
+    }
+
+    @objc func toggleResizableMenu() {
+        clipboardManager.resizableMenu.toggle()
+        clipboardManager.defaults.set(clipboardManager.resizableMenu, forKey: "resizableMenu")
+    }
+
+    @objc func manualUpdateCheck() { checkForUpdates(silentIfCurrent: false) }
+    @objc func quitApp() { NSApp.terminate(nil) }
+
     // MARK: - About window (privacy-first splash)
-    var aboutWindow: NSWindow?
 
     @objc func showAboutMenu() { showAbout(onLaunch: false) }
 
-    func showAbout(onLaunch: Bool) {
+    func showAbout(onLaunch: Bool = false) {
         if onLaunch && defaults.bool(forKey: "hideAbout") { return }
 
         aboutWindow?.close()
@@ -225,7 +904,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
 
         let icon = NSImageView(frame: NSRect(x: (width - 72)/2, y: height - 120, width: 72, height: 72))
         let cfg = NSImage.SymbolConfiguration(pointSize: 60, weight: .regular)
-        icon.image = NSImage(systemSymbolName: "lock.doc.fill", accessibilityDescription: nil)?
+        icon.image = NSImage(systemSymbolName: "paperclip.circle", accessibilityDescription: nil)?
             .withSymbolConfiguration(cfg)
         icon.contentTintColor = NSColor.controlAccentColor
         bg.addSubview(icon)
@@ -355,14 +1034,25 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
         let contact = NSButton(title: "Contact", target: self, action: #selector(contactDeveloper))
         let buttonsY = dontShow.frame.minY - 48
         contact.frame = NSRect(x: 40, y: buttonsY, width: 100, height: 32)
-        contact.bezelStyle = .rounded
+        contact.isBordered = false
+        contact.wantsLayer = true
+        contact.layer?.backgroundColor = NSColor.controlColor.cgColor
+        contact.layer?.cornerRadius = 16
+        contact.layer?.masksToBounds = true
+        contact.attributedTitle = NSAttributedString(string: "Contact", attributes: [
+            .foregroundColor: NSColor.labelColor,
+            .font: NSFont.systemFont(ofSize: 13, weight: .medium)
+        ])
         bg.addSubview(contact)
 
         let close = NSButton(title: "Get Started", target: self, action: #selector(closeAbout))
         close.frame = NSRect(x: width - 160, y: buttonsY, width: 120, height: 32)
-        close.bezelStyle = .rounded
+        close.isBordered = false
+        close.wantsLayer = true
+        close.layer?.backgroundColor = NSColor.controlAccentColor.cgColor
+        close.layer?.cornerRadius = 16
+        close.layer?.masksToBounds = true
         close.keyEquivalent = "\r"
-        close.bezelColor = NSColor.controlAccentColor
         close.attributedTitle = NSAttributedString(string: "Get Started", attributes: [
             .foregroundColor: NSColor.white,
             .font: NSFont.systemFont(ofSize: 13, weight: .medium)
@@ -372,7 +1062,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
         win.contentView = bg
         win.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
-        aboutWindow = win
+        self.aboutWindow = win
     }
 
     @objc func contactDeveloper() {
@@ -389,65 +1079,55 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
 
     @objc func closeAbout() { aboutWindow?.close(); aboutWindow = nil }
 
-    // MARK: - Watching the clipboard
     func checkClipboard() {
         let pb = NSPasteboard.general
-        guard pb.changeCount != lastChangeCount else { return }
-        lastChangeCount = pb.changeCount
+        if pb.changeCount == clipboardManager.lastChangeCount { return }
+        clipboardManager.lastChangeCount = pb.changeCount
 
-        if skipConcealed {
-            let types = pb.types ?? []
-            let concealed = NSPasteboard.PasteboardType("org.nspasteboard.ConcealedType")
-            let transient = NSPasteboard.PasteboardType("org.nspasteboard.TransientType")
-            if types.contains(concealed) || types.contains(transient) { return }
-        }
-
-        var textToStore = ""
-        var imageToStore: Data? = nil
-
-        if let fileURLs = pb.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL], let firstURL = fileURLs.first, firstURL.isFileURL {
-            textToStore = firstURL.path
-        } else if let img = NSImage(pasteboard: pb),
-           let tiff = img.tiffRepresentation,
-           let bitmap = NSBitmapImageRep(data: tiff),
-           let pngData = bitmap.representation(using: .png, properties: [:]) {
-            imageToStore = pngData
-            textToStore = "[Image: \(Int(img.size.width))x\(Int(img.size.height))]"
-        } else if let text = pb.string(forType: .string),
-                  !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            textToStore = text
-        } else {
-            return
-        }
-
-        var pinned = false
-        if let idx = history.firstIndex(where: {
-            if let img1 = $0.imageData, let img2 = imageToStore {
-                return img1 == img2
+        if clipboardManager.skipConcealed {
+            if let types = pb.types, types.contains(NSPasteboard.PasteboardType("org.nspasteboard.ConcealedType")) {
+                return
             }
-            return $0.imageData == nil && imageToStore == nil && $0.text == textToStore
-        }) {
-            pinned = history[idx].pinned
-            history.remove(at: idx)
         }
-        history.insert(ClipItem(text: textToStore, date: Date(), pinned: pinned, imageData: imageToStore), at: 0)
-        trimHistory()
-        persistIfNeeded()
-        rebuildMenu()
-        showPreview(textToStore)
+
+        var newText: String?
+        var newImage: Data?
+        let sourceApp = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+
+        if let urls = pb.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL], let first = urls.first {
+            newText = "file://" + first.path
+        } else if let images = pb.readObjects(forClasses: [NSImage.self], options: nil) as? [NSImage], let img = images.first {
+            if let tiff = img.tiffRepresentation, let rep = NSBitmapImageRep(data: tiff), let png = rep.representation(using: .png, properties: [:]) {
+                newImage = png
+                newText = "[Image" + (clipboardManager.showImageDimensions ? " \(Int(img.size.width))x\(Int(img.size.height))" : "") + "]"
+            }
+        } else if let str = pb.string(forType: .string) {
+            let t = str.trimmingCharacters(in: .whitespacesAndNewlines)
+            if t.isEmpty { return }
+            newText = str
+        }
+
+        guard let text = newText else { return }
+
+        let isRemote = pb.types?.contains(NSPasteboard.PasteboardType("com.apple.is-remote-clipboard")) ?? false
+
+        // Needs to be run on main thread since it updates @Published history
+        DispatchQueue.main.async {
+            if let idx = self.clipboardManager.history.firstIndex(where: { $0.text == text && $0.imageData == newImage }) {
+                let pinned = self.clipboardManager.history[idx].pinned
+                self.clipboardManager.history.remove(at: idx)
+                let newItem = ClipItem(text: text, date: Date(), pinned: pinned, imageData: newImage, sourceAppBundleIdentifier: sourceApp, isRemote: isRemote)
+                self.clipboardManager.history.insert(newItem, at: 0)
+            } else {
+                let newItem = ClipItem(text: text, date: Date(), pinned: false, imageData: newImage, sourceAppBundleIdentifier: sourceApp, isRemote: isRemote)
+                self.clipboardManager.history.insert(newItem, at: 0)
+                self.showPreview(text)
+            }
+            self.clipboardManager.trimHistory()
+            self.clipboardManager.persistIfNeeded()
+        }
     }
 
-    func trimHistory() {
-        var nonPinned = 0
-        var result: [ClipItem] = []
-        for item in history {
-            if item.pinned { result.append(item) }
-            else if nonPinned < maxItems { result.append(item); nonPinned += 1 }
-        }
-        history = result
-    }
-
-    // MARK: - Bottom-right "Copied" preview
     func showPreview(_ text: String) {
         previewWindow?.close()
         let snippet = String(text.prefix(90)).replacingOccurrences(of: "\n", with: " ")
@@ -494,600 +1174,19 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
         win.contentView = container
         win.alphaValue = 0
         win.orderFront(nil)
+        previewWindow = win
 
         NSAnimationContext.runAnimationGroup { ctx in
             ctx.duration = 0.2
             win.animator().alphaValue = 1
         }
-        previewWindow = win
-
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self, weak win] in
-            guard let win = win else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
             NSAnimationContext.runAnimationGroup({ ctx in
-                ctx.duration = 0.4
+                ctx.duration = 0.3
                 win.animator().alphaValue = 0
             }, completionHandler: { win.close() })
-            if self?.previewWindow == win { self?.previewWindow = nil }
         }
     }
-
-    // MARK: - The menu
-    func icon(_ name: String) -> NSImage? {
-        let cfg = NSImage.SymbolConfiguration(pointSize: 13, weight: .regular)
-        return NSImage(systemSymbolName: name, accessibilityDescription: nil)?
-            .withSymbolConfiguration(cfg)
-    }
-
-    func iconName(for text: String) -> String {
-        if text.hasPrefix("[Image:") {
-            return "photo"
-        }
-        let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        let lower = t.lowercased()
-
-        let isCode = t.contains("{") || t.contains("}") || t.contains("<") || t.contains(">") || t.hasPrefix("func ") || t.hasPrefix("import ") || t.hasPrefix("class ")
-        if isCode {
-            return "chevron.left.forwardslash.chevron.right"
-        }
-        if lower.hasPrefix("http://") || lower.hasPrefix("https://") || lower.hasPrefix("www.") {
-            return "link"
-        }
-        if t.contains("@"), t.contains("."), !t.contains(" "), t.count < 60 {
-            return "envelope"
-        }
-        if t.range(of: "^[0-9 +().-]{5,}$", options: .regularExpression) != nil {
-            return "number"
-        }
-        if lower.hasPrefix("file://") || lower.hasPrefix("/") {
-            return "doc"
-        }
-        return "text.alignleft"
-    }
-
-    func paintedTitle(for text: String, shortcut: String, isSubmenu: Bool = false, image: NSImage? = nil, extraLabel: String? = nil) -> NSAttributedString {
-        let para = NSMutableParagraphStyle()
-        let tabLocation: CGFloat = isSubmenu ? 295.25 : 300
-        para.tabStops = [NSTextTab(textAlignment: .right, location: tabLocation)]
-        para.lineBreakMode = .byTruncatingTail
-
-        let title = NSMutableAttributedString()
-
-        if let img = image {
-            let targetHeight: CGFloat = 14.0
-            let ratio = img.size.width / img.size.height
-            let targetWidth = min(targetHeight * ratio, 250.0)
-
-            let scaledImage = NSImage(size: NSSize(width: targetWidth, height: targetHeight))
-            scaledImage.lockFocus()
-            img.draw(in: NSRect(x: 0, y: 0, width: targetWidth, height: targetHeight))
-            scaledImage.unlockFocus()
-
-            let attachment = NSTextAttachment()
-            attachment.image = scaledImage
-            attachment.bounds = NSRect(x: 0, y: -2, width: targetWidth, height: targetHeight)
-
-            title.append(NSAttributedString(attachment: attachment))
-
-            if showImageDimensions, text.hasPrefix("[Image: "), text.hasSuffix("]") {
-                let dims = text.dropFirst(8).dropLast()
-                title.append(NSAttributedString(
-                    string: "  \(dims)",
-                    attributes: [.font: NSFont.menuFont(ofSize: 0), .foregroundColor: NSColor.secondaryLabelColor]))
-            }
-        } else {
-            title.append(NSAttributedString(
-                string: text,
-                attributes: [.font: NSFont.menuFont(ofSize: 0)]))
-
-            if let extra = extraLabel {
-                title.append(NSAttributedString(
-                    string: "  \(extra)",
-                    attributes: [.font: NSFont.menuFont(ofSize: 0), .foregroundColor: NSColor.secondaryLabelColor]))
-            }
-        }
-
-        title.append(NSAttributedString(
-            string: "\t\(shortcut)",
-            attributes: [
-                .font: NSFont.menuFont(ofSize: 0),
-                .foregroundColor: NSColor.tertiaryLabelColor,
-                .paragraphStyle: para
-            ]))
-        return title
-    }
-
-    // MARK: - NSMenuDelegate & Search/Filter Actions
-    func menuWillOpen(_ menu: NSMenu) {
-        isMenuOpen = true
-        focusTimer?.invalidate()
-
-        // This timer intelligently keeps filters visible while searching OR if filters are active
-        let timer = Timer(timeInterval: 0.1, repeats: true) { [weak self] _ in
-            guard let self = self, let sf = self.searchField else { return }
-
-            // Check if the search field or its active field editor currently has focus
-            let isFocused = (sf.window?.firstResponder == sf) || (sf.currentEditor() != nil && sf.window?.firstResponder == sf.currentEditor())
-
-            // Show the filters ONLY if we are actively focused in the search bar.
-            let shouldShow = isFocused
-
-            if let item = self.filtersMenuItem {
-                if shouldShow && item.isHidden {
-                    item.isHidden = false
-                } else if !shouldShow && !item.isHidden {
-                    item.isHidden = true
-                }
-            }
-        }
-        RunLoop.current.add(timer, forMode: .common)
-        self.focusTimer = timer
-    }
-
-    func menuDidClose(_ menu: NSMenu) {
-        isMenuOpen = false
-        focusTimer?.invalidate()
-        focusTimer = nil
-
-        searchField?.window?.makeFirstResponder(nil)
-
-        currentSearchText = ""
-        activeFilters.removeAll()
-        searchField?.stringValue = ""
-
-        // Smoothly un-highlight custom filter buttons
-        if let stack = filtersMenuItem?.view?.subviews.compactMap({ $0 as? NSStackView }).first {
-            for v in stack.views {
-                if let btn = v as? FilterButton {
-                    btn.setSelected(false, animated: false)
-                }
-            }
-        }
-
-        for item in historyMenuItems {
-            item.isHidden = false
-        }
-
-        if needsRebuildAfterClose {
-            needsRebuildAfterClose = false
-            rebuildMenu()
-        }
-    }
-
-    func controlTextDidChange(_ obj: Notification) {
-        guard let field = obj.object as? NSSearchField else { return }
-        currentSearchText = field.stringValue.lowercased()
-        applySearchAndFilter()
-    }
-
-    @objc func filterToggled(_ sender: FilterButton) {
-        let filterName = sender.identifier?.rawValue ?? ""
-        let isActivating = sender.state == .on
-
-        sender.setSelected(isActivating, animated: true)
-
-        if isActivating {
-            activeFilters.insert(filterName)
-        } else {
-            activeFilters.remove(filterName)
-        }
-        applySearchAndFilter()
-    }
-
-    func applySearchAndFilter() {
-        for (i, item) in history.enumerated() {
-            guard i < historyMenuItems.count else { continue }
-            let menuItem = historyMenuItems[i]
-
-            var matchesSearch = true
-            if !currentSearchText.isEmpty {
-                matchesSearch = item.text.lowercased().contains(currentSearchText)
-            }
-
-            var matchesFilter = true
-            if !activeFilters.isEmpty {
-                var filterMatched = false
-
-                let t = item.text.trimmingCharacters(in: .whitespacesAndNewlines)
-                let textLower = t.lowercased()
-
-                let isImage = item.imageData != nil
-                let isCode = t.contains("{") || t.contains("}") || t.contains("<") || t.contains(">") || t.hasPrefix("func ") || t.hasPrefix("import ") || t.hasPrefix("class ")
-                let isLink = textLower.hasPrefix("http://") || textLower.hasPrefix("https://") || textLower.hasPrefix("www.")
-                let isEmail = t.contains("@") && t.contains(".") && !t.contains(" ") && t.count < 60
-                let isNum = t.range(of: "^[0-9 +().-]{5,}$", options: .regularExpression) != nil
-                let isFile = textLower.hasPrefix("file://") || textLower.hasPrefix("/")
-                let isText = !isImage && !isLink && !isEmail && !isNum && !isCode && !isFile
-
-                if activeFilters.contains("link") && isLink { filterMatched = true }
-                if activeFilters.contains("email") && isEmail { filterMatched = true }
-                if activeFilters.contains("number") && isNum { filterMatched = true }
-                if activeFilters.contains("image") && isImage { filterMatched = true }
-                if activeFilters.contains("file") && isFile { filterMatched = true }
-                if activeFilters.contains("code") && isCode { filterMatched = true }
-                if activeFilters.contains("text") && isText { filterMatched = true }
-
-                if !filterMatched {
-                    matchesFilter = false
-                }
-            }
-
-            menuItem.isHidden = !(matchesSearch && matchesFilter)
-        }
-    }
-
-    func rebuildMenu() {
-        let menu = NSMenu()
-        menu.delegate = self
-
-        let header = NSMenuItem(title: "ClipLocal — History (\(history.count))", action: nil, keyEquivalent: "")
-        header.image = icon("doc.on.clipboard")
-        let sizeSub = NSMenu()
-        let sizeTitle = NSMenuItem(title: "Keep up to…", action: nil, keyEquivalent: "")
-        sizeTitle.isEnabled = false
-        sizeSub.addItem(sizeTitle)
-        sizeSub.addItem(.separator())
-        for n in [10, 25, 50, 100, 200] {
-            let opt = NSMenuItem(title: "\(n) items", action: #selector(setHistorySize(_:)), keyEquivalent: "")
-            opt.target = self
-            opt.tag = n
-            opt.state = maxItems == n ? .on : .off
-            sizeSub.addItem(opt)
-        }
-        header.submenu = sizeSub
-        menu.addItem(header)
-        menu.addItem(.separator())
-
-        // --- Search and Filter UI ---
-        let searchViewItem = NSMenuItem()
-        let searchContainer = NSView(frame: NSRect(x: 0, y: 0, width: 300, height: 32))
-        searchContainer.autoresizingMask = [.width]
-
-        // Using our subclass to fix NSMenu cursor bugs
-        let sf = MenuSearchField(frame: .zero)
-        sf.placeholderString = "Search history..."
-        sf.delegate = self
-        sf.focusRingType = .none
-        sf.stringValue = currentSearchText
-        self.searchField = sf
-
-        sf.translatesAutoresizingMaskIntoConstraints = false
-        searchContainer.addSubview(sf)
-
-        NSLayoutConstraint.activate([
-            sf.leadingAnchor.constraint(equalTo: searchContainer.leadingAnchor, constant: 14),
-            sf.trailingAnchor.constraint(equalTo: searchContainer.trailingAnchor, constant: -14),
-            sf.centerYAnchor.constraint(equalTo: searchContainer.centerYAnchor),
-            sf.heightAnchor.constraint(equalToConstant: 22)
-        ])
-
-        searchViewItem.view = searchContainer
-        menu.addItem(searchViewItem)
-
-        let filtersMenuItem = NSMenuItem()
-        let filtersContainer = NSView(frame: NSRect(x: 0, y: 0, width: 300, height: 32))
-        filtersContainer.autoresizingMask = [.width]
-
-        let filters = [
-            ("code", "chevron.left.forwardslash.chevron.right"),
-            ("email", "envelope"),
-            ("file", "doc"),
-            ("image", "photo"),
-            ("link", "link"),
-            ("number", "number"),
-            ("text", "text.alignleft")
-        ]
-
-        let stack = NSStackView(frame: .zero)
-        stack.orientation = .horizontal
-        stack.distribution = .equalSpacing
-        stack.alignment = .centerY
-
-        stack.translatesAutoresizingMaskIntoConstraints = false
-        filtersContainer.addSubview(stack)
-
-        NSLayoutConstraint.activate([
-            stack.leadingAnchor.constraint(equalTo: filtersContainer.leadingAnchor, constant: 14),
-            stack.trailingAnchor.constraint(equalTo: filtersContainer.trailingAnchor, constant: -14),
-            stack.centerYAnchor.constraint(equalTo: filtersContainer.centerYAnchor),
-            stack.heightAnchor.constraint(equalToConstant: 22)
-        ])
-
-        // Pre-calculate which filters have items
-        var categoryCounts: [String: Int] = [
-            "link": 0, "image": 0, "text": 0, "file": 0, "number": 0, "email": 0, "code": 0
-        ]
-
-        for item in history {
-            let t = item.text.trimmingCharacters(in: .whitespacesAndNewlines)
-            let textLower = t.lowercased()
-            let isImage = item.imageData != nil
-            let isCode = t.contains("{") || t.contains("}") || t.contains("<") || t.contains(">") || t.hasPrefix("func ") || t.hasPrefix("import ") || t.hasPrefix("class ")
-            let isLink = textLower.hasPrefix("http://") || textLower.hasPrefix("https://") || textLower.hasPrefix("www.")
-            let isEmail = t.contains("@") && t.contains(".") && !t.contains(" ") && t.count < 60
-            let isNum = t.range(of: "^[0-9 +().-]{5,}$", options: .regularExpression) != nil
-            let isFile = textLower.hasPrefix("file://") || textLower.hasPrefix("/")
-            let isText = !isImage && !isLink && !isEmail && !isNum && !isCode && !isFile
-
-            if isLink { categoryCounts["link"]! += 1 }
-            if isImage { categoryCounts["image"]! += 1 }
-            if isText { categoryCounts["text"]! += 1 }
-            if isFile { categoryCounts["file"]! += 1 }
-            if isCode { categoryCounts["code"]! += 1 }
-            if isNum { categoryCounts["number"]! += 1 }
-            if isEmail { categoryCounts["email"]! += 1 }
-        }
-
-        for filter in filters {
-            let btn = FilterButton(frame: .zero)
-            btn.image = icon(filter.1)
-            btn.target = self
-            btn.action = #selector(filterToggled(_:))
-            btn.identifier = NSUserInterfaceItemIdentifier(filter.0)
-            btn.toolTip = "Filter by \(filter.0)"
-
-            let count = categoryCounts[filter.0] ?? 0
-            btn.hasItems = count > 0
-
-            let isSelected = activeFilters.contains(filter.0)
-            btn.state = isSelected ? .on : .off
-            btn.setSelected(isSelected, animated: false)
-
-            btn.translatesAutoresizingMaskIntoConstraints = false
-            btn.widthAnchor.constraint(equalToConstant: 28).isActive = true
-            btn.heightAnchor.constraint(equalToConstant: 22).isActive = true
-            stack.addView(btn, in: .leading)
-        }
-
-        filtersMenuItem.view = filtersContainer
-        filtersMenuItem.isHidden = true
-        self.filtersMenuItem = filtersMenuItem
-        menu.addItem(filtersMenuItem)
-        menu.addItem(.separator())
-        // --- End Search and Filter UI ---
-
-        historyMenuItems.removeAll()
-        if history.isEmpty {
-            let empty = NSMenuItem(title: "— empty —", action: nil, keyEquivalent: "")
-            empty.isEnabled = false
-            menu.addItem(empty)
-        } else {
-            for (i, item) in history.enumerated() {
-                var displayText = item.text
-                let extraLabel: String? = nil
-
-                let isFile = item.text.hasPrefix("file://") || item.text.hasPrefix("/")
-                if isFile {
-                    let path = item.text.hasPrefix("file://") ? String(item.text.dropFirst(7)) : item.text
-                    let url = URL(fileURLWithPath: path)
-                    displayText = url.lastPathComponent
-                }
-
-                let oneLine = displayText
-                    .replacingOccurrences(of: "\n", with: " ")
-                    .trimmingCharacters(in: .whitespacesAndNewlines)
-
-                let maxLen = extraLabel != nil ? 20 : 34
-                let snippet = oneLine.count > maxLen ? String(oneLine.prefix(maxLen)) + "…" : oneLine
-                let shortcut = i < 9 ? "\(i + 1)" : ""
-                let mi = NSMenuItem(title: snippet,
-                                    action: #selector(copyItem(_:)), keyEquivalent: shortcut)
-                mi.keyEquivalentModifierMask = [.command]
-                mi.image = icon(item.pinned ? "pin.fill" : iconName(for: item.text))
-                mi.target = self; mi.tag = i
-
-                var previewImage: NSImage? = nil
-                if let data = item.imageData, let loaded = NSImage(data: data) {
-                    previewImage = loaded
-                }
-
-                if i < 9 || previewImage != nil || extraLabel != nil {
-                    let shortcutToPaint = i < 9 ? "⌘\(i + 1)" : ""
-                    mi.attributedTitle = paintedTitle(for: snippet, shortcut: shortcutToPaint, isSubmenu: true, image: previewImage, extraLabel: extraLabel)
-                }
-
-                let sub = NSMenu()
-                let copyA = NSMenuItem(title: "Copy", action: #selector(copyItem(_:)), keyEquivalent: "")
-                copyA.image = icon("doc.on.doc")
-                copyA.target = self; copyA.tag = i
-                let pinA = NSMenuItem(title: item.pinned ? "Unpin" : "Pin",
-                                      action: #selector(togglePin(_:)), keyEquivalent: "")
-                pinA.image = icon(item.pinned ? "pin.slash" : "pin")
-                pinA.target = self; pinA.tag = i
-                let delA = NSMenuItem(title: "Delete", action: #selector(deleteItem(_:)), keyEquivalent: "")
-                delA.image = icon("trash")
-                delA.target = self; delA.tag = i
-                sub.addItem(copyA); sub.addItem(pinA); sub.addItem(.separator()); sub.addItem(delA)
-                mi.submenu = sub
-                menu.addItem(mi)
-                historyMenuItems.append(mi)
-            }
-        }
-        menu.addItem(.separator())
-
-        applySearchAndFilter()
-
-        let clear = NSMenuItem(title: "Clear History Now", action: #selector(clearNow), keyEquivalent: "")
-        clear.attributedTitle = paintedTitle(for: "Clear History Now", shortcut: "⌘⌫")
-        clear.image = icon("trash.fill")
-        clear.target = self
-        menu.addItem(clear)
-        let hiddenClear = NSMenuItem(title: "", action: #selector(clearNow), keyEquivalent: "\u{8}")
-        hiddenClear.keyEquivalentModifierMask = [.command]
-        hiddenClear.target = self
-        hiddenClear.isHidden = true
-        menu.addItem(hiddenClear)
-
-        menu.addItem(.separator())
-
-        let prefs = NSMenuItem(title: "Preferences…", action: nil, keyEquivalent: "")
-        prefs.attributedTitle = paintedTitle(for: "Preferences…", shortcut: "⌘,", isSubmenu: true)
-        prefs.image = icon("gearshape")
-        let prefsSub = NSMenu()
-
-        let privacy = NSMenuItem(title: "History Storage", action: nil, keyEquivalent: "")
-        privacy.image = icon("lock.shield")
-        let psub = NSMenu()
-        let sessionItem = NSMenuItem(title: "Session-only (wiped on quit)",
-                                     action: #selector(setSession), keyEquivalent: "")
-        sessionItem.image = icon("lock")
-        sessionItem.target = self
-        sessionItem.state = mode == .session ? .on : .off
-        let persistItem = NSMenuItem(title: "Persistent (kept on quit)",
-                                     action: #selector(setPersistent), keyEquivalent: "")
-        persistItem.image = icon("externaldrive.fill")
-        persistItem.target = self
-        persistItem.state = mode == .persistent ? .on : .off
-        psub.addItem(sessionItem); psub.addItem(persistItem)
-        privacy.submenu = psub
-        prefsSub.addItem(privacy)
-
-        let skip = NSMenuItem(title: "Skip password-manager copies",
-                              action: #selector(toggleSkip), keyEquivalent: "")
-        skip.image = icon("key.fill")
-        skip.target = self
-        skip.state = skipConcealed ? .on : .off
-        prefsSub.addItem(skip)
-
-        let showDims = NSMenuItem(title: "Show image dimensions",
-                                  action: #selector(toggleShowImageDimensions), keyEquivalent: "")
-        showDims.image = icon("photo.on.rectangle.angled")
-        showDims.target = self
-        showDims.state = showImageDimensions ? .on : .off
-        prefsSub.addItem(showDims)
-
-        let launch = NSMenuItem(title: "Launch at Login",
-                                action: #selector(toggleLaunchAtLogin), keyEquivalent: "")
-        launch.image = icon("power")
-        launch.target = self
-        launch.state = launchAtLoginEnabled ? .on : .off
-        prefsSub.addItem(launch)
-
-        prefs.submenu = prefsSub
-        menu.addItem(prefs)
-
-        let hiddenPrefs = NSMenuItem(title: "", action: nil, keyEquivalent: ",")
-        hiddenPrefs.keyEquivalentModifierMask = [.command]
-        hiddenPrefs.target = self
-        hiddenPrefs.isHidden = true
-        menu.addItem(hiddenPrefs)
-
-        menu.addItem(.separator())
-        let updates = NSMenuItem(title: "Check for Updates…", action: #selector(checkForUpdatesMenu), keyEquivalent: "")
-        updates.image = icon("arrow.triangle.2.circlepath")
-        updates.target = self
-        menu.addItem(updates)
-        let about = NSMenuItem(title: "About ClipLocal", action: #selector(showAboutMenu), keyEquivalent: "")
-        about.image = icon("info.circle")
-        about.target = self
-        menu.addItem(about)
-        let quit = NSMenuItem(title: "Quit", action: #selector(quitApp), keyEquivalent: "")
-        quit.attributedTitle = paintedTitle(for: "Quit", shortcut: "⌘Q")
-        quit.image = icon("xmark.circle")
-        quit.target = self
-        menu.addItem(quit)
-        let hiddenQuit = NSMenuItem(title: "", action: #selector(quitApp), keyEquivalent: "q")
-        hiddenQuit.keyEquivalentModifierMask = [.command]
-        hiddenQuit.target = self
-        hiddenQuit.isHidden = true
-        menu.addItem(hiddenQuit)
-
-        statusItem.menu = menu
-    }
-
-    // MARK: - Menu actions
-    @objc func copyItem(_ sender: NSMenuItem) {
-        let i = sender.tag
-        guard i < history.count else { return }
-        let item = history[i]
-        let pb = NSPasteboard.general
-        pb.clearContents()
-
-        if let data = item.imageData, let img = NSImage(data: data) {
-            pb.setData(data, forType: .png)
-            if let tiff = img.tiffRepresentation {
-                pb.setData(tiff, forType: .tiff)
-            }
-        } else if (item.text.hasPrefix("/") || item.text.hasPrefix("file://")) && FileManager.default.fileExists(atPath: item.text.hasPrefix("file://") ? String(item.text.dropFirst(7)) : item.text) {
-            let path = item.text.hasPrefix("file://") ? String(item.text.dropFirst(7)) : item.text
-            let url = URL(fileURLWithPath: path)
-            pb.writeObjects([url as NSURL])
-            pb.setString(item.text, forType: .string)
-        } else {
-            pb.setString(item.text, forType: .string)
-        }
-
-        lastChangeCount = pb.changeCount
-        let pinned = item.pinned
-        history.remove(at: i)
-        history.insert(ClipItem(text: item.text, date: Date(), pinned: pinned, imageData: item.imageData), at: 0)
-        persistIfNeeded()
-        rebuildMenu()
-    }
-
-    @objc func togglePin(_ sender: NSMenuItem) {
-        let i = sender.tag
-        guard i < history.count else { return }
-        history[i].pinned.toggle()
-        persistIfNeeded()
-        rebuildMenu()
-    }
-
-    @objc func deleteItem(_ sender: NSMenuItem) {
-        let i = sender.tag
-        guard i < history.count else { return }
-        history.remove(at: i)
-        persistIfNeeded()
-        rebuildMenu()
-    }
-
-    @objc func setSession() { mode = .session; deleteStore() }
-    @objc func setPersistent() { mode = .persistent; saveHistory() }
-    @objc func toggleSkip() { skipConcealed.toggle() }
-    @objc func toggleShowImageDimensions() { showImageDimensions.toggle() }
-
-    @objc func setHistorySize(_ sender: NSMenuItem) {
-        maxItems = sender.tag
-        trimHistory()
-        persistIfNeeded()
-        rebuildMenu()
-    }
-
-    // MARK: - Launch at Login
-    var launchAtLoginEnabled: Bool {
-        return SMAppService.mainApp.status == .enabled
-    }
-
-    @objc func toggleLaunchAtLogin() {
-        do {
-            if SMAppService.mainApp.status == .enabled {
-                try SMAppService.mainApp.unregister()
-            } else {
-                try SMAppService.mainApp.register()
-            }
-        } catch {
-            let alert = NSAlert()
-            alert.messageText = "Couldn't change Launch at Login"
-            alert.informativeText = "macOS blocked the change. You can also manage this in System Settings → General → Login Items."
-            alert.addButton(withTitle: "OK")
-            alert.runModal()
-        }
-        rebuildMenu()
-    }
-
-    @objc func clearNow() {
-        history = history.filter { $0.pinned }
-        if history.isEmpty {
-            deleteStore()
-        } else {
-            persistIfNeeded()
-        }
-        rebuildMenu()
-    }
-
-    @objc func quitApp() { NSApp.terminate(nil) }
-
-    // MARK: - Update check
-    @objc func checkForUpdatesMenu() { checkForUpdates(silentIfCurrent: false) }
 
     func checkForUpdates(silentIfCurrent: Bool) {
         guard let url = URL(string: updateCheckURL) else { return }
@@ -1168,40 +1267,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSearchFiel
             alert.runModal()
         }
     }
-
-    // MARK: - Encrypted persistence
-    var storeURL: URL {
-        let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("ClipLocal")
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        return dir.appendingPathComponent("history.enc")
-    }
-
-    func persistIfNeeded() { if mode == .persistent { saveHistory() } }
-
-    func saveHistory() {
-        do {
-            let data = try JSONEncoder().encode(history)
-            let sealed = try AES.GCM.seal(data, using: key)
-            if let combined = sealed.combined {
-                try combined.write(to: storeURL, options: .completeFileProtection)
-            }
-        } catch { }
-    }
-
-    func loadHistory() {
-        guard let data = try? Data(contentsOf: storeURL) else { return }
-        do {
-            let box = try AES.GCM.SealedBox(combined: data)
-            let dec = try AES.GCM.open(box, using: key)
-            history = try JSONDecoder().decode([ClipItem].self, from: dec)
-        } catch { }
-    }
-
-    func deleteStore() { try? FileManager.default.removeItem(at: storeURL) }
 }
 
-// MARK: - Launch
+// MARK: - App Main
 let app = NSApplication.shared
 let delegate = AppDelegate()
 app.delegate = delegate

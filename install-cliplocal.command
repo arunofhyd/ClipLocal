@@ -107,9 +107,9 @@ if let shineGrad = NSGradient(colors: [shine0, shine1, shine1, shine0], atLocati
 }
 NSGraphicsContext.restoreGraphicsState()
 
-// White lock-on-document glyph, centered.
-let cfg = NSImage.SymbolConfiguration(pointSize: 560, weight: .regular)
-if let sym = NSImage(systemSymbolName: "lock.doc.fill", accessibilityDescription: nil)?
+// White paperclip-in-circle glyph, centered.
+let cfg = NSImage.SymbolConfiguration(pointSize: 560, weight: .semibold)
+if let sym = NSImage(systemSymbolName: "paperclip.circle", accessibilityDescription: nil)?
         .withSymbolConfiguration(cfg) {
     let s = sym.size
     let tinted = NSImage(size: s)
@@ -244,7 +244,7 @@ class DropZone: NSImageView {
         NSSound(named: "Glass")?.play()
         let a = NSAlert()
         a.messageText = "ClipLocal installed!"
-        a.informativeText = "Look for the clipboard icon in your menu bar (top-right). It runs quietly with no Dock icon."
+        a.informativeText = "Look for the paperclip icon in your menu bar (top-right). It runs quietly with no Dock icon."
         a.addButton(withTitle: "Launch ClipLocal")
         a.addButton(withTitle: "Quit")
         if a.runModal() == .alertFirstButtonReturn { NSWorkspace.shared.open(dest) }
@@ -330,7 +330,7 @@ if ! swiftc -O -o Installer Installer.swift -framework Cocoa >/dev/null 2>&1; th
     ok "Installed to Applications."
     printf "\n"; line
     printf "\n  ${GREEN}${BOLD}✓ ClipLocal is installed!${NC}\n\n"
-    printf "  ${GREY}Look for the clipboard icon in your menu bar (top-right).${NC}\n\n"
+    printf "  ${GREY}Look for the paperclip icon in your menu bar (top-right).${NC}\n\n"
     printf "  Launch ClipLocal now? [Y/n] "
     read -r ans
     case "$ans" in [Nn]*) : ;; *) open "$DEST" ;; esac
