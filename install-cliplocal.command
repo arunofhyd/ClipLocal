@@ -107,32 +107,18 @@ if let shineGrad = NSGradient(colors: [shine0, shine1, shine1, shine0], atLocati
 }
 NSGraphicsContext.restoreGraphicsState()
 
-// Document
-let cfgDoc = NSImage.SymbolConfiguration(pointSize: 460, weight: .regular)
-if let docSym = NSImage(systemSymbolName: "doc.fill", accessibilityDescription: nil)?.withSymbolConfiguration(cfgDoc) {
-    let s = docSym.size
+// White paperclip-in-circle glyph, centered.
+let cfg = NSImage.SymbolConfiguration(pointSize: 560, weight: .semibold)
+if let sym = NSImage(systemSymbolName: "paperclip.circle", accessibilityDescription: nil)?
+        .withSymbolConfiguration(cfg) {
+    let s = sym.size
     let tinted = NSImage(size: s)
     tinted.lockFocus()
-    docSym.draw(in: NSRect(origin: .zero, size: s))
+    sym.draw(in: NSRect(origin: .zero, size: s))
     NSColor.white.set()
     NSRect(origin: .zero, size: s).fill(using: .sourceAtop)
     tinted.unlockFocus()
-    let rect = NSRect(x: (px - s.width)/2 - 20, y: (px - s.height)/2, width: s.width, height: s.height)
-    tinted.draw(in: rect, from: .zero, operation: .sourceOver, fraction: 1.0)
-}
-
-// Paperclip (tinted dark blue)
-let cfgClip = NSImage.SymbolConfiguration(pointSize: 320, weight: .bold)
-if let clipSym = NSImage(systemSymbolName: "paperclip", accessibilityDescription: nil)?.withSymbolConfiguration(cfgClip) {
-    let s = clipSym.size
-    let tinted = NSImage(size: s)
-    tinted.lockFocus()
-    clipSym.draw(in: NSRect(origin: .zero, size: s))
-    NSColor(calibratedRed: 0.0, green: 0.40, blue: 0.95, alpha: 1.0).set()
-    NSRect(origin: .zero, size: s).fill(using: .sourceAtop)
-    tinted.unlockFocus()
-    
-    let rect = NSRect(x: px/2 + 20, y: px/2 + 20, width: s.width, height: s.height)
+    let rect = NSRect(x: (px - s.width)/2, y: (px - s.height)/2, width: s.width, height: s.height)
     tinted.draw(in: rect, from: .zero, operation: .sourceOver, fraction: 1.0)
 }
 
