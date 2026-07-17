@@ -84,6 +84,8 @@ class ClipboardManager: ObservableObject {
     @Published var history: [ClipItem] = []
     @Published var currentSearchText = ""
     @Published var activeFilters: Set<String> = []
+    @Published var resizableMenu: Bool
+    @Published var menuHeight: Double
 
     let key = KeyStore.loadOrCreateKey()
     let defaults = UserDefaults.standard
@@ -110,6 +112,8 @@ class ClipboardManager: ObservableObject {
     }
 
     init() {
+        self.resizableMenu = UserDefaults.standard.object(forKey: "resizableMenu") as? Bool ?? false
+        self.menuHeight = UserDefaults.standard.object(forKey: "menuHeight") as? Double ?? 500.0
         if mode == .persistent { loadHistory() }
     }
 
@@ -159,6 +163,7 @@ struct ContentView: View {
     @State private var hoverIdx: String? = nil
     @State private var expandedIdx: String? = nil
     @State private var copiedItemId: String? = nil
+    @State private var dragStartHeight: Double? = nil
 
     var body: some View {
         VStack(spacing: 0) {
@@ -212,7 +217,7 @@ struct ContentView: View {
                     }
                     .buttonStyle(PlainButtonStyle())
 
-                    FilterButton(title: "Pinned", systemImage: "pin.fill", filterType: "pinned", manager: manager)
+                    FilterButton(title: nil, systemImage: "pin.fill", filterType: "pinned", manager: manager)
                     FilterButton(title: "Code", systemImage: "chevron.left.forwardslash.chevron.right", filterType: "code", manager: manager)
                     FilterButton(title: "Email", systemImage: "envelope", filterType: "email", manager: manager)
                     FilterButton(title: "Files", systemImage: "doc", filterType: "file", manager: manager)
@@ -277,8 +282,50 @@ struct ContentView: View {
             }
             .listStyle(.plain)
             .background(Color.clear)
+
+            if manager.resizableMenu {
+                VStack(spacing: 0) {
+                    Divider()
+                    HStack {
+                        Spacer()
+                        Image(systemName: "line.3.horizontal")
+                            .font(.system(size: 14))
+                            .foregroundColor(.secondary)
+                            .padding(.vertical, 4)
+                        Spacer()
+                    }
+                    .contentShape(Rectangle())
+                    .gesture(
+                        DragGesture()
+                            .onChanged { value in
+                                if dragStartHeight == nil {
+                                    dragStartHeight = manager.menuHeight
+                                }
+                                if let start = dragStartHeight {
+                                    let newHeight = max(300, min(1000, start + Double(value.translation.height)))
+                                    manager.menuHeight = newHeight
+                                    if let appDelegate = NSApp.delegate as? AppDelegate {
+                                        appDelegate.popover.contentSize = NSSize(width: 450, height: newHeight)
+                                    }
+                                }
+                            }
+                            .onEnded { _ in
+                                dragStartHeight = nil
+                                manager.defaults.set(manager.menuHeight, forKey: "menuHeight")
+                            }
+                    )
+                    .onHover { isHovering in
+                        if isHovering {
+                            NSCursor.resizeUpDown.push()
+                        } else {
+                            NSCursor.pop()
+                        }
+                    }
+                }
+                .background(Color(NSColor.windowBackgroundColor))
+            }
         }
-        .frame(width: 450, height: 500)
+        .frame(width: 450, height: CGFloat(manager.menuHeight))
         .background(Color.clear)
     }
 
@@ -577,7 +624,7 @@ struct ContentView: View {
 }
 
 struct FilterButton: View {
-    let title: String
+    let title: String?
     let systemImage: String
     let filterType: String
     @ObservedObject var manager: ClipboardManager
@@ -597,7 +644,9 @@ struct FilterButton: View {
             HStack(spacing: 4) {
                 Image(systemName: systemImage)
                     .font(.system(size: 11))
-                Text(title)
+                if let title = title, !title.isEmpty {
+                    Text(title)
+                }
             }
             .font(.system(size: 12, weight: .semibold))
             .padding(.horizontal, 10)
@@ -635,7 +684,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         let contentView = ContentView(manager: clipboardManager)
         popover = NSPopover()
-        popover.contentSize = NSSize(width: 450, height: 500)
+        popover.contentSize = NSSize(width: 450, height: clipboardManager.menuHeight)
         popover.behavior = .transient
         popover.contentViewController = NSHostingController(rootView: contentView)
 
@@ -743,6 +792,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         launchItem.target = self
         menu.addItem(launchItem)
 
+        let resizeItem = NSMenuItem(title: (clipboardManager.resizableMenu ? "✓ " : "   ") + "Resizable Menu", action: #selector(toggleResizableMenu), keyEquivalent: "")
+        resizeItem.image = icon("arrow.up.and.down")
+        resizeItem.target = self
+        menu.addItem(resizeItem)
+
         menu.addItem(.separator())
 
         let about = NSMenuItem(title: "About ClipLocal", action: #selector(showAboutMenu), keyEquivalent: "")
@@ -792,6 +846,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         } else {
             try? service.register()
         }
+    }
+
+    @objc func toggleResizableMenu() {
+        clipboardManager.resizableMenu.toggle()
+        clipboardManager.defaults.set(clipboardManager.resizableMenu, forKey: "resizableMenu")
     }
 
     @objc func manualUpdateCheck() { checkForUpdates(silentIfCurrent: false) }
