@@ -86,6 +86,7 @@ class ClipboardManager: ObservableObject {
     @Published var activeFilters: Set<String> = []
     @Published var resizableMenu: Bool
     @Published var menuHeight: Double
+    @Published var pinFlash: Bool = false
 
     let key = KeyStore.loadOrCreateKey()
     let defaults = UserDefaults.standard
@@ -576,13 +577,23 @@ struct ContentView: View {
         // Defer mutation slightly to allow swipe action to complete
         // without crashing the SwiftUI list layout engine.
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
-            if let idx = manager.history.firstIndex(where: { $0.id == item.id }) {
-                manager.history[idx].pinned.toggle()
-                manager.history.sort {
-                    if $0.pinned == $1.pinned { return $0.date > $1.date }
-                    return $0.pinned && !$1.pinned
+            if let idx = self.manager.history.firstIndex(where: { $0.id == item.id }) {
+                withAnimation {
+                    self.manager.history[idx].pinned.toggle()
+                    let wasPinned = self.manager.history[idx].pinned
+                    self.manager.history.sort {
+                        if $0.pinned == $1.pinned { return $0.date > $1.date }
+                        return $0.pinned && !$1.pinned
+                    }
+                    self.manager.persistIfNeeded()
+                    
+                    if wasPinned {
+                        self.manager.pinFlash = true
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                            self.manager.pinFlash = false
+                        }
+                    }
                 }
-                manager.persistIfNeeded()
             }
         }
     }
@@ -607,6 +618,10 @@ struct FilterButton: View {
     var isSelected: Bool {
         manager.activeFilters.contains(filterType)
     }
+    
+    var isFlashing: Bool {
+        filterType == "pinned" && manager.pinFlash
+    }
 
     var body: some View {
         Button(action: {
@@ -626,13 +641,16 @@ struct FilterButton: View {
             .font(.system(size: 12, weight: .semibold))
             .padding(.horizontal, 10)
             .padding(.vertical, 4)
-            .background(isSelected ? Color.blue : Color.secondary.opacity(0.1))
-            .foregroundColor(isSelected ? .white : .primary)
+            .background(isSelected ? Color.blue : (isFlashing ? Color.orange.opacity(0.9) : Color.secondary.opacity(0.1)))
+            .foregroundColor(isSelected || isFlashing ? .white : .primary)
             .clipShape(Capsule())
             .overlay(
                 Capsule()
-                    .stroke(Color.secondary.opacity(0.2), lineWidth: isSelected ? 0 : 1)
+                    .stroke(isFlashing ? Color.orange : Color.secondary.opacity(0.2), lineWidth: (isSelected || isFlashing) ? 0 : 1)
             )
+            .scaleEffect(isFlashing ? 1.15 : 1.0)
+            .shadow(color: isFlashing ? Color.orange.opacity(0.6) : Color.clear, radius: isFlashing ? 4 : 0)
+            .animation(.spring(response: 0.3, dampingFraction: 0.5), value: isFlashing)
         }
         .buttonStyle(PlainButtonStyle())
     }
