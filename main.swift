@@ -417,14 +417,14 @@ struct ContentView: View {
             Button(role: .destructive) {
                 deleteItem(item)
             } label: {
-                Text("\(Image(systemName: "trash")) Delete")
+                Label("Delete", systemImage: "trash")
             }
         }
         .swipeActions(edge: .leading, allowsFullSwipe: true) {
             Button {
                 togglePin(item)
             } label: {
-                Text("\(Image(systemName: item.pinned ? "pin.slash" : "pin")) \(item.pinned ? "Unpin" : "Pin")")
+                Label(item.pinned ? "Unpin" : "Pin", systemImage: item.pinned ? "pin.slash" : "pin")
             }
             .tint(.orange)
         }
