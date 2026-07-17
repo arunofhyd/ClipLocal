@@ -531,6 +531,7 @@ struct ContentView: View {
         }
 
         manager.lastChangeCount = pb.changeCount
+        NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .default)
 
         withAnimation {
             copiedItemId = item.id
@@ -564,6 +565,7 @@ struct ContentView: View {
     }
 
     func togglePin(_ item: ClipItem) {
+        NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .default)
         // Defer mutation slightly to allow swipe action to complete
         // without crashing the SwiftUI list layout engine.
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
@@ -589,6 +591,7 @@ struct ContentView: View {
     }
 
     func deleteItem(_ item: ClipItem) {
+        NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .default)
         // Defer mutation slightly to allow swipe action to complete
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
             if let idx = manager.history.firstIndex(where: { $0.id == item.id }) {
@@ -820,11 +823,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc func clearHistory() {
+        NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .default)
         clipboardManager.history.removeAll()
         clipboardManager.clearHistoryFile()
     }
     
     @objc func unpinAll() {
+        NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .default)
         var didChange = false
         for i in 0..<clipboardManager.history.count {
             if clipboardManager.history[i].pinned {
