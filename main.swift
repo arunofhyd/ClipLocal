@@ -532,47 +532,34 @@ struct ContentView: View {
 
         manager.lastChangeCount = pb.changeCount
 
-        var newId: String? = nil
-        if let idx = manager.history.firstIndex(where: { $0.id == item.id }) {
-            var updated = item
-            updated.date = Date() // Refresh date
-            newId = updated.id
-            manager.history.remove(at: idx)
-            manager.history.insert(updated, at: 0)
-        }
-
-        manager.persistIfNeeded()
-
-        if let theNewId = newId {
-            withAnimation {
-                copiedItemId = theNewId
-            }
-
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-                withAnimation {
-                    if copiedItemId == theNewId {
-                        copiedItemId = nil
-                    }
-                }
-            }
-        } else {
-            withAnimation {
-                copiedItemId = item.id
-            }
-
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-                withAnimation {
-                    if copiedItemId == item.id {
-                        copiedItemId = nil
-                    }
-                }
-            }
+        withAnimation {
+            copiedItemId = item.id
         }
 
         // Delay closing the popover slightly so the user can see the checkmark animation
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
             (NSApp.delegate as? AppDelegate)?.closePopover()
             (NSApp.delegate as? AppDelegate)?.showPreview(item.text)
+            
+            // Reorder the item to the top in the background *after* the popover is gone
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                if let idx = self.manager.history.firstIndex(where: { $0.id == item.id }) {
+                    var updated = item
+                    updated.date = Date() // Refresh date
+                    self.manager.history.remove(at: idx)
+                    self.manager.history.insert(updated, at: 0)
+                    
+                    self.manager.history.sort {
+                        if $0.pinned == $1.pinned { return $0.date > $1.date }
+                        return $0.pinned && !$1.pinned
+                    }
+                    self.manager.persistIfNeeded()
+                }
+                
+                if self.copiedItemId == item.id {
+                    self.copiedItemId = nil
+                }
+            }
         }
     }
 
