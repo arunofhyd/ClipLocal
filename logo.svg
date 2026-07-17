@@ -13,10 +13,14 @@
   </defs>
   <rect x="0" y="0" width="120" height="120" rx="27" ry="27" fill="url(#bg)"/>
   <rect x="1" y="1" width="118" height="118" rx="26" ry="26" fill="none" stroke="url(#shine)" stroke-width="2"/>
-  <!-- Paperclip Circle -->
-  <circle cx="60" cy="60" r="42" fill="none" stroke="#ffffff" stroke-width="4"/>
-  <g transform="translate(60,60) rotate(45) scale(0.7) translate(-60,-60)">
+  <!-- Document -->
+  <path d="M42 24 h26 l14 14 v44 a6 6 0 0 1 -6 6 H42 a6 6 0 0 1 -6 -6 V30 a6 6 0 0 1 6 -6 z" fill="#ffffff"/>
+  <!-- Folded corner -->
+  <path d="M68 24 v14 h14 z" fill="#cfe3ff"/>
+  
+  <!-- Paperclip -->
+  <g transform="translate(68,54) rotate(45) scale(0.65) translate(-60,-60)">
     <path d="M54 50 v20 a 6 6 0 0 0 12 0 v-28 a 10 10 0 0 0 -20 0 v32 a 14 14 0 0 0 28 0 v-28"
-          fill="none" stroke="#ffffff" stroke-width="5.5" stroke-linecap="round"/>
+          fill="none" stroke="#0066F2" stroke-width="8" stroke-linecap="round"/>
   </g>
 </svg>
