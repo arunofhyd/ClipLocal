@@ -732,11 +732,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         privacy.image = icon("lock.shield")
         let psub = NSMenu()
 
-        let sessionItem = NSMenuItem(title: (clipboardManager.mode == .session ? "✓ " : "   ") + "Session-only (wiped on quit)", action: #selector(setSessionMode), keyEquivalent: "")
+        let sessionItem = NSMenuItem(title: "Session-only (wiped on quit)", action: #selector(setSessionMode), keyEquivalent: "")
+        sessionItem.state = clipboardManager.mode == .session ? .on : .off
         sessionItem.image = icon("lock")
         sessionItem.target = self
 
-        let persistItem = NSMenuItem(title: (clipboardManager.mode == .persistent ? "✓ " : "   ") + "Persistent (kept on quit)", action: #selector(setPersistentMode), keyEquivalent: "")
+        let persistItem = NSMenuItem(title: "Persistent (kept on quit)", action: #selector(setPersistentMode), keyEquivalent: "")
+        persistItem.state = clipboardManager.mode == .persistent ? .on : .off
         persistItem.image = icon("externaldrive.fill")
         persistItem.target = self
 
@@ -750,7 +752,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let msub = NSMenu()
         let limits = [50, 100, 200, 500]
         for limit in limits {
-            let item = NSMenuItem(title: (clipboardManager.maxHistorySize == limit ? "✓ " : "   ") + "\(limit) Items", action: #selector(setMaxItems(_:)), keyEquivalent: "")
+            let item = NSMenuItem(title: "\(limit) Items", action: #selector(setMaxItems(_:)), keyEquivalent: "")
+            item.state = clipboardManager.maxHistorySize == limit ? .on : .off
             item.tag = limit
             item.target = self
             msub.addItem(item)
@@ -758,22 +761,26 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         maxItems.submenu = msub
         menu.addItem(maxItems)
 
-        let concealItem = NSMenuItem(title: (clipboardManager.skipConcealed ? "✓ " : "   ") + "Skip password-manager copies", action: #selector(toggleConcealed), keyEquivalent: "")
+        let concealItem = NSMenuItem(title: "Skip password-manager copies", action: #selector(toggleConcealed), keyEquivalent: "")
+        concealItem.state = clipboardManager.skipConcealed ? .on : .off
         concealItem.image = icon("eye.slash")
         concealItem.target = self
         menu.addItem(concealItem)
 
-        let imgItem = NSMenuItem(title: (clipboardManager.showImageDimensions ? "✓ " : "   ") + "Show image dimensions", action: #selector(toggleImageDim), keyEquivalent: "")
+        let imgItem = NSMenuItem(title: "Show image dimensions", action: #selector(toggleImageDim), keyEquivalent: "")
+        imgItem.state = clipboardManager.showImageDimensions ? .on : .off
         imgItem.image = icon("photo")
         imgItem.target = self
         menu.addItem(imgItem)
 
-        let launchItem = NSMenuItem(title: (SMAppService.mainApp.status == .enabled ? "✓ " : "   ") + "Launch at Login", action: #selector(toggleLaunch), keyEquivalent: "")
+        let launchItem = NSMenuItem(title: "Launch at Login", action: #selector(toggleLaunch), keyEquivalent: "")
+        launchItem.state = SMAppService.mainApp.status == .enabled ? .on : .off
         launchItem.image = icon("macwindow")
         launchItem.target = self
         menu.addItem(launchItem)
 
-        let resizeItem = NSMenuItem(title: (clipboardManager.resizableMenu ? "✓ " : "   ") + "Resizable Menu", action: #selector(toggleResizableMenu), keyEquivalent: "")
+        let resizeItem = NSMenuItem(title: "Resizable Menu", action: #selector(toggleResizableMenu), keyEquivalent: "")
+        resizeItem.state = clipboardManager.resizableMenu ? .on : .off
         resizeItem.image = icon("arrow.up.and.down")
         resizeItem.target = self
         menu.addItem(resizeItem)
