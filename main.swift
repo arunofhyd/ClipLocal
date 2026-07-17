@@ -1150,8 +1150,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         container.material = .hudWindow
         container.state = .active
         container.wantsLayer = true
-        container.layer?.cornerRadius = 12
-        container.layer?.masksToBounds = true
+
+        let mask = NSImage(size: container.bounds.size, flipped: false) { rect in
+            NSColor.black.set()
+            NSBezierPath(roundedRect: rect, xRadius: 12, yRadius: 12).fill()
+            return true
+        }
+        container.maskImage = mask
 
         let title = NSTextField(labelWithString: "✓ Copied")
         title.frame = NSRect(x: 14, y: height - 26, width: width - 28, height: 18)
