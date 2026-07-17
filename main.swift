@@ -744,6 +744,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         clear.image = icon("trash")
         clear.target = self
         menu.addItem(clear)
+        
+        let unpin = NSMenuItem(title: "Unpin All", action: #selector(unpinAll), keyEquivalent: "")
+        unpin.image = icon("pin.slash")
+        unpin.target = self
+        menu.addItem(unpin)
 
         menu.addItem(.separator())
 
@@ -827,6 +832,20 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     @objc func clearHistory() {
         clipboardManager.history.removeAll()
         clipboardManager.clearHistoryFile()
+    }
+    
+    @objc func unpinAll() {
+        var didChange = false
+        for i in 0..<clipboardManager.history.count {
+            if clipboardManager.history[i].pinned {
+                clipboardManager.history[i].pinned = false
+                didChange = true
+            }
+        }
+        if didChange {
+            clipboardManager.history.sort { $0.date > $1.date }
+            clipboardManager.persistIfNeeded()
+        }
     }
 
     @objc func setSessionMode() {
