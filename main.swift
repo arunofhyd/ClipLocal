@@ -241,38 +241,9 @@ struct ContentView: View {
                         .frame(maxWidth: .infinity, alignment: .center)
                         .padding()
                 } else if manager.activeFilters.isEmpty && manager.currentSearchText.isEmpty {
-                    let pinned = filteredHistory.filter { $0.pinned }
-                    let recent = filteredHistory.filter { !$0.pinned }
-
-                    if !pinned.isEmpty {
-                        Text("Pinned")
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundColor(.secondary)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 4)
-                            .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
-                            .listRowSeparator(.hidden)
-                            .listRowBackground(Color.clear)
-
-                        ForEach(pinned) { item in
-                            clipItemRow(item, shortcutIndex: nil)
-                        }
-                    }
-
-                    if !recent.isEmpty {
-                        Text("Recent")
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundColor(.secondary)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 4)
-                            .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
-                            .listRowSeparator(.hidden)
-                            .listRowBackground(Color.clear)
-
-                        ForEach(recent) { item in
-                            let idx = recent.firstIndex(of: item) ?? 99
-                            clipItemRow(item, shortcutIndex: idx < 9 ? idx : nil)
-                        }
+                    ForEach(filteredHistory) { item in
+                        let idx = filteredHistory.firstIndex(of: item) ?? 99
+                        clipItemRow(item, shortcutIndex: idx < 9 ? idx : nil)
                     }
                 } else {
                     ForEach(filteredHistory) { item in
@@ -300,6 +271,9 @@ struct ContentView: View {
                             .onChanged { value in
                                 if dragStartHeight == nil {
                                     dragStartHeight = manager.menuHeight
+                                    if let appDelegate = NSApp.delegate as? AppDelegate {
+                                        appDelegate.popover.animates = false
+                                    }
                                 }
                                 if let start = dragStartHeight {
                                     let newHeight = max(300, min(1000, start + Double(value.translation.height)))
@@ -312,6 +286,9 @@ struct ContentView: View {
                             .onEnded { _ in
                                 dragStartHeight = nil
                                 manager.defaults.set(manager.menuHeight, forKey: "menuHeight")
+                                if let appDelegate = NSApp.delegate as? AppDelegate {
+                                    appDelegate.popover.animates = true
+                                }
                             }
                     )
                     .onHover { isHovering in
@@ -465,6 +442,8 @@ struct ContentView: View {
 
         if manager.activeFilters.contains("pinned") {
             result = result.filter { $0.pinned }
+        } else {
+            result = result.filter { !$0.pinned }
         }
 
         let typeFilters = manager.activeFilters.subtracting(["pinned"])
