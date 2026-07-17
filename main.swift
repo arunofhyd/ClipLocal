@@ -417,14 +417,14 @@ struct ContentView: View {
             Button(role: .destructive) {
                 deleteItem(item)
             } label: {
-                Label("Delete", systemImage: "trash")
+                Image(nsImage: .swipeActionImage(systemName: "trash", text: "Delete"))
             }
         }
         .swipeActions(edge: .leading, allowsFullSwipe: true) {
             Button {
                 togglePin(item)
             } label: {
-                Label(item.pinned ? "Unpin" : "Pin", systemImage: item.pinned ? "pin.slash" : "pin")
+                Image(nsImage: .swipeActionImage(systemName: item.pinned ? "pin.slash" : "pin", text: item.pinned ? "Unpin" : "Pin"))
             }
             .tint(.orange)
         }
@@ -1216,6 +1216,34 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             alert.addButton(withTitle: "OK")
             alert.runModal()
         }
+    }
+}
+
+extension NSImage {
+    static func swipeActionImage(systemName: String, text: String) -> NSImage {
+        let config = NSImage.SymbolConfiguration(pointSize: 14, weight: .semibold)
+        let icon = NSImage(systemSymbolName: systemName, accessibilityDescription: nil)?.withSymbolConfiguration(config) ?? NSImage()
+        
+        let font = NSFont.systemFont(ofSize: 14, weight: .semibold)
+        let attributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: NSColor.white]
+        let textSize = (text as NSString).size(withAttributes: attributes)
+        
+        let spacing: CGFloat = 6
+        let width = icon.size.width + spacing + textSize.width
+        let height = max(icon.size.height, textSize.height)
+        
+        let image = NSImage(size: NSSize(width: width, height: height))
+        image.lockFocus()
+        
+        let iconRect = NSRect(x: 0, y: (height - icon.size.height) / 2, width: icon.size.width, height: icon.size.height)
+        icon.draw(in: iconRect)
+        
+        let textRect = NSRect(x: icon.size.width + spacing, y: (height - textSize.height) / 2, width: textSize.width, height: textSize.height)
+        (text as NSString).draw(in: textRect, withAttributes: attributes)
+        
+        image.unlockFocus()
+        image.isTemplate = true
+        return image
     }
 }
 
