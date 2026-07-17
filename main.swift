@@ -673,6 +673,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             img?.isTemplate = true
             btn.image = img
             btn.action = #selector(togglePopover(_:))
+            btn.sendAction(on: [.leftMouseUp, .rightMouseUp])
         }
 
         buildSettingsMenu()
@@ -687,6 +688,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc func togglePopover(_ sender: AnyObject?) {
+        if let event = NSApp.currentEvent, event.type == .rightMouseUp || (event.type == .leftMouseUp && event.modifierFlags.contains(.control)) {
+            showSettingsMenu()
+            return
+        }
+
         if popover.isShown {
             closePopover()
         } else {
