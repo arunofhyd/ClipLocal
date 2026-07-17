@@ -308,9 +308,8 @@ struct ContentView: View {
 
     @ViewBuilder
     func clipItemRow(_ item: ClipItem, shortcutIndex: Int?) -> some View {
-        VStack(spacing: 0) {
-            HStack(alignment: .center, spacing: 16) {
-                Image(systemName: iconName(for: item.text))
+        HStack(alignment: .center, spacing: 16) {
+            Image(systemName: iconName(for: item.text))
                     .font(.system(size: 16, weight: .light))
                     .foregroundColor(.secondary)
                     .frame(width: 24)
@@ -399,9 +398,6 @@ struct ContentView: View {
         }
         .padding(.vertical, 8)
         .padding(.horizontal, 12)
-
-        Divider()
-        }
         .contentShape(Rectangle())
         .onTapGesture(count: 2) {
             copyItem(item)
@@ -433,7 +429,7 @@ struct ContentView: View {
             .tint(.orange)
         }
         .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
-        .listRowSeparator(.hidden)
+        .listRowSeparator(.visible)
     }
 
     // MARK: - Helpers
