@@ -1001,20 +1001,25 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let contact = NSButton(title: "Contact", target: self, action: #selector(contactDeveloper))
         let buttonsY = dontShow.frame.minY - 48
         contact.frame = NSRect(x: 40, y: buttonsY, width: 100, height: 32)
-        contact.bezelStyle = .rounded
+        contact.isBordered = false
         contact.wantsLayer = true
+        contact.layer?.backgroundColor = NSColor.controlColor.cgColor
         contact.layer?.cornerRadius = 16
         contact.layer?.masksToBounds = true
+        contact.attributedTitle = NSAttributedString(string: "Contact", attributes: [
+            .foregroundColor: NSColor.labelColor,
+            .font: NSFont.systemFont(ofSize: 13, weight: .medium)
+        ])
         bg.addSubview(contact)
 
         let close = NSButton(title: "Get Started", target: self, action: #selector(closeAbout))
         close.frame = NSRect(x: width - 160, y: buttonsY, width: 120, height: 32)
-        close.bezelStyle = .rounded
+        close.isBordered = false
         close.wantsLayer = true
+        close.layer?.backgroundColor = NSColor.controlAccentColor.cgColor
         close.layer?.cornerRadius = 16
         close.layer?.masksToBounds = true
         close.keyEquivalent = "\r"
-        close.bezelColor = NSColor.controlAccentColor
         close.attributedTitle = NSAttributedString(string: "Get Started", attributes: [
             .foregroundColor: NSColor.white,
             .font: NSFont.systemFont(ofSize: 13, weight: .medium)
