@@ -381,8 +381,11 @@ struct ContentView: View {
                     .font(.system(size: 16))
                     .foregroundColor(copiedItemId == item.id ? .white : Color.primary.opacity(0.6))
                     .frame(width: 36, height: 36)
-                    .background(copiedItemId == item.id ? Color.blue : Color.secondary.opacity(0.1))
+                    .background(copiedItemId == item.id ? Color.green : Color.secondary.opacity(0.1))
                     .clipShape(Circle())
+                    .scaleEffect(copiedItemId == item.id ? 0.85 : 1.0)
+                    .shadow(color: copiedItemId == item.id ? Color.green.opacity(0.5) : Color.clear, radius: copiedItemId == item.id ? 4 : 0)
+                    .animation(.spring(response: 0.3, dampingFraction: 0.5), value: copiedItemId)
             }
             .buttonStyle(PlainButtonStyle())
             .background(
