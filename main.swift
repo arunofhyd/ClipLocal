@@ -244,10 +244,20 @@ struct ContentView: View {
                     ForEach(filteredHistory) { item in
                         let idx = filteredHistory.firstIndex(of: item) ?? 99
                         clipItemRow(item, shortcutIndex: idx < 9 ? idx : nil)
+                        if item.id != filteredHistory.last?.id {
+                            Divider()
+                                .listRowInsets(EdgeInsets())
+                                .listRowSeparator(.hidden)
+                        }
                     }
                 } else {
                     ForEach(filteredHistory) { item in
                         clipItemRow(item, shortcutIndex: nil)
+                        if item.id != filteredHistory.last?.id {
+                            Divider()
+                                .listRowInsets(EdgeInsets())
+                                .listRowSeparator(.hidden)
+                        }
                     }
                 }
             }
@@ -429,8 +439,7 @@ struct ContentView: View {
             .tint(.orange)
         }
         .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
-        .listRowSeparator(.visible)
-        .alignmentGuide(.listRowSeparatorLeading) { _ in 0 }
+        .listRowSeparator(.hidden)
     }
 
     // MARK: - Helpers
