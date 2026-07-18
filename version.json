@@ -1,7 +1,14 @@
 {
-  "version": "1.0.0",
+  "version": "1.0.1",
   "downloadURL": "https://cliplocal.vercel.app/#install",
   "changelog": [
+    {
+      "version": "1.0.1",
+      "date": "August 2026",
+      "changes": [
+        "Added GitHub button and open source text to the About window."
+      ]
+    },
     {
       "version": "1.0.0",
       "date": "August 2026",
