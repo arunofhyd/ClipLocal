@@ -165,6 +165,7 @@ struct ContentView: View {
     @State private var expandedIdx: String? = nil
     @State private var copiedItemId: String? = nil
     @State private var dragStartHeight: Double? = nil
+    @Environment(\.colorScheme) var colorScheme
 
     var body: some View {
         VStack(spacing: 0) {
@@ -254,6 +255,7 @@ struct ContentView: View {
             }
             .listStyle(.plain)
             .background(Color.clear)
+            .scrollContentBackground(colorScheme == .light ? .hidden : .visible)
 
             if manager.resizableMenu {
                 VStack(spacing: 0) {
