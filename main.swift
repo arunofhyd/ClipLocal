@@ -676,8 +676,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         if let btn = statusItem.button {
-            let config = NSImage.SymbolConfiguration(pointSize: 18, weight: .medium)
-            let img = NSImage(systemSymbolName: "paperclip.circle", accessibilityDescription: "ClipLocal")?.withSymbolConfiguration(config)
+            let img = NSImage(systemSymbolName: "paperclip.circle", accessibilityDescription: "ClipLocal")
             img?.isTemplate = true
             btn.image = img
             btn.action = #selector(togglePopover(_:))
