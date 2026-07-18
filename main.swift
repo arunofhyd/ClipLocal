@@ -935,7 +935,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             ("key", "Skips Secrets", "By default, passwords copied from 1Password, Bitwarden, etc., are completely ignored."),
             ("eye.slash", "No Analytics", "Zero telemetry. The app only connects to GitHub manually when you check for updates."),
             ("externaldrive.fill", "Encrypted Storage", "In Persistent mode, your history is encrypted (AES-GCM) on disk. Only your Mac account can read it."),
-            ("gift", "Free & Open Source", "ClipLocal is completely free and open source. Check out the code on GitHub.")
+            ("chevron.left.forwardslash.chevron.right", "Free & Open Source", "ClipLocal is completely free and open source. Check out the code on GitHub.")
         ]
 
         let bodyWidth = width - 80
@@ -1033,9 +1033,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         dontShow.state = defaults.bool(forKey: "hideAbout") ? .on : .off
         bg.addSubview(dontShow)
 
+        let contactW: CGFloat = 100
+        let gitW: CGFloat = 32
+        let spacing: CGFloat = 16
+        let totalW = contactW + spacing + gitW
+        let startX = (width - totalW) / 2
+        
         let contact = NSButton(title: "Contact", target: self, action: #selector(contactDeveloper))
         let buttonsY = dontShow.frame.minY - 48
-        contact.frame = NSRect(x: 40, y: buttonsY, width: 100, height: 32)
+        contact.frame = NSRect(x: startX, y: buttonsY, width: contactW, height: 32)
         contact.isBordered = false
         contact.wantsLayer = true
         contact.layer?.backgroundColor = NSColor.controlColor.cgColor
@@ -1047,32 +1053,18 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         ])
         bg.addSubview(contact)
 
-        let github = NSButton(title: "GitHub", target: self, action: #selector(openGitHub))
-        github.frame = NSRect(x: 150, y: buttonsY, width: 100, height: 32)
+        let github = NSButton(title: "", target: self, action: #selector(openGitHub))
+        github.frame = NSRect(x: startX + contactW + spacing, y: buttonsY, width: gitW, height: 32)
         github.isBordered = false
         github.wantsLayer = true
         github.layer?.backgroundColor = NSColor.controlColor.cgColor
         github.layer?.cornerRadius = 16
         github.layer?.masksToBounds = true
-        github.attributedTitle = NSAttributedString(string: "GitHub", attributes: [
-            .foregroundColor: NSColor.labelColor,
-            .font: NSFont.systemFont(ofSize: 13, weight: .medium)
-        ])
+        let ghCfg = NSImage.SymbolConfiguration(pointSize: 14, weight: .semibold)
+        github.image = NSImage(systemSymbolName: "chevron.left.forwardslash.chevron.right", accessibilityDescription: nil)?.withSymbolConfiguration(ghCfg)
+        github.imagePosition = .imageOnly
+        github.contentTintColor = .labelColor
         bg.addSubview(github)
-
-        let close = NSButton(title: "Get Started", target: self, action: #selector(closeAbout))
-        close.frame = NSRect(x: width - 160, y: buttonsY, width: 120, height: 32)
-        close.isBordered = false
-        close.wantsLayer = true
-        close.layer?.backgroundColor = NSColor.controlAccentColor.cgColor
-        close.layer?.cornerRadius = 16
-        close.layer?.masksToBounds = true
-        close.keyEquivalent = "\r"
-        close.attributedTitle = NSAttributedString(string: "Get Started", attributes: [
-            .foregroundColor: NSColor.white,
-            .font: NSFont.systemFont(ofSize: 13, weight: .medium)
-        ])
-        bg.addSubview(close)
 
         win.contentView = bg
         win.makeKeyAndOrderFront(nil)
