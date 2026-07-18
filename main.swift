@@ -6,7 +6,7 @@ import ServiceManagement
 //  ClipLocal — 100% on-device clipboard history, no third parties
 // ============================================================
 
-let appVersion = "1.0.0"
+let appVersion = "1.0.1"
 let updateCheckURL = "https://raw.githubusercontent.com/arunofhyd/ClipLocal/main/version.json"
 let downloadPageURL = "https://cliplocal.vercel.app/#install"
 
@@ -934,7 +934,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             ("lock.shield", "100% On-Device & Private", "Your clipboard data never leaves your Mac. No cloud, no tracking, no accounts."),
             ("key", "Skips Secrets", "By default, passwords copied from 1Password, Bitwarden, etc., are completely ignored."),
             ("eye.slash", "No Analytics", "Zero telemetry. The app only connects to GitHub manually when you check for updates."),
-            ("externaldrive.fill", "Encrypted Storage", "In Persistent mode, your history is encrypted (AES-GCM) on disk. Only your Mac account can read it.")
+            ("externaldrive.fill", "Encrypted Storage", "In Persistent mode, your history is encrypted (AES-GCM) on disk. Only your Mac account can read it."),
+            ("gift", "Free & Open Source", "ClipLocal is completely free and open source. Check out the code on GitHub.")
         ]
 
         let bodyWidth = width - 80
@@ -1046,6 +1047,19 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         ])
         bg.addSubview(contact)
 
+        let github = NSButton(title: "GitHub", target: self, action: #selector(openGitHub))
+        github.frame = NSRect(x: 150, y: buttonsY, width: 100, height: 32)
+        github.isBordered = false
+        github.wantsLayer = true
+        github.layer?.backgroundColor = NSColor.controlColor.cgColor
+        github.layer?.cornerRadius = 16
+        github.layer?.masksToBounds = true
+        github.attributedTitle = NSAttributedString(string: "GitHub", attributes: [
+            .foregroundColor: NSColor.labelColor,
+            .font: NSFont.systemFont(ofSize: 13, weight: .medium)
+        ])
+        bg.addSubview(github)
+
         let close = NSButton(title: "Get Started", target: self, action: #selector(closeAbout))
         close.frame = NSRect(x: width - 160, y: buttonsY, width: 120, height: 32)
         close.isBordered = false
@@ -1070,6 +1084,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let subject = "ClipLocal feedback"
         let encoded = subject.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? subject
         if let url = URL(string: "mailto:arunthomas04042001@gmail.com?subject=\(encoded)") {
+            NSWorkspace.shared.open(url)
+        }
+    }
+
+    @objc func openGitHub() {
+        if let url = URL(string: "https://github.com/arunofhyd/ClipLocal") {
             NSWorkspace.shared.open(url)
         }
     }
