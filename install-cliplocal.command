@@ -75,8 +75,13 @@ img.lockFocus()
 
 guard let ctx = NSGraphicsContext.current?.cgContext else { fatalError() }
 
+// macOS icon padding: bounding box is typically ~824x824 inside a 1024 canvas
+let padding: CGFloat = 100
+let size = px - 2 * padding
+ctx.translateBy(x: padding, y: padding)
+
 // Scale up to use 120x120 SVG coordinate space, flipped for standard SVG rendering
-let scale = px / 120.0
+let scale = size / 120.0
 ctx.scaleBy(x: scale, y: scale)
 ctx.translateBy(x: 0, y: 120)
 ctx.scaleBy(x: 1, y: -1)
