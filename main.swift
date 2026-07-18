@@ -1062,11 +1062,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         github.frame = NSRect(x: startX + contactW + spacing, y: buttonsY, width: gitW, height: 32)
         github.isBordered = false
         github.wantsLayer = true
-        github.layer?.backgroundColor = NSColor.controlColor.cgColor
+        github.layer?.backgroundColor = NSColor.black.cgColor
         github.layer?.cornerRadius = 16
         github.layer?.masksToBounds = true
         github.attributedTitle = NSAttributedString(string: "GitHub", attributes: [
-            .foregroundColor: NSColor.labelColor,
+            .foregroundColor: NSColor.white,
             .font: NSFont.systemFont(ofSize: 13, weight: .medium)
         ])
         bg.addSubview(github)
