@@ -531,7 +531,9 @@ struct ContentView: View {
         }
 
         manager.lastChangeCount = pb.changeCount
-        NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .default)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .default)
+        }
 
         withAnimation {
             copiedItemId = item.id
