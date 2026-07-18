@@ -75,52 +75,72 @@ img.lockFocus()
 
 guard let ctx = NSGraphicsContext.current?.cgContext else { fatalError() }
 
-// macOS icon padding: bounding box is typically ~824x824 inside a 1024 canvas
-let padding: CGFloat = 100
-let size = px - 2 * padding
-// Transform context to center the 824x824 icon
-ctx.translateBy(x: padding, y: padding)
-let scale = size / px
+// Scale up to use 120x120 SVG coordinate space, flipped for standard SVG rendering
+let scale = px / 120.0
 ctx.scaleBy(x: scale, y: scale)
+ctx.translateBy(x: 0, y: 120)
+ctx.scaleBy(x: 1, y: -1)
 
-// Apple-blue rounded-rect background with a subtle vertical gradient.
-let bg = NSBezierPath(roundedRect: NSRect(x: 0, y: 0, width: px, height: px),
-                      xRadius: 230, yRadius: 230)
-bg.addClip()
+// Background
+let bgPath = CGPath(roundedRect: CGRect(x: 0, y: 0, width: 120, height: 120), cornerWidth: 27, cornerHeight: 27, transform: nil)
+ctx.addPath(bgPath)
+ctx.clip()
+
 let top = NSColor(calibratedRed: 0.16, green: 0.55, blue: 1.00, alpha: 1.0)
 let bot = NSColor(calibratedRed: 0.00, green: 0.40, blue: 0.95, alpha: 1.0)
-NSGradient(starting: top, ending: bot)?.draw(in: NSRect(x: 0, y: 0, width: px, height: px), angle: -90)
+if let bgGrad = NSGradient(starting: top, ending: bot) {
+    bgGrad.draw(from: NSPoint(x: 0, y: 0), to: NSPoint(x: 0, y: 120), options: [])
+}
 
-// Inner shine gradient
-NSGraphicsContext.saveGraphicsState()
-let shinePadding: CGFloat = 8
-let rect = CGRect(x: shinePadding, y: shinePadding, width: px - 2 * shinePadding, height: px - 2 * shinePadding)
-let shinePath = CGPath(roundedRect: rect, cornerWidth: 230 - shinePadding, cornerHeight: 230 - shinePadding, transform: nil)
+// Inner shine
+ctx.saveGState()
+let shinePath = CGPath(roundedRect: CGRect(x: 1, y: 1, width: 118, height: 118), cornerWidth: 26, cornerHeight: 26, transform: nil)
 ctx.addPath(shinePath)
-ctx.setLineWidth(16)
+ctx.setLineWidth(2)
 ctx.replacePathWithStrokedPath()
 ctx.clip()
 let shine0 = NSColor(white: 1.0, alpha: 0.6)
 let shine1 = NSColor(white: 1.0, alpha: 0.0)
 if let shineGrad = NSGradient(colors: [shine0, shine1, shine1, shine0], atLocations: [0.0, 0.3, 0.7, 1.0], colorSpace: .sRGB) {
-    shineGrad.draw(from: NSPoint(x: 0, y: px), to: NSPoint(x: px, y: 0), options: [])
+    shineGrad.draw(from: NSPoint(x: 0, y: 0), to: NSPoint(x: 0, y: 120), options: [])
 }
-NSGraphicsContext.restoreGraphicsState()
+ctx.restoreGState()
 
-// White paperclip-in-circle glyph, centered.
-let cfg = NSImage.SymbolConfiguration(pointSize: 560, weight: .semibold)
-if let sym = NSImage(systemSymbolName: "paperclip.circle", accessibilityDescription: nil)?
-        .withSymbolConfiguration(cfg) {
-    let s = sym.size
-    let tinted = NSImage(size: s)
-    tinted.lockFocus()
-    sym.draw(in: NSRect(origin: .zero, size: s))
-    NSColor.white.set()
-    NSRect(origin: .zero, size: s).fill(using: .sourceAtop)
-    tinted.unlockFocus()
-    let rect = NSRect(x: (px - s.width)/2, y: (px - s.height)/2, width: s.width, height: s.height)
-    tinted.draw(in: rect, from: .zero, operation: .sourceOver, fraction: 1.0)
-}
+// Outer circle
+ctx.saveGState()
+let circlePath = CGPath(ellipseIn: CGRect(x: 18, y: 18, width: 84, height: 84), transform: nil)
+ctx.addPath(circlePath)
+ctx.setLineWidth(4)
+ctx.setStrokeColor(NSColor.white.cgColor)
+ctx.strokePath()
+ctx.restoreGState()
+
+// Paperclip
+ctx.saveGState()
+ctx.translateBy(x: 60, y: 60)
+ctx.rotate(by: 45 * .pi / 180) // 45 deg clockwise
+ctx.scaleBy(x: 0.7, y: 0.7)
+ctx.translateBy(x: -60, y: -60)
+
+let p = CGMutablePath()
+p.move(to: CGPoint(x: 54, y: 50))
+p.addLine(to: CGPoint(x: 54, y: 70))
+p.addArc(tangent1End: CGPoint(x: 54, y: 76), tangent2End: CGPoint(x: 60, y: 76), radius: 6)
+p.addArc(tangent1End: CGPoint(x: 66, y: 76), tangent2End: CGPoint(x: 66, y: 70), radius: 6)
+p.addLine(to: CGPoint(x: 66, y: 42))
+p.addArc(tangent1End: CGPoint(x: 66, y: 32), tangent2End: CGPoint(x: 56, y: 32), radius: 10)
+p.addArc(tangent1End: CGPoint(x: 46, y: 32), tangent2End: CGPoint(x: 46, y: 42), radius: 10)
+p.addLine(to: CGPoint(x: 46, y: 74))
+p.addArc(tangent1End: CGPoint(x: 46, y: 88), tangent2End: CGPoint(x: 60, y: 88), radius: 14)
+p.addArc(tangent1End: CGPoint(x: 74, y: 88), tangent2End: CGPoint(x: 74, y: 74), radius: 14)
+p.addLine(to: CGPoint(x: 74, y: 46))
+
+ctx.addPath(p)
+ctx.setLineWidth(5.5)
+ctx.setLineCap(.round)
+ctx.setStrokeColor(NSColor.white.cgColor)
+ctx.strokePath()
+ctx.restoreGState()
 
 img.unlockFocus()
 if let tiff = img.tiffRepresentation,
