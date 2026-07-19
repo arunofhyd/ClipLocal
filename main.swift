@@ -6,7 +6,7 @@ import ServiceManagement
 //  ClipLocal — 100% on-device clipboard history, no third parties
 // ============================================================
 
-let appVersion = "1.0.5"
+let appVersion = "1.0.6"
 let updateCheckURL = "https://raw.githubusercontent.com/arunofhyd/ClipLocal/main/version.json"
 let downloadPageURL = "https://cliplocal.vercel.app/#install"
 
@@ -94,7 +94,7 @@ extension ClipItem {
 /// Reused across all rows — DateFormatter is expensive to construct.
 private let sharedDateFormatter: DateFormatter = {
     let f = DateFormatter()
-    f.dateFormat = "d MMM yyyy 'at' h:mm a"
+    f.dateFormat = "d MMM, h:mm a"
     return f
 }()
 
@@ -124,8 +124,9 @@ final class AppIconCache {
 
 /// Module-level helper so both ContentView and ClipItemRowView can share
 /// the same type-detection logic without duplicating it.
-func clipItemType(for text: String) -> String {
-    let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
+func clipItemType(for item: ClipItem) -> String {
+    if item.imageData != nil { return "image" }
+    let t = item.text.trimmingCharacters(in: .whitespacesAndNewlines)
     if t.hasPrefix("http://") || t.hasPrefix("https://") || t.hasPrefix("www.") { return "link" }
     let parts = t.split(separator: "@")
     if parts.count == 2 && parts[1].contains(".") && !t.contains(" ") { return "email" }
@@ -408,7 +409,7 @@ struct ContentView: View {
         let typeFilters = manager.activeFilters.subtracting(["pinned"])
         if !typeFilters.isEmpty {
             result = result.filter { item in
-                let type = clipItemType(for: item.text)
+                let type = clipItemType(for: item)
                 return typeFilters.contains(type)
             }
         }
@@ -441,7 +442,7 @@ struct ClipItemRowView: View {
     @State private var isHovered = false
 
     // MARK: Memoised helpers (computed once per render, not on every sub-view)
-    private var itemType: String { clipItemType(for: item.text) }
+    private var itemType: String { clipItemType(for: item) }
 
     private var iconSystemName: String {
         switch itemType {
@@ -479,30 +480,26 @@ struct ClipItemRowView: View {
 
     var body: some View {
         HStack(alignment: .center, spacing: 16) {
-            Image(systemName: iconSystemName)
-                .font(.system(size: 16, weight: .light))
-                .foregroundColor(.secondary)
-                .frame(width: 24)
+            if let imageData = item.imageData, let nsImage = NSImage(data: imageData) {
+                Image(nsImage: nsImage)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: 32, height: 32)
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+            } else {
+                Image(systemName: iconSystemName)
+                    .font(.system(size: 16, weight: .light))
+                    .foregroundColor(.secondary)
+                    .frame(width: 32)
+            }
 
             VStack(alignment: .leading, spacing: 6) {
-                Text(snippet)
-                    .lineLimit(expandedIdx == item.id ? 5 : 1)
-                    .truncationMode(.tail)
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundColor(.primary)
-
-                if let imageData = item.imageData, let nsImage = NSImage(data: imageData) {
-                    HStack(spacing: 8) {
-                        Image(nsImage: nsImage)
-                            .resizable()
-                            .scaledToFill()
-                            .frame(width: 48, height: 48)
-                            .clipShape(RoundedRectangle(cornerRadius: 4))
-                        
-                        Text("\(Int(nsImage.size.width)) × \(Int(nsImage.size.height))")
-                            .font(.system(size: 11))
-                            .foregroundColor(.secondary)
-                    }
+                if snippet != "[Image]" {
+                    Text(snippet)
+                        .lineLimit(expandedIdx == item.id ? 5 : 1)
+                        .truncationMode(.tail)
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(.primary)
                 }
 
                 HStack(spacing: 4) {
@@ -513,13 +510,19 @@ struct ClipItemRowView: View {
                         .frame(width: 12, height: 12)
                         .clipShape(Circle())
 
-                    Text(typeLabel)
-                        .font(.system(size: 11))
-                        .foregroundColor(.secondary)
+                    if let imageData = item.imageData, let nsImage = NSImage(data: imageData) {
+                        Text("\(Int(nsImage.size.width)) × \(Int(nsImage.size.height))")
+                            .font(.system(size: 11))
+                            .foregroundColor(.secondary)
+                    } else {
+                        Text(typeLabel)
+                            .font(.system(size: 11))
+                            .foregroundColor(.secondary)
+                    }
                     Text("·")
                         .font(.system(size: 11))
                         .foregroundColor(.secondary)
-                    Text("Copied \(formattedDate)")
+                    Text(formattedDate)
                         .font(.system(size: 11))
                         .foregroundColor(.secondary)
 
@@ -1220,7 +1223,25 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         } else if let images = pb.readObjects(forClasses: [NSImage.self], options: nil) as? [NSImage], let img = images.first {
             if let tiff = img.tiffRepresentation, let rep = NSBitmapImageRep(data: tiff), let png = rep.representation(using: .png, properties: [:]) {
                 newImage = png
-                newText = "[Image]"
+                var extractedName = "[Image]"
+                if let html = pb.string(forType: NSPasteboard.PasteboardType("public.html")) {
+                    if let range = html.range(of: "alt=\"([^\"]+)\"", options: .regularExpression) {
+                        let alt = String(html[range]).replacingOccurrences(of: "alt=\"", with: "").replacingOccurrences(of: "\"", with: "")
+                        if !alt.isEmpty { extractedName = alt }
+                    } else if let range = html.range(of: "src=\"([^\"]+)\"", options: .regularExpression) {
+                        let src = String(html[range]).replacingOccurrences(of: "src=\"", with: "").replacingOccurrences(of: "\"", with: "")
+                        if let url = URL(string: src) {
+                            let filename = url.lastPathComponent.removingPercentEncoding ?? url.lastPathComponent
+                            if !filename.isEmpty { extractedName = filename }
+                        }
+                    }
+                }
+                
+                if extractedName == "[Image]" {
+                    let possibleName = pb.string(forType: .string)?.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if let name = possibleName, !name.isEmpty { extractedName = name }
+                }
+                newText = extractedName
             }
         } else if let str = pb.string(forType: .string) {
             let t = str.trimmingCharacters(in: .whitespacesAndNewlines)

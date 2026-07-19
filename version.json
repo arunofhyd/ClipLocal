@@ -1,7 +1,18 @@
 {
-  "version": "1.0.5",
+  "version": "1.0.6",
   "downloadURL": "https://cliplocal.vercel.app/#install",
   "changelog": [
+    {
+      "version": "1.0.6",
+      "date": "2026-07-19",
+      "changes": [
+        "Major UI enhancement for image copies: Thumbnail moved to icon position.",
+        "Smarter image titles: Automatically extracts filenames from browser copies instead of saying [Image].",
+        "Streamlined metadata text: Date format shortened and image dimensions accurately displayed on one line.",
+        "Removed 'Show image dimensions' toggle in favor of native UI display.",
+        "Fixed issue where images with extracted filenames were incorrectly filtered as text."
+      ]
+    },
     {
       "version": "1.0.5",
       "date": "2026-07-19",
