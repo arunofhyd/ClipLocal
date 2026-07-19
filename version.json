@@ -1,7 +1,20 @@
 {
-  "version": "1.0.4",
+  "version": "1.0.5",
   "downloadURL": "https://cliplocal.vercel.app/#install",
   "changelog": [
+    {
+      "version": "1.0.5",
+      "date": "2026-07-19",
+      "changes": [
+        "Clipboard items now have a stable UUID identity — no more ghost references after copying.",
+        "History now saves in the background — no more main-thread stutter on copy.",
+        "Trimming history now correctly syncs to disk immediately.",
+        "'Keep up to' limit expanded to 1,000 items.",
+        "Reducing the item limit now shows a confirmation before deleting older entries.",
+        "Copy-button checkmark no longer shows stale state when reopening ClipLocal.",
+        "'Get Started' on the About screen no longer accidentally closes the popover."
+      ]
+    },
     {
       "version": "1.0.4",
       "date": "2026-07-19",

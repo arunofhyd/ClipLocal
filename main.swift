@@ -6,7 +6,7 @@ import ServiceManagement
 //  ClipLocal — 100% on-device clipboard history, no third parties
 // ============================================================
 
-let appVersion = "1.0.4"
+let appVersion = "1.0.5"
 let updateCheckURL = "https://raw.githubusercontent.com/arunofhyd/ClipLocal/main/version.json"
 let downloadPageURL = "https://cliplocal.vercel.app/#install"
 
@@ -56,7 +56,8 @@ struct CryptoHelper {
 
 // MARK: - Models
 struct ClipItem: Codable, Identifiable, Hashable {
-    var id: String { text + String(date.timeIntervalSince1970) }
+    /// Stable UUID — never changes, even when the item's date is refreshed after a copy.
+    var id: String = UUID().uuidString
     let text: String
     var date: Date
     var pinned: Bool = false
@@ -65,12 +66,26 @@ struct ClipItem: Codable, Identifiable, Hashable {
     var isRemote: Bool?
 
     func hash(into hasher: inout Hasher) {
-        hasher.combine(text)
-        hasher.combine(date)
+        hasher.combine(id)
     }
 
     static func == (lhs: ClipItem, rhs: ClipItem) -> Bool {
-        return lhs.text == rhs.text && lhs.date == rhs.date
+        return lhs.id == rhs.id
+    }
+}
+
+extension ClipItem {
+    /// Custom decoder so existing saved items that predate the stable-id field
+    /// get a freshly generated UUID instead of crashing on a missing key.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id   = (try? c.decode(String.self, forKey: .id)) ?? UUID().uuidString
+        text = try c.decode(String.self, forKey: .text)
+        date = try c.decode(Date.self,   forKey: .date)
+        pinned                    = (try? c.decode(Bool.self,   forKey: .pinned))                    ?? false
+        imageData                 =  try? c.decode(Data.self,   forKey: .imageData)
+        sourceAppBundleIdentifier =  try? c.decode(String.self, forKey: .sourceAppBundleIdentifier)
+        isRemote                  =  try? c.decode(Bool.self,   forKey: .isRemote)
     }
 }
 
@@ -87,14 +102,12 @@ private let sharedDateFormatter: DateFormatter = {
 /// once per bundle identifier during a session.
 final class AppIconCache {
     static let shared = AppIconCache()
-    private var cache: [String: NSImage] = [:]
-    private let lock = NSLock()
+    /// NSCache is thread-safe — no manual locking needed.
+    private let cache = NSCache<NSString, NSImage>()
 
     func icon(forBundleID bundleID: String?) -> NSImage {
-        let key = bundleID ?? "__finder__"
-        lock.lock()
-        if let cached = cache[key] { lock.unlock(); return cached }
-        lock.unlock()
+        let key = (bundleID ?? "__finder__") as NSString
+        if let cached = cache.object(forKey: key) { return cached }
 
         let img: NSImage
         if let bid = bundleID,
@@ -104,9 +117,7 @@ final class AppIconCache {
             img = NSWorkspace.shared.icon(forFile: "/System/Library/CoreServices/Finder.app")
         }
 
-        lock.lock()
-        cache[key] = img
-        lock.unlock()
+        cache.setObject(img, forKey: key)
         return img
     }
 }
@@ -142,6 +153,8 @@ class ClipboardManager: ObservableObject {
     let key = KeyStore.loadOrCreateKey()
     let defaults = UserDefaults.standard
     var lastChangeCount = NSPasteboard.general.changeCount
+    /// Serial background queue for encrypt + disk-write so the main thread never blocks.
+    private let saveQueue = DispatchQueue(label: "com.cliplocal.history.save", qos: .utility)
 
     var mode: PrivacyMode {
         get { PrivacyMode(rawValue: defaults.string(forKey: "mode") ?? "persistent") ?? .persistent }
@@ -183,9 +196,20 @@ class ClipboardManager: ObservableObject {
     }
 
     func saveHistory() {
-        guard let data = try? JSONEncoder().encode(history),
-              let enc = try? CryptoHelper.encrypt(data, key: key) else { return }
-        try? enc.write(to: historyFile, options: .atomic)
+        // Capture values on the main thread, then encrypt + write in the background.
+        let snapshot = history
+        let encKey   = key
+        let url      = historyFile
+        saveQueue.async {
+            guard let data = try? JSONEncoder().encode(snapshot),
+                  let enc  = try? CryptoHelper.encrypt(data, key: encKey) else { return }
+            try? enc.write(to: url, options: .atomic)
+        }
+    }
+
+    /// Drain any pending background save — call on app quit to avoid data loss.
+    func flushPendingSave() {
+        saveQueue.sync {}
     }
 
     func clearHistoryFile() {
@@ -200,11 +224,12 @@ class ClipboardManager: ObservableObject {
         let max = maxHistorySize
         if history.count > max {
             // Keep pinned items
-            let pinned = history.filter { $0.pinned }
+            let pinned   = history.filter {  $0.pinned }
             let unpinned = history.filter { !$0.pinned }.prefix(Swift.max(0, max - pinned.count))
             history = pinned + Array(unpinned)
             // Sort back by date
             history.sort { $0.date > $1.date }
+            persistIfNeeded()  // keep the on-disk file in sync after a trim
         }
     }
 }
@@ -369,6 +394,10 @@ struct ContentView: View {
         }
         .frame(width: 450, height: CGFloat(manager.menuHeight))
         .background(Color.clear)
+        .onDisappear {
+            // Clear stale copy-button animation so it never shows on next open.
+            copiedItemId = nil
+        }
     }
 
     // MARK: - Helpers
@@ -824,6 +853,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         checkForUpdates(silentIfCurrent: true)
     }
 
+    func applicationWillTerminate(_ notification: Notification) {
+        // Wait for any in-flight background save to finish before the process exits.
+        clipboardManager.flushPendingSave()
+    }
+
     @objc func togglePopover(_ sender: AnyObject?) {
         if let event = NSApp.currentEvent, event.type == .rightMouseUp || (event.type == .leftMouseUp && event.modifierFlags.contains(.control)) {
             showSettingsMenu()
@@ -896,7 +930,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let maxItems = NSMenuItem(title: "Keep up to...", action: nil, keyEquivalent: "")
         maxItems.image = icon("list.number")
         let msub = NSMenu()
-        let limits = [50, 100, 200, 500]
+        let limits = [50, 100, 200, 500, 1000]
         for limit in limits {
             let item = NSMenuItem(title: "\(limit) Items", action: #selector(setMaxItems(_:)), keyEquivalent: "")
             item.state = clipboardManager.maxHistorySize == limit ? .on : .off
@@ -986,7 +1020,20 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     @objc func toggleImageDim() { clipboardManager.showImageDimensions.toggle() }
 
     @objc func setMaxItems(_ sender: NSMenuItem) {
-        clipboardManager.maxHistorySize = sender.tag
+        let newLimit = sender.tag
+        let currentCount = clipboardManager.history.count
+        if currentCount > newLimit {
+            let toDelete = currentCount - newLimit
+            let alert = NSAlert()
+            alert.messageText = "Trim Clipboard History?"
+            alert.informativeText = "Reducing to \(newLimit) items will permanently delete \(toDelete) older entr\(toDelete == 1 ? "y" : "ies"). This cannot be undone."
+            alert.alertStyle = .warning
+            alert.addButton(withTitle: "Trim History")
+            alert.addButton(withTitle: "Cancel")
+            NSApp.activate(ignoringOtherApps: true)
+            guard alert.runModal() == .alertFirstButtonReturn else { return }
+        }
+        clipboardManager.maxHistorySize = newLimit
     }
 
     @objc func toggleLaunch() {
@@ -1237,11 +1284,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         defaults.set(sender.state == .on, forKey: "hideAbout")
     }
 
-    @objc func closeAbout() { 
+    @objc func closeAbout() {
         aboutWindow?.close()
-        aboutWindow = nil 
-        if let button = statusItem?.button {
-            button.performClick(nil)
+        aboutWindow = nil
+        // Only open the popover if it isn’t already visible — avoids closing it instead of opening.
+        if !popover.isShown {
+            showPopover(statusItem?.button)
         }
     }
 
