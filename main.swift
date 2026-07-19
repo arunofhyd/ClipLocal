@@ -161,11 +161,6 @@ class ClipboardManager: ObservableObject {
         set { defaults.set(newValue.rawValue, forKey: "mode") }
     }
 
-    var showImageDimensions: Bool {
-        get { defaults.object(forKey: "showImageDimensions") as? Bool ?? false }
-        set { defaults.set(newValue, forKey: "showImageDimensions") }
-    }
-
     var skipConcealed: Bool {
         get { defaults.object(forKey: "skipConcealed") as? Bool ?? true }
         set { defaults.set(newValue, forKey: "skipConcealed") }
@@ -497,11 +492,17 @@ struct ClipItemRowView: View {
                     .foregroundColor(.primary)
 
                 if let imageData = item.imageData, let nsImage = NSImage(data: imageData) {
-                    Image(nsImage: nsImage)
-                        .resizable()
-                        .scaledToFill()
-                        .frame(width: 48, height: 48)
-                        .clipShape(RoundedRectangle(cornerRadius: 4))
+                    HStack(spacing: 8) {
+                        Image(nsImage: nsImage)
+                            .resizable()
+                            .scaledToFill()
+                            .frame(width: 48, height: 48)
+                            .clipShape(RoundedRectangle(cornerRadius: 4))
+                        
+                        Text("\(Int(nsImage.size.width)) × \(Int(nsImage.size.height))")
+                            .font(.system(size: 11))
+                            .foregroundColor(.secondary)
+                    }
                 }
 
                 HStack(spacing: 4) {
@@ -859,12 +860,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         concealItem.target = self
         menu.addItem(concealItem)
 
-        let imgItem = NSMenuItem(title: "Show image dimensions", action: #selector(toggleImageDim), keyEquivalent: "")
-        imgItem.state = clipboardManager.showImageDimensions ? .on : .off
-        imgItem.image = icon("photo")
-        imgItem.target = self
-        menu.addItem(imgItem)
-
         let launchItem = NSMenuItem(title: "Launch at Login", action: #selector(toggleLaunch), keyEquivalent: "")
         launchItem.state = SMAppService.mainApp.status == .enabled ? .on : .off
         launchItem.image = icon("macwindow")
@@ -929,7 +924,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc func toggleConcealed() { clipboardManager.skipConcealed.toggle() }
-    @objc func toggleImageDim() { clipboardManager.showImageDimensions.toggle() }
+
 
     @objc func setMaxItems(_ sender: NSMenuItem) {
         let newLimit = sender.tag
@@ -1225,7 +1220,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         } else if let images = pb.readObjects(forClasses: [NSImage.self], options: nil) as? [NSImage], let img = images.first {
             if let tiff = img.tiffRepresentation, let rep = NSBitmapImageRep(data: tiff), let png = rep.representation(using: .png, properties: [:]) {
                 newImage = png
-                newText = "[Image" + (clipboardManager.showImageDimensions ? " \(Int(img.size.width))x\(Int(img.size.height))" : "") + "]"
+                newText = "[Image]"
             }
         } else if let str = pb.string(forType: .string) {
             let t = str.trimmingCharacters(in: .whitespacesAndNewlines)
