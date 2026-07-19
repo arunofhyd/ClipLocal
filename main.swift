@@ -6,7 +6,7 @@ import ServiceManagement
 //  ClipLocal — 100% on-device clipboard history, no third parties
 // ============================================================
 
-let appVersion = "1.0.2"
+let appVersion = "1.0.3"
 let updateCheckURL = "https://raw.githubusercontent.com/arunofhyd/ClipLocal/main/version.json"
 let downloadPageURL = "https://cliplocal.vercel.app/#install"
 
@@ -71,6 +71,43 @@ struct ClipItem: Codable, Identifiable, Hashable {
 
     static func == (lhs: ClipItem, rhs: ClipItem) -> Bool {
         return lhs.text == rhs.text && lhs.date == rhs.date
+    }
+}
+
+// MARK: - Shared formatters & caches
+
+/// Reused across all rows — DateFormatter is expensive to construct.
+private let sharedDateFormatter: DateFormatter = {
+    let f = DateFormatter()
+    f.dateFormat = "d MMM yyyy 'at' h:mm a"
+    return f
+}()
+
+/// Thread-safe cache for NSWorkspace app icons so we never hit disk more than
+/// once per bundle identifier during a session.
+final class AppIconCache {
+    static let shared = AppIconCache()
+    private var cache: [String: NSImage] = [:]
+    private let lock = NSLock()
+
+    func icon(forBundleID bundleID: String?) -> NSImage {
+        let key = bundleID ?? "__finder__"
+        lock.lock()
+        if let cached = cache[key] { lock.unlock(); return cached }
+        lock.unlock()
+
+        let img: NSImage
+        if let bid = bundleID,
+           let appURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bid) {
+            img = NSWorkspace.shared.icon(forFile: appURL.path)
+        } else {
+            img = NSWorkspace.shared.icon(forFile: "/System/Library/CoreServices/Finder.app")
+        }
+
+        lock.lock()
+        cache[key] = img
+        lock.unlock()
+        return img
     }
 }
 
@@ -161,7 +198,6 @@ class ClipboardManager: ObservableObject {
 // MARK: - SwiftUI Views
 struct ContentView: View {
     @ObservedObject var manager: ClipboardManager
-    @State private var hoverIdx: String? = nil
     @State private var expandedIdx: String? = nil
     @State private var copiedItemId: String? = nil
     @State private var dragStartHeight: Double? = nil
@@ -243,13 +279,25 @@ struct ContentView: View {
                         .frame(maxWidth: .infinity, alignment: .center)
                         .padding()
                 } else if manager.activeFilters.isEmpty && manager.currentSearchText.isEmpty {
-                    ForEach(filteredHistory) { item in
-                        let idx = filteredHistory.firstIndex(of: item) ?? 99
-                        clipItemRow(item, shortcutIndex: idx < 9 ? idx : nil)
+                    // Use enumerated so shortcut index lookup is O(1) per row, not O(n²)
+                    ForEach(Array(filteredHistory.enumerated()), id: \.element.id) { idx, item in
+                        ClipItemRowView(
+                            item: item,
+                            shortcutIndex: idx < 9 ? idx : nil,
+                            expandedIdx: $expandedIdx,
+                            copiedItemId: $copiedItemId,
+                            manager: manager
+                        )
                     }
                 } else {
                     ForEach(filteredHistory) { item in
-                        clipItemRow(item, shortcutIndex: nil)
+                        ClipItemRowView(
+                            item: item,
+                            shortcutIndex: nil,
+                            expandedIdx: $expandedIdx,
+                            copiedItemId: $copiedItemId,
+                            manager: manager
+                        )
                     }
                 }
             }
@@ -309,135 +357,6 @@ struct ContentView: View {
         .background(Color.clear)
     }
 
-    @ViewBuilder
-    func clipItemRow(_ item: ClipItem, shortcutIndex: Int?) -> some View {
-        HStack(alignment: .center, spacing: 16) {
-            Image(systemName: iconName(for: item.text))
-                    .font(.system(size: 16, weight: .light))
-                    .foregroundColor(.secondary)
-                    .frame(width: 24)
-
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(snippet(for: item.text))
-                        .lineLimit(expandedIdx == item.id ? 5 : 1)
-                        .truncationMode(.tail)
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundColor(.primary)
-
-                    if let imageData = item.imageData, let nsImage = NSImage(data: imageData) {
-                        Image(nsImage: nsImage)
-                            .resizable()
-                            .scaledToFill()
-                            .frame(width: 48, height: 48)
-                            .clipShape(RoundedRectangle(cornerRadius: 4))
-                    }
-
-                    HStack(spacing: 4) {
-                    if let bundleID = item.sourceAppBundleIdentifier,
-                       let appURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) {
-                        Image(nsImage: NSWorkspace.shared.icon(forFile: appURL.path))
-                            .resizable()
-                            .frame(width: 12, height: 12)
-                            .clipShape(Circle())
-                    } else {
-                        Image(nsImage: NSWorkspace.shared.icon(forFile: "/System/Library/CoreServices/Finder.app"))
-                            .resizable()
-                            .frame(width: 12, height: 12)
-                            .clipShape(Circle())
-                    }
-                    Text(typeString(for: item.text))
-                        .font(.system(size: 11))
-                        .foregroundColor(.secondary)
-                    Text("·")
-                        .font(.system(size: 11))
-                        .foregroundColor(.secondary)
-                    Text("Copied \(formatDate(item.date))")
-                        .font(.system(size: 11))
-                        .foregroundColor(.secondary)
-
-                    if item.isRemote == true {
-                        Image(systemName: "macbook.and.iphone")
-                            .font(.system(size: 10))
-                            .foregroundColor(.secondary)
-                    }
-                }
-            }
-
-            Spacer(minLength: 8)
-
-            if item.pinned {
-                Image(systemName: "pin.fill")
-                    .font(.system(size: 12))
-                    .foregroundColor(.orange)
-                    .rotationEffect(Angle(degrees: 45))
-                    .padding(.trailing, 4)
-            } else if let sIdx = shortcutIndex {
-                Text("⌘\(sIdx + 1)")
-                    .foregroundColor(.secondary)
-                    .font(.system(size: 11))
-                    .padding(.trailing, 2)
-            }
-
-            Button(action: { copyItem(item) }) {
-                Image(systemName: copiedItemId == item.id ? "checkmark.circle.fill" : "doc.on.doc")
-                    .font(.system(size: 16))
-                    .foregroundColor(copiedItemId == item.id ? .white : Color.primary.opacity(0.6))
-                    .frame(width: 36, height: 36)
-                    .background(copiedItemId == item.id ? Color.green : Color.secondary.opacity(0.1))
-                    .clipShape(Circle())
-                    .scaleEffect(copiedItemId == item.id ? 0.85 : 1.0)
-                    .shadow(color: copiedItemId == item.id ? Color.green.opacity(0.5) : Color.clear, radius: copiedItemId == item.id ? 4 : 0)
-                    .animation(.spring(response: 0.3, dampingFraction: 0.5), value: copiedItemId)
-            }
-            .buttonStyle(PlainButtonStyle())
-            .background(
-                Group {
-                    if let sIdx = shortcutIndex {
-                        let shortcutString = String(sIdx + 1)
-                        let keyEq = KeyEquivalent(Character(shortcutString))
-                        Button("") { copyItem(item) }
-                            .keyboardShortcut(keyEq, modifiers: .command)
-                            .opacity(0)
-                    }
-                }
-            )
-        }
-        .padding(.vertical, 8)
-        .padding(.horizontal, 12)
-        .contentShape(Rectangle())
-        .onTapGesture(count: 2) {
-            copyItem(item)
-        }
-        .onTapGesture {
-            if expandedIdx == item.id {
-                expandedIdx = nil
-            } else {
-                expandedIdx = item.id
-            }
-        }
-        .onHover { isHovered in
-            hoverIdx = isHovered ? item.id : nil
-        }
-        .listRowBackground(hoverIdx == item.id ? Color.accentColor.opacity(0.1) : Color.clear)
-        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-            Button(role: .destructive) {
-                deleteItem(item)
-            } label: {
-                Label("Delete", systemImage: "trash")
-            }
-        }
-        .swipeActions(edge: .leading, allowsFullSwipe: true) {
-            Button {
-                togglePin(item)
-            } label: {
-                Label(item.pinned ? "Unpin" : "Pin", systemImage: item.pinned ? "pin.slash" : "pin")
-            }
-            .tint(.orange)
-        }
-        .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
-        .listRowSeparator(.hidden)
-    }
-
     // MARK: - Helpers
     var filteredHistory: [ClipItem] {
         var result = manager.history
@@ -466,55 +385,6 @@ struct ContentView: View {
             if !$0.pinned && $1.pinned { return false }
             return $0.date > $1.date
         }
-    }
-
-    func itemType(for text: String) -> String {
-        let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        if t.hasPrefix("http://") || t.hasPrefix("https://") || t.hasPrefix("www.") { return "link" }
-        let parts = t.split(separator: "@")
-        if parts.count == 2 && parts[1].contains(".") && !t.contains(" ") { return "email" }
-        if t.range(of: "^[0-9 +().-]{5,}$", options: .regularExpression) != nil { return "number" }
-        if (t.hasPrefix("/") || t.hasPrefix("file://")) && !t.contains("\n") { return "file" }
-        if t.hasPrefix("[Image") && t.hasSuffix("]") { return "image" }
-        if t.contains("{") || t.contains("}") || t.contains("func ") || t.contains("var ") || t.contains("let ") || t.contains("class ") || t.contains("struct ") || t.contains("<") || t.contains(">") || t.contains(";") { return "code" }
-        return "text"
-    }
-
-    func formatDate(_ date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "d MMM yyyy 'at' h:mm a"
-        return formatter.string(from: date)
-    }
-
-    func typeString(for text: String) -> String {
-        let type = itemType(for: text)
-        switch type {
-        case "code": return "Code"
-        case "email": return "Email"
-        case "file": return "File"
-        case "image": return "Image"
-        case "link": return "Link"
-        case "number": return "Number"
-        default: return "Text"
-        }
-    }
-
-    func iconName(for text: String) -> String {
-        let type = itemType(for: text)
-        switch type {
-        case "code": return "chevron.left.forwardslash.chevron.right"
-        case "email": return "envelope"
-        case "file": return "doc"
-        case "image": return "photo"
-        case "link": return "link"
-        case "number": return "number"
-        default: return "text.alignleft"
-        }
-    }
-
-    func snippet(for text: String) -> String {
-        let oneLine = text.replacingOccurrences(of: "\n", with: " ↵ ").trimmingCharacters(in: .whitespacesAndNewlines)
-        return oneLine
     }
 
     // MARK: - Actions
@@ -597,6 +467,258 @@ struct ContentView: View {
     func deleteItem(_ item: ClipItem) {
         NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .default)
         // Defer mutation slightly to allow swipe action to complete
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+            if let idx = manager.history.firstIndex(where: { $0.id == item.id }) {
+                manager.history.remove(at: idx)
+                manager.persistIfNeeded()
+            }
+        }
+    }
+}
+
+// MARK: - ClipItemRowView
+/// A self-contained row view for each clipboard item.
+/// Keeping hover state and copy-button animation local here means SwiftUI
+/// only needs to re-render the single hovered row instead of the whole list.
+struct ClipItemRowView: View {
+    let item: ClipItem
+    let shortcutIndex: Int?
+    @Binding var expandedIdx: String?
+    @Binding var copiedItemId: String?
+    @ObservedObject var manager: ClipboardManager
+
+    /// Local hover state — changes here never propagate up to ContentView.
+    @State private var isHovered = false
+
+    // MARK: Memoised helpers (computed once per render, not on every sub-view)
+    private var itemType: String {
+        let t = item.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if t.hasPrefix("http://") || t.hasPrefix("https://") || t.hasPrefix("www.") { return "link" }
+        let parts = t.split(separator: "@")
+        if parts.count == 2 && parts[1].contains(".") && !t.contains(" ") { return "email" }
+        if t.range(of: "^[0-9 +().-]{5,}$", options: .regularExpression) != nil { return "number" }
+        if (t.hasPrefix("/") || t.hasPrefix("file://")) && !t.contains("\n") { return "file" }
+        if t.hasPrefix("[Image") && t.hasSuffix("]") { return "image" }
+        if t.contains("{") || t.contains("}") || t.contains("func ") || t.contains("var ") || t.contains("let ") || t.contains("class ") || t.contains("struct ") || t.contains("<") || t.contains(">") || t.contains(";") { return "code" }
+        return "text"
+    }
+
+    private var iconSystemName: String {
+        switch itemType {
+        case "code": return "chevron.left.forwardslash.chevron.right"
+        case "email": return "envelope"
+        case "file": return "doc"
+        case "image": return "photo"
+        case "link": return "link"
+        case "number": return "number"
+        default: return "text.alignleft"
+        }
+    }
+
+    private var typeLabel: String {
+        switch itemType {
+        case "code": return "Code"
+        case "email": return "Email"
+        case "file": return "File"
+        case "image": return "Image"
+        case "link": return "Link"
+        case "number": return "Number"
+        default: return "Text"
+        }
+    }
+
+    private var snippet: String {
+        item.text
+            .replacingOccurrences(of: "\n", with: " ↵ ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var formattedDate: String {
+        sharedDateFormatter.string(from: item.date)
+    }
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 16) {
+            Image(systemName: iconSystemName)
+                .font(.system(size: 16, weight: .light))
+                .foregroundColor(.secondary)
+                .frame(width: 24)
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text(snippet)
+                    .lineLimit(expandedIdx == item.id ? 5 : 1)
+                    .truncationMode(.tail)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(.primary)
+
+                if let imageData = item.imageData, let nsImage = NSImage(data: imageData) {
+                    Image(nsImage: nsImage)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: 48, height: 48)
+                        .clipShape(RoundedRectangle(cornerRadius: 4))
+                }
+
+                HStack(spacing: 4) {
+                    // Icon is served from cache — no disk I/O on hot path
+                    let appIcon = AppIconCache.shared.icon(forBundleID: item.sourceAppBundleIdentifier)
+                    Image(nsImage: appIcon)
+                        .resizable()
+                        .frame(width: 12, height: 12)
+                        .clipShape(Circle())
+
+                    Text(typeLabel)
+                        .font(.system(size: 11))
+                        .foregroundColor(.secondary)
+                    Text("·")
+                        .font(.system(size: 11))
+                        .foregroundColor(.secondary)
+                    Text("Copied \(formattedDate)")
+                        .font(.system(size: 11))
+                        .foregroundColor(.secondary)
+
+                    if item.isRemote == true {
+                        Image(systemName: "macbook.and.iphone")
+                            .font(.system(size: 10))
+                            .foregroundColor(.secondary)
+                    }
+                }
+            }
+
+            Spacer(minLength: 8)
+
+            if item.pinned {
+                Image(systemName: "pin.fill")
+                    .font(.system(size: 12))
+                    .foregroundColor(.orange)
+                    .rotationEffect(Angle(degrees: 45))
+                    .padding(.trailing, 4)
+            } else if let sIdx = shortcutIndex {
+                Text("⌘\(sIdx + 1)")
+                    .foregroundColor(.secondary)
+                    .font(.system(size: 11))
+                    .padding(.trailing, 2)
+            }
+
+            Button(action: { copyItem() }) {
+                Image(systemName: copiedItemId == item.id ? "checkmark.circle.fill" : "doc.on.doc")
+                    .font(.system(size: 16))
+                    .foregroundColor(copiedItemId == item.id ? .white : Color.primary.opacity(0.6))
+                    .frame(width: 36, height: 36)
+                    .background(copiedItemId == item.id ? Color.green : Color.secondary.opacity(0.1))
+                    .clipShape(Circle())
+                    .scaleEffect(copiedItemId == item.id ? 0.85 : 1.0)
+                    .shadow(color: copiedItemId == item.id ? Color.green.opacity(0.5) : Color.clear,
+                            radius: copiedItemId == item.id ? 4 : 0)
+                    .animation(.spring(response: 0.3, dampingFraction: 0.5), value: copiedItemId)
+            }
+            .buttonStyle(PlainButtonStyle())
+            .background(
+                Group {
+                    if let sIdx = shortcutIndex {
+                        let keyEq = KeyEquivalent(Character(String(sIdx + 1)))
+                        Button("") { copyItem() }
+                            .keyboardShortcut(keyEq, modifiers: .command)
+                            .opacity(0)
+                    }
+                }
+            )
+        }
+        .padding(.vertical, 8)
+        .padding(.horizontal, 12)
+        .contentShape(Rectangle())
+        .onTapGesture(count: 2) { copyItem() }
+        .onTapGesture {
+            expandedIdx = (expandedIdx == item.id) ? nil : item.id
+        }
+        .onHover { hovering in
+            // Only this row re-renders — ContentView is untouched
+            isHovered = hovering
+        }
+        .listRowBackground(isHovered ? Color.accentColor.opacity(0.1) : Color.clear)
+        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+            Button(role: .destructive) { deleteItem() } label: {
+                Label("Delete", systemImage: "trash")
+            }
+        }
+        .swipeActions(edge: .leading, allowsFullSwipe: true) {
+            Button { togglePin() } label: {
+                Label(item.pinned ? "Unpin" : "Pin",
+                      systemImage: item.pinned ? "pin.slash" : "pin")
+            }
+            .tint(.orange)
+        }
+        .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
+        .listRowSeparator(.hidden)
+    }
+
+    // MARK: - Row actions
+    private func copyItem() {
+        let pb = NSPasteboard.general
+        pb.clearContents()
+
+        if let data = item.imageData, let img = NSImage(data: data) {
+            pb.writeObjects([img])
+        } else if item.text.hasPrefix("file://") {
+            let path = String(item.text.dropFirst(7))
+            pb.writeObjects([URL(fileURLWithPath: path) as NSURL])
+        } else {
+            pb.setString(item.text, forType: .string)
+        }
+
+        manager.lastChangeCount = pb.changeCount
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .default)
+        }
+
+        withAnimation { copiedItemId = item.id }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+            (NSApp.delegate as? AppDelegate)?.closePopover()
+            (NSApp.delegate as? AppDelegate)?.showPreview(item.text)
+
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                if let idx = manager.history.firstIndex(where: { $0.id == item.id }) {
+                    var updated = item
+                    updated.date = Date()
+                    manager.history.remove(at: idx)
+                    manager.history.insert(updated, at: 0)
+                    manager.history.sort {
+                        if $0.pinned == $1.pinned { return $0.date > $1.date }
+                        return $0.pinned && !$1.pinned
+                    }
+                    manager.persistIfNeeded()
+                }
+                if copiedItemId == item.id { copiedItemId = nil }
+            }
+        }
+    }
+
+    private func togglePin() {
+        NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .default)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+            if let idx = manager.history.firstIndex(where: { $0.id == item.id }) {
+                withAnimation {
+                    manager.history[idx].pinned.toggle()
+                    let wasPinned = manager.history[idx].pinned
+                    manager.history.sort {
+                        if $0.pinned == $1.pinned { return $0.date > $1.date }
+                        return $0.pinned && !$1.pinned
+                    }
+                    manager.persistIfNeeded()
+                    if wasPinned {
+                        manager.pinFlash = true
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                            manager.pinFlash = false
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private func deleteItem() {
+        NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .default)
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
             if let idx = manager.history.firstIndex(where: { $0.id == item.id }) {
                 manager.history.remove(at: idx)
