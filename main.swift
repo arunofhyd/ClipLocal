@@ -111,6 +111,20 @@ final class AppIconCache {
     }
 }
 
+/// Module-level helper so both ContentView and ClipItemRowView can share
+/// the same type-detection logic without duplicating it.
+func clipItemType(for text: String) -> String {
+    let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    if t.hasPrefix("http://") || t.hasPrefix("https://") || t.hasPrefix("www.") { return "link" }
+    let parts = t.split(separator: "@")
+    if parts.count == 2 && parts[1].contains(".") && !t.contains(" ") { return "email" }
+    if t.range(of: "^[0-9 +().-]{5,}$", options: .regularExpression) != nil { return "number" }
+    if (t.hasPrefix("/") || t.hasPrefix("file://")) && !t.contains("\n") { return "file" }
+    if t.hasPrefix("[Image") && t.hasSuffix("]") { return "image" }
+    if t.contains("{") || t.contains("}") || t.contains("func ") || t.contains("var ") || t.contains("let ") || t.contains("class ") || t.contains("struct ") || t.contains("<") || t.contains(">") || t.contains(";") { return "code" }
+    return "text"
+}
+
 enum PrivacyMode: String {
     case session
     case persistent
@@ -370,7 +384,7 @@ struct ContentView: View {
         let typeFilters = manager.activeFilters.subtracting(["pinned"])
         if !typeFilters.isEmpty {
             result = result.filter { item in
-                let type = itemType(for: item.text)
+                let type = clipItemType(for: item.text)
                 return typeFilters.contains(type)
             }
         }
@@ -491,17 +505,7 @@ struct ClipItemRowView: View {
     @State private var isHovered = false
 
     // MARK: Memoised helpers (computed once per render, not on every sub-view)
-    private var itemType: String {
-        let t = item.text.trimmingCharacters(in: .whitespacesAndNewlines)
-        if t.hasPrefix("http://") || t.hasPrefix("https://") || t.hasPrefix("www.") { return "link" }
-        let parts = t.split(separator: "@")
-        if parts.count == 2 && parts[1].contains(".") && !t.contains(" ") { return "email" }
-        if t.range(of: "^[0-9 +().-]{5,}$", options: .regularExpression) != nil { return "number" }
-        if (t.hasPrefix("/") || t.hasPrefix("file://")) && !t.contains("\n") { return "file" }
-        if t.hasPrefix("[Image") && t.hasSuffix("]") { return "image" }
-        if t.contains("{") || t.contains("}") || t.contains("func ") || t.contains("var ") || t.contains("let ") || t.contains("class ") || t.contains("struct ") || t.contains("<") || t.contains(">") || t.contains(";") { return "code" }
-        return "text"
-    }
+    private var itemType: String { clipItemType(for: item.text) }
 
     private var iconSystemName: String {
         switch itemType {
