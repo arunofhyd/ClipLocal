@@ -6,7 +6,7 @@ import ServiceManagement
 //  ClipLocal — 100% on-device clipboard history, no third parties
 // ============================================================
 
-let appVersion = "1.0.64"
+let appVersion = "1.1.0"
 let updateCheckURL = "https://raw.githubusercontent.com/arunofhyd/ClipLocal/main/version.json"
 let downloadPageURL = "https://cliplocal.vercel.app/#install"
 
@@ -122,19 +122,42 @@ final class AppIconCache {
     }
 }
 
+class ItemTypeCache {
+    static let shared = ItemTypeCache()
+    private var cache = NSCache<NSString, NSString>()
+    
+    func type(for item: ClipItem) -> String {
+        if let cached = cache.object(forKey: item.id as NSString) {
+            return cached as String
+        }
+        
+        let t: String
+        if item.imageData != nil { t = "image" }
+        else {
+            // Clamp type detection to the first 2000 characters to prevent running regex on massive strings
+            let rawTxt = item.text.count > 2000 ? String(item.text.prefix(2000)) : item.text
+            let txt = rawTxt.trimmingCharacters(in: .whitespacesAndNewlines)
+            if txt.hasPrefix("http://") || txt.hasPrefix("https://") || txt.hasPrefix("www.") { t = "link" }
+            else {
+                let parts = txt.split(separator: "@")
+                if parts.count == 2 && parts[1].contains(".") && !txt.contains(" ") { t = "email" }
+                else if txt.range(of: "^[0-9 +().-]{5,}$", options: .regularExpression) != nil { t = "number" }
+                else if (txt.hasPrefix("/") || txt.hasPrefix("file://")) && !txt.contains("\n") { t = "file" }
+                else if txt.hasPrefix("[Image") && txt.hasSuffix("]") { t = "image" }
+                else if txt.contains("{") || txt.contains("}") || txt.contains("func ") || txt.contains("var ") || txt.contains("let ") || txt.contains("class ") || txt.contains("struct ") || txt.contains("<") || txt.contains(">") || txt.contains(";") { t = "code" }
+                else { t = "text" }
+            }
+        }
+        
+        cache.setObject(t as NSString, forKey: item.id as NSString)
+        return t
+    }
+}
+
 /// Module-level helper so both ContentView and ClipItemRowView can share
 /// the same type-detection logic without duplicating it.
 func clipItemType(for item: ClipItem) -> String {
-    if item.imageData != nil { return "image" }
-    let t = item.text.trimmingCharacters(in: .whitespacesAndNewlines)
-    if t.hasPrefix("http://") || t.hasPrefix("https://") || t.hasPrefix("www.") { return "link" }
-    let parts = t.split(separator: "@")
-    if parts.count == 2 && parts[1].contains(".") && !t.contains(" ") { return "email" }
-    if t.range(of: "^[0-9 +().-]{5,}$", options: .regularExpression) != nil { return "number" }
-    if (t.hasPrefix("/") || t.hasPrefix("file://")) && !t.contains("\n") { return "file" }
-    if t.hasPrefix("[Image") && t.hasSuffix("]") { return "image" }
-    if t.contains("{") || t.contains("}") || t.contains("func ") || t.contains("var ") || t.contains("let ") || t.contains("class ") || t.contains("struct ") || t.contains("<") || t.contains(">") || t.contains(";") { return "code" }
-    return "text"
+    return ItemTypeCache.shared.type(for: item)
 }
 
 enum PrivacyMode: String {
@@ -143,10 +166,26 @@ enum PrivacyMode: String {
 }
 
 // MARK: - ClipboardManager
+class ImagePreviewCache {
+    static let shared = ImagePreviewCache()
+    private var cache = NSCache<NSString, NSImage>()
+    
+    func image(for item: ClipItem) -> NSImage? {
+        if let cached = cache.object(forKey: item.id as NSString) {
+            return cached
+        }
+        guard let data = item.imageData, let img = NSImage(data: data) else { return nil }
+        cache.setObject(img, forKey: item.id as NSString)
+        return img
+    }
+}
+
 class ClipboardManager: ObservableObject {
-    @Published var history: [ClipItem] = []
-    @Published var currentSearchText = ""
-    @Published var activeFilters: Set<String> = []
+    @Published var history: [ClipItem] = [] { didSet { updateFilteredHistory() } }
+    @Published var expandedIdx: Set<String> = []
+    @Published var currentSearchText = "" { didSet { updateFilteredHistory() } }
+    @Published var activeFilters: Set<String> = [] { didSet { updateFilteredHistory() } }
+    @Published var filteredHistory: [ClipItem] = []
     @Published var resizableMenu: Bool
     @Published var menuHeight: Double
     @Published var pinFlash: Bool = false
@@ -185,10 +224,11 @@ class ClipboardManager: ObservableObject {
     }
 
     func loadHistory() {
-        guard let enc = try? Data(contentsOf: historyFile),
-              let dec = try? CryptoHelper.decrypt(enc, key: key),
-              let arr = try? JSONDecoder().decode([ClipItem].self, from: dec) else { return }
-        self.history = arr
+        if let dec = try? Data(contentsOf: historyFile) {
+            let arr = try? JSONDecoder().decode([ClipItem].self, from: CryptoHelper.decrypt(dec, key: key))
+            self.history = arr ?? []
+        }
+        updateFilteredHistory()
     }
 
     func saveHistory() {
@@ -228,12 +268,40 @@ class ClipboardManager: ObservableObject {
             persistIfNeeded()  // keep the on-disk file in sync after a trim
         }
     }
+
+    func updateFilteredHistory() {
+        var result = history
+
+        if activeFilters.contains("pinned") {
+            result = result.filter { $0.pinned }
+        } else {
+            result = result.filter { !$0.pinned }
+        }
+
+        let typeFilters = activeFilters.subtracting(["pinned"])
+        if !typeFilters.isEmpty {
+            result = result.filter { item in
+                let type = clipItemType(for: item)
+                return typeFilters.contains(type)
+            }
+        }
+
+        if !currentSearchText.isEmpty {
+            let lower = currentSearchText.lowercased()
+            result = result.filter { $0.text.lowercased().contains(lower) }
+        }
+
+        filteredHistory = result.sorted {
+            if $0.pinned && !$1.pinned { return true }
+            if !$0.pinned && $1.pinned { return false }
+            return $0.date > $1.date
+        }
+    }
 }
 
 // MARK: - SwiftUI Views
 struct ContentView: View {
     @ObservedObject var manager: ClipboardManager
-    @State private var expandedIdx: String? = nil
     @State private var copiedItemId: String? = nil
     @State private var dragStartHeight: Double? = nil
     @Environment(\.colorScheme) var colorScheme
@@ -308,28 +376,25 @@ struct ContentView: View {
 
             // List
             List {
-                if filteredHistory.isEmpty {
+                if manager.filteredHistory.isEmpty {
                     Text("— empty —")
                         .foregroundColor(.secondary)
                         .frame(maxWidth: .infinity, alignment: .center)
                         .padding()
                 } else if manager.activeFilters.isEmpty && manager.currentSearchText.isEmpty {
-                    // Use enumerated so shortcut index lookup is O(1) per row, not O(n²)
-                    ForEach(Array(filteredHistory.enumerated()), id: \.element.id) { idx, item in
+                    ForEach(Array(manager.filteredHistory.enumerated()), id: \.element.id) { idx, item in
                         ClipItemRowView(
                             item: item,
-                            shortcutIndex: idx < 9 ? idx : nil,
-                            expandedIdx: $expandedIdx,
+                            shortcutIndex: idx < 9 ? idx + 1 : nil,
                             copiedItemId: $copiedItemId,
                             manager: manager
                         )
                     }
                 } else {
-                    ForEach(filteredHistory) { item in
+                    ForEach(manager.filteredHistory) { item in
                         ClipItemRowView(
                             item: item,
                             shortcutIndex: nil,
-                            expandedIdx: $expandedIdx,
                             copiedItemId: $copiedItemId,
                             manager: manager
                         )
@@ -397,34 +462,6 @@ struct ContentView: View {
     }
 
     // MARK: - Helpers
-    var filteredHistory: [ClipItem] {
-        var result = manager.history
-
-        if manager.activeFilters.contains("pinned") {
-            result = result.filter { $0.pinned }
-        } else {
-            result = result.filter { !$0.pinned }
-        }
-
-        let typeFilters = manager.activeFilters.subtracting(["pinned"])
-        if !typeFilters.isEmpty {
-            result = result.filter { item in
-                let type = clipItemType(for: item)
-                return typeFilters.contains(type)
-            }
-        }
-
-        if !manager.currentSearchText.isEmpty {
-            let lower = manager.currentSearchText.lowercased()
-            result = result.filter { $0.text.lowercased().contains(lower) }
-        }
-
-        return result.sorted {
-            if $0.pinned && !$1.pinned { return true }
-            if !$0.pinned && $1.pinned { return false }
-            return $0.date > $1.date
-        }
-    }
 }
 
 // MARK: - ClipItemRowView
@@ -434,12 +471,12 @@ struct ContentView: View {
 struct ClipItemRowView: View {
     let item: ClipItem
     let shortcutIndex: Int?
-    @Binding var expandedIdx: String?
     @Binding var copiedItemId: String?
     @ObservedObject var manager: ClipboardManager
 
     /// Local hover state — changes here never propagate up to ContentView.
     @State private var isHovered = false
+    @State private var lastClickTime = Date.distantPast
 
     // MARK: Memoised helpers (computed once per render, not on every sub-view)
     private var itemType: String { clipItemType(for: item) }
@@ -473,7 +510,9 @@ struct ClipItemRowView: View {
     }
 
     private var snippet: String {
-        item.text
+        let maxChars = 500
+        let txt = item.text.count > maxChars ? String(item.text.prefix(maxChars)) + "…" : item.text
+        return txt
             .replacingOccurrences(of: "\n", with: " ↵ ")
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }
@@ -484,7 +523,7 @@ struct ClipItemRowView: View {
 
     var body: some View {
         HStack(alignment: .center, spacing: 16) {
-            if let imageData = item.imageData, let nsImage = NSImage(data: imageData) {
+            if let nsImage = ImagePreviewCache.shared.image(for: item) {
                 Image(nsImage: nsImage)
                     .resizable()
                     .scaledToFill()
@@ -500,13 +539,13 @@ struct ClipItemRowView: View {
             VStack(alignment: .leading, spacing: 6) {
                 if snippet != "[Image]" {
                     Text(snippet)
-                        .lineLimit(expandedIdx == item.id ? 5 : 1)
+                        .lineLimit(manager.expandedIdx.contains(item.id) ? 5 : 1)
                         .truncationMode(.tail)
                         .font(.system(size: 14, weight: .semibold))
                         .foregroundColor(.primary)
                 }
 
-                if expandedIdx == item.id, let imageData = item.imageData, let nsImage = NSImage(data: imageData) {
+                if manager.expandedIdx.contains(item.id), let nsImage = ImagePreviewCache.shared.image(for: item) {
                     Image(nsImage: nsImage)
                         .resizable()
                         .scaledToFit()
@@ -523,7 +562,7 @@ struct ClipItemRowView: View {
                         .frame(width: 12, height: 12)
                         .clipShape(Circle())
 
-                    if let imageData = item.imageData, let nsImage = NSImage(data: imageData) {
+                    if let nsImage = ImagePreviewCache.shared.image(for: item) {
                         Text("\(typeLabel) · \(Int(nsImage.size.width)) × \(Int(nsImage.size.height))")
                             .font(.system(size: 11))
                             .foregroundColor(.secondary)
@@ -591,9 +630,18 @@ struct ClipItemRowView: View {
         .padding(.vertical, 8)
         .padding(.horizontal, 12)
         .contentShape(Rectangle())
-        .onTapGesture(count: 2) { copyItem() }
         .onTapGesture {
-            expandedIdx = (expandedIdx == item.id) ? nil : item.id
+            let now = Date()
+            if now.timeIntervalSince(lastClickTime) < 0.3 {
+                copyItem()
+            } else {
+                if manager.expandedIdx.contains(item.id) {
+                    manager.expandedIdx.remove(item.id)
+                } else {
+                    manager.expandedIdx.insert(item.id)
+                }
+            }
+            lastClickTime = now
         }
         .onHover { hovering in
             // Only this row re-renders — ContentView is untouched
@@ -740,7 +788,7 @@ struct FilterButton: View {
 }
 
 // MARK: - App Delegate
-class AppDelegate: NSObject, NSApplicationDelegate {
+class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     var statusItem: NSStatusItem!
     var popover: NSPopover!
     var timer: Timer?
@@ -762,6 +810,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         popover = NSPopover()
         popover.contentSize = NSSize(width: 450, height: clipboardManager.menuHeight)
         popover.behavior = .transient
+        popover.delegate = self
         popover.contentViewController = NSHostingController(rootView: contentView)
 
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -1425,6 +1474,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             alert.addButton(withTitle: "OK")
             alert.runModal()
         }
+    }
+    
+    func popoverDidClose(_ notification: Notification) {
+        clipboardManager.expandedIdx.removeAll()
     }
 }
 

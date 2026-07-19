@@ -1,7 +1,19 @@
 {
-  "version": "1.0.64",
+  "version": "1.1.0",
   "downloadURL": "https://cliplocal.vercel.app/#install",
   "changelog": [
+    {
+      "version": "1.1.0",
+      "date": "2026-07-19",
+      "changes": [
+        "Major Engine Overhaul: Expanding rows and scrolling is now hyper-optimized.",
+        "Introduced native NSCache for images and regex evaluations to eliminate main-thread lag.",
+        "List filtering is now cached dynamically, guaranteeing stable 60 FPS while scrolling.",
+        "Added zero-delay timestamp tracker for instant click responses.",
+        "Multiple rows can now be expanded simultaneously without UI shifting.",
+        "Popovers now reliably clear all memory states immediately upon closing."
+      ]
+    },
     {
       "version": "1.0.64",
       "date": "2026-07-19",
