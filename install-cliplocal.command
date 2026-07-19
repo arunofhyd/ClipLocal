@@ -56,7 +56,7 @@ printf "\n"
 
 # ---- Step 3: Download the source -----------------------------------------
 step "Downloading ClipLocal source…"
-if ! curl -fsSL "$REPO_RAW/main.swift" -o main.swift; then
+if ! curl -fsSL "$REPO_RAW/main.swift?v=$(date +%s)" -o main.swift; then
     fail "Could not download the app source."
     printf "  ${GREY}Check your internet connection and try again.${NC}\n\n"
     exit 1
