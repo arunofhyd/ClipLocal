@@ -6,7 +6,7 @@ import ServiceManagement
 //  ClipLocal — 100% on-device clipboard history, no third parties
 // ============================================================
 
-let appVersion = "1.0.61"
+let appVersion = "1.0.62"
 let updateCheckURL = "https://raw.githubusercontent.com/arunofhyd/ClipLocal/main/version.json"
 let downloadPageURL = "https://cliplocal.vercel.app/#install"
 
@@ -500,6 +500,15 @@ struct ClipItemRowView: View {
                         .truncationMode(.tail)
                         .font(.system(size: 14, weight: .semibold))
                         .foregroundColor(.primary)
+                }
+
+                if expandedIdx == item.id, let imageData = item.imageData, let nsImage = NSImage(data: imageData) {
+                    Image(nsImage: nsImage)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(maxWidth: .infinity, maxHeight: 200, alignment: .leading)
+                        .clipShape(RoundedRectangle(cornerRadius: 6))
+                        .padding(.vertical, 4)
                 }
 
                 HStack(spacing: 4) {

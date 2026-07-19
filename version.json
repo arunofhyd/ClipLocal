@@ -1,7 +1,14 @@
 {
-  "version": "1.0.61",
+  "version": "1.0.62",
   "downloadURL": "https://cliplocal.vercel.app/#install",
   "changelog": [
+    {
+      "version": "1.0.62",
+      "date": "2026-07-19",
+      "changes": [
+        "Added large image preview: clicking an image row now elegantly expands to show a full preview of the image."
+      ]
+    },
     {
       "version": "1.0.61",
       "date": "2026-07-19",
