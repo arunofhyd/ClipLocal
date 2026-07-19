@@ -1,7 +1,14 @@
 {
-  "version": "1.0.63",
+  "version": "1.0.64",
   "downloadURL": "https://cliplocal.vercel.app/#install",
   "changelog": [
+    {
+      "version": "1.0.64",
+      "date": "2026-07-19",
+      "changes": [
+        "Fixed an issue where long metadata labels (like high-res image dimensions) would wrap to a second line."
+      ]
+    },
     {
       "version": "1.0.63",
       "date": "2026-07-19",
