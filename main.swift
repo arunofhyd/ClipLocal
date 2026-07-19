@@ -429,8 +429,6 @@ struct ContentView: View {
             return $0.date > $1.date
         }
     }
-
-    }
 }
 
 // MARK: - ClipItemRowView
