@@ -6,7 +6,7 @@ import ServiceManagement
 //  ClipLocal — 100% on-device clipboard history, no third parties
 // ============================================================
 
-let appVersion = "1.0.62"
+let appVersion = "1.0.63"
 let updateCheckURL = "https://raw.githubusercontent.com/arunofhyd/ClipLocal/main/version.json"
 let downloadPageURL = "https://cliplocal.vercel.app/#install"
 
@@ -460,8 +460,12 @@ struct ClipItemRowView: View {
         switch itemType {
         case "code": return "Code"
         case "email": return "Email"
-        case "file": return "File"
-        case "image": return "Image"
+        case "file":
+            let ext = (item.text.trimmingCharacters(in: .whitespacesAndNewlines) as NSString).pathExtension.uppercased()
+            return ext.isEmpty ? "File" : "\(ext) file"
+        case "image":
+            let ext = (item.text.trimmingCharacters(in: .whitespacesAndNewlines) as NSString).pathExtension.uppercased()
+            return ext.isEmpty ? "PNG image" : "\(ext) image"
         case "link": return "Link"
         case "number": return "Number"
         default: return "Text"
@@ -520,7 +524,7 @@ struct ClipItemRowView: View {
                         .clipShape(Circle())
 
                     if let imageData = item.imageData, let nsImage = NSImage(data: imageData) {
-                        Text("\(Int(nsImage.size.width)) × \(Int(nsImage.size.height))")
+                        Text("\(typeLabel) · \(Int(nsImage.size.width)) × \(Int(nsImage.size.height))")
                             .font(.system(size: 11))
                             .foregroundColor(.secondary)
                     } else {

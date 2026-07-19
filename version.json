@@ -1,7 +1,14 @@
 {
-  "version": "1.0.62",
+  "version": "1.0.63",
   "downloadURL": "https://cliplocal.vercel.app/#install",
   "changelog": [
+    {
+      "version": "1.0.63",
+      "date": "2026-07-19",
+      "changes": [
+        "Dynamic file types: Metadata row now dynamically extracts the exact extension to display 'JPG image' or 'SRT file' instead of generic labels."
+      ]
+    },
     {
       "version": "1.0.62",
       "date": "2026-07-19",
