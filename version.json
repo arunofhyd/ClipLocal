@@ -1,7 +1,14 @@
 {
-  "version": "1.1.0",
+  "version": "1.1.1",
   "downloadURL": "https://cliplocal.vercel.app/#install",
   "changelog": [
+    {
+      "version": "1.1.1",
+      "date": "2026-07-19",
+      "changes": [
+        "Added dynamic item counts to the 'Clear History' and 'Unpin All' buttons in the Settings menu."
+      ]
+    },
     {
       "version": "1.1.0",
       "date": "2026-07-19",

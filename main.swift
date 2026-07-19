@@ -6,7 +6,7 @@ import ServiceManagement
 //  ClipLocal — 100% on-device clipboard history, no third parties
 // ============================================================
 
-let appVersion = "1.1.0"
+let appVersion = "1.1.1"
 let updateCheckURL = "https://raw.githubusercontent.com/arunofhyd/ClipLocal/main/version.json"
 let downloadPageURL = "https://cliplocal.vercel.app/#install"
 
@@ -876,12 +876,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             return i
         }
 
-        let clear = NSMenuItem(title: "Clear History", action: #selector(clearHistory), keyEquivalent: "")
+        let totalCount = clipboardManager.history.count
+        let clear = NSMenuItem(title: "Clear History (\(totalCount))", action: #selector(clearHistory), keyEquivalent: "")
         clear.image = icon("trash")
         clear.target = self
         menu.addItem(clear)
         
-        let unpin = NSMenuItem(title: "Unpin All", action: #selector(unpinAll), keyEquivalent: "")
+        let pinnedCount = clipboardManager.history.filter { $0.pinned }.count
+        let unpin = NSMenuItem(title: "Unpin All (\(pinnedCount))", action: #selector(unpinAll), keyEquivalent: "")
         unpin.image = icon("pin.slash")
         unpin.target = self
         menu.addItem(unpin)
