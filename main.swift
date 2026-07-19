@@ -357,6 +357,32 @@ struct ContentView: View {
                         )
                     }
                     .buttonStyle(PlainButtonStyle())
+                    .contextMenu {
+                        let total = manager.history.count
+                        let pinned = manager.history.filter { $0.pinned }.count
+                        let unpinned = total - pinned
+                        
+                        Button("Pin All Items (\(unpinned))") {
+                            for i in 0..<manager.history.count {
+                                manager.history[i].pinned = true
+                            }
+                            manager.saveHistory()
+                        }
+                        
+                        Button("Unpin All Items (\(pinned))") {
+                            for i in 0..<manager.history.count {
+                                manager.history[i].pinned = false
+                            }
+                            manager.saveHistory()
+                        }
+                        
+                        Divider()
+                        
+                        Button("Delete All Items (\(total))", role: .destructive) {
+                            manager.history.removeAll()
+                            manager.saveHistory()
+                        }
+                    }
 
                     FilterButton(title: nil, systemImage: "pin.fill", filterType: "pinned", manager: manager)
                     FilterButton(title: "Code", systemImage: "chevron.left.forwardslash.chevron.right", filterType: "code", manager: manager)
@@ -784,6 +810,46 @@ struct FilterButton: View {
             .animation(.spring(response: 0.3, dampingFraction: 0.5), value: isFlashing)
         }
         .buttonStyle(PlainButtonStyle())
+        .contextMenu {
+            let label = title ?? (filterType == "pinned" ? "Pinned" : "Items")
+            let matches = manager.history.filter { filterType == "pinned" ? $0.pinned : clipItemType(for: $0) == filterType }
+            let total = matches.count
+            let pinned = matches.filter { $0.pinned }.count
+            let unpinned = total - pinned
+            
+            Button("Pin All \(label) (\(unpinned))") {
+                for i in 0..<manager.history.count {
+                    if filterType == "pinned" {
+                        if manager.history[i].pinned { manager.history[i].pinned = true }
+                    } else if clipItemType(for: manager.history[i]) == filterType {
+                        manager.history[i].pinned = true
+                    }
+                }
+                manager.saveHistory()
+            }
+            
+            Button("Unpin All \(label) (\(pinned))") {
+                for i in 0..<manager.history.count {
+                    if filterType == "pinned" {
+                        manager.history[i].pinned = false
+                    } else if clipItemType(for: manager.history[i]) == filterType {
+                        manager.history[i].pinned = false
+                    }
+                }
+                manager.saveHistory()
+            }
+            
+            Divider()
+            
+            Button("Delete All \(label) (\(total))", role: .destructive) {
+                if filterType == "pinned" {
+                    manager.history.removeAll { $0.pinned }
+                } else {
+                    manager.history.removeAll { clipItemType(for: $0) == filterType }
+                }
+                manager.saveHistory()
+            }
+        }
     }
 }
 
