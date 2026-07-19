@@ -1,7 +1,18 @@
 {
-  "version": "1.0.3",
+  "version": "1.0.4",
   "downloadURL": "https://cliplocal.vercel.app/#install",
   "changelog": [
+    {
+      "version": "1.0.4",
+      "date": "2026-07-19",
+      "changes": [
+        "Smooth 60 fps scrolling: extracted per-row view to isolate hover-state re-renders.",
+        "Cached app icons via AppIconCache — no more repeated disk I/O per render.",
+        "Shared DateFormatter singleton to avoid expensive allocations on every row.",
+        "Replaced O(n\u00b2) firstIndex scan with O(n) enumerated index for shortcut badges.",
+        "Fixed CI build pipeline and homebrew tap workflow."
+      ]
+    },
     {
       "version": "1.0.3",
       "date": "2026-07-19",
