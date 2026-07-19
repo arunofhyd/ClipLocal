@@ -6,7 +6,7 @@ import ServiceManagement
 //  ClipLocal — 100% on-device clipboard history, no third parties
 // ============================================================
 
-let appVersion = "1.0.6"
+let appVersion = "1.0.61"
 let updateCheckURL = "https://raw.githubusercontent.com/arunofhyd/ClipLocal/main/version.json"
 let downloadPageURL = "https://cliplocal.vercel.app/#install"
 
@@ -1386,8 +1386,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 tv.isEditable = false; tv.drawsBackground = false
                 tv.font = NSFont.systemFont(ofSize: 12)
                 tv.string = changelog
+                tv.autoresizingMask = [.width]
                 let scroll = NSScrollView(frame: NSRect(x: 0, y: 0, width: 340, height: 130))
                 scroll.hasVerticalScroller = true; scroll.drawsBackground = false
+                scroll.wantsLayer = true
                 scroll.documentView = tv
                 alert.accessoryView = scroll
             }

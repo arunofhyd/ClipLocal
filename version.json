@@ -1,9 +1,9 @@
 {
-  "version": "1.0.6",
+  "version": "1.0.61",
   "downloadURL": "https://cliplocal.vercel.app/#install",
   "changelog": [
     {
-      "version": "1.0.6",
+      "version": "1.0.61",
       "date": "2026-07-19",
       "changes": [
         "Major UI enhancement for image copies: Thumbnail moved to icon position.",
