@@ -6,7 +6,7 @@ import ServiceManagement
 //  ClipLocal — 100% on-device clipboard history, no third parties
 // ============================================================
 
-let appVersion = "1.1.1"
+let appVersion = "1.1.3"
 let updateCheckURL = "https://raw.githubusercontent.com/arunofhyd/ClipLocal/main/version.json"
 let downloadPageURL = "https://cliplocal.vercel.app/#install"
 
@@ -180,12 +180,19 @@ class ImagePreviewCache {
     }
 }
 
+struct TypeCount {
+    var total: Int = 0
+    var pinned: Int = 0
+    var unpinned: Int { total - pinned }
+}
+
 class ClipboardManager: ObservableObject {
     @Published var history: [ClipItem] = [] { didSet { updateFilteredHistory() } }
     @Published var expandedIdx: Set<String> = []
     @Published var currentSearchText = "" { didSet { updateFilteredHistory() } }
     @Published var activeFilters: Set<String> = [] { didSet { updateFilteredHistory() } }
     @Published var filteredHistory: [ClipItem] = []
+    @Published var filterCounts: [String: TypeCount] = [:]
     @Published var resizableMenu: Bool
     @Published var menuHeight: Double
     @Published var pinFlash: Bool = false
@@ -270,6 +277,27 @@ class ClipboardManager: ObservableObject {
     }
 
     func updateFilteredHistory() {
+        var counts = [String: TypeCount]()
+        var all = TypeCount()
+        var pin = TypeCount()
+        
+        for item in history {
+            let t = clipItemType(for: item)
+            var c = counts[t] ?? TypeCount()
+            c.total += 1
+            all.total += 1
+            if item.pinned {
+                c.pinned += 1
+                all.pinned += 1
+                pin.total += 1
+                pin.pinned += 1
+            }
+            counts[t] = c
+        }
+        counts["all"] = all
+        counts["pinned"] = pin
+        filterCounts = counts
+
         var result = history
 
         if activeFilters.contains("pinned") {
@@ -357,30 +385,35 @@ struct ContentView: View {
                         )
                     }
                     .buttonStyle(PlainButtonStyle())
+                    .help("Right-click for mass actions")
                     .contextMenu {
-                        let total = manager.history.count
-                        let pinned = manager.history.filter { $0.pinned }.count
-                        let unpinned = total - pinned
+                        let c = manager.filterCounts["all"] ?? TypeCount()
                         
-                        Button("Pin All Items (\(unpinned))") {
+                        Button(action: {
                             for i in 0..<manager.history.count {
                                 manager.history[i].pinned = true
                             }
                             manager.saveHistory()
+                        }) {
+                            Label("Pin All Items (\(c.unpinned))", systemImage: "pin")
                         }
                         
-                        Button("Unpin All Items (\(pinned))") {
+                        Button(action: {
                             for i in 0..<manager.history.count {
                                 manager.history[i].pinned = false
                             }
                             manager.saveHistory()
+                        }) {
+                            Label("Unpin All Items (\(c.pinned))", systemImage: "pin.slash")
                         }
                         
                         Divider()
                         
-                        Button("Delete All Items (\(total))", role: .destructive) {
+                        Button(role: .destructive, action: {
                             manager.history.removeAll()
                             manager.saveHistory()
+                        }) {
+                            Label("Delete All Items (\(c.total))", systemImage: "trash")
                         }
                     }
 
@@ -810,14 +843,12 @@ struct FilterButton: View {
             .animation(.spring(response: 0.3, dampingFraction: 0.5), value: isFlashing)
         }
         .buttonStyle(PlainButtonStyle())
+        .help("Right-click for mass actions")
         .contextMenu {
             let label = title ?? (filterType == "pinned" ? "Pinned" : "Items")
-            let matches = manager.history.filter { filterType == "pinned" ? $0.pinned : clipItemType(for: $0) == filterType }
-            let total = matches.count
-            let pinned = matches.filter { $0.pinned }.count
-            let unpinned = total - pinned
+            let c = manager.filterCounts[filterType] ?? TypeCount()
             
-            Button("Pin All \(label) (\(unpinned))") {
+            Button(action: {
                 for i in 0..<manager.history.count {
                     if filterType == "pinned" {
                         if manager.history[i].pinned { manager.history[i].pinned = true }
@@ -826,9 +857,11 @@ struct FilterButton: View {
                     }
                 }
                 manager.saveHistory()
+            }) {
+                Label("Pin All \(label) (\(c.unpinned))", systemImage: "pin")
             }
             
-            Button("Unpin All \(label) (\(pinned))") {
+            Button(action: {
                 for i in 0..<manager.history.count {
                     if filterType == "pinned" {
                         manager.history[i].pinned = false
@@ -837,17 +870,21 @@ struct FilterButton: View {
                     }
                 }
                 manager.saveHistory()
+            }) {
+                Label("Unpin All \(label) (\(c.pinned))", systemImage: "pin.slash")
             }
             
             Divider()
             
-            Button("Delete All \(label) (\(total))", role: .destructive) {
+            Button(role: .destructive, action: {
                 if filterType == "pinned" {
                     manager.history.removeAll { $0.pinned }
                 } else {
                     manager.history.removeAll { clipItemType(for: $0) == filterType }
                 }
                 manager.saveHistory()
+            }) {
+                Label("Delete All \(label) (\(c.total))", systemImage: "trash")
             }
         }
     }
@@ -948,7 +985,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         clear.target = self
         menu.addItem(clear)
         
-        let pinnedCount = clipboardManager.history.filter { $0.pinned }.count
+        let pinnedCount = clipboardManager.filterCounts["pinned"]?.total ?? 0
         let unpin = NSMenuItem(title: "Unpin All (\(pinnedCount))", action: #selector(unpinAll), keyEquivalent: "")
         unpin.image = icon("pin.slash")
         unpin.target = self
