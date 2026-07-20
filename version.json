@@ -1,7 +1,14 @@
 {
-  "version": "1.1.3",
+  "version": "1.1.4",
   "downloadURL": "https://cliplocal.vercel.app/#install",
   "changelog": [
+    {
+      "version": "1.1.4",
+      "date": "2026-07-20",
+      "changes": [
+        "Smart Cleanup: ClipLocal now automatically garbage collects old Universal Clipboard (Handoff) file proxy links to prevent pasting dead links."
+      ]
+    },
     {
       "version": "1.1.3",
       "date": "2026-07-19",

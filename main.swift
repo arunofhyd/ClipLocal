@@ -6,7 +6,7 @@ import ServiceManagement
 //  ClipLocal — 100% on-device clipboard history, no third parties
 // ============================================================
 
-let appVersion = "1.1.3"
+let appVersion = "1.1.4"
 let updateCheckURL = "https://raw.githubusercontent.com/arunofhyd/ClipLocal/main/version.json"
 let downloadPageURL = "https://cliplocal.vercel.app/#install"
 
@@ -1434,6 +1434,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
                 self.clipboardManager.history.insert(newItem, at: 0)
                 self.showPreview(text)
             }
+            
+            // Auto-cleanup: Apple Universal Clipboard destroys old Handoff file promises when a new item is copied.
+            // Remove any old remote files so they don't clutter the UI with dead links.
+            self.clipboardManager.history.removeAll {
+                ($0.isRemote == true) && $0.text.hasPrefix("file://") && $0.id != self.clipboardManager.history.first?.id
+            }
+            
             self.clipboardManager.trimHistory()
             self.clipboardManager.persistIfNeeded()
         }
