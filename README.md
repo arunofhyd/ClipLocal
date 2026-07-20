@@ -41,6 +41,9 @@ Built specifically for people who handle **sensitive text** and don't want their
 *   **Full Control**: 📌 Pin, delete, and re-copy any item straight from the menu bar.
 *   **Quick Shortcuts**: ⌨️ Open the menu and press **⌘1–⌘9** to instantly copy any of your recent items.
 *   **Smart Icons**: 🏷️ Each item shows a relevant icon so your history is easy to scan — 🔗 for links, ✉️ for emails, #️⃣ for numbers, 📄 for files, 🧑‍💻 for code, and 🖼️ for images.
+*   **Mass Actions**: 🖱️ Right-click any filter button to mass Pin, Unpin, or Delete all items of that type instantly.
+*   **Auto-Cleanup**: 🧹 Automatically detects and garbage-collects expired Universal Clipboard (Handoff) file proxy links.
+*   **Hyper-Optimized**: ⚡ Built with a centralized O(1) memory cache ensuring UI rendering stays locked at 60 FPS even with a 1,000-item history.
 *   **Image Previews**: 🖼️ Copies standard images seamlessly, rendering tiny inline previews inside your history menu.
 *   **Panic Wipe**: 🧹 One-click "Clear History Now" clears everything instantly.
 *   **Launch at Login**: 🚀 Optional — start ClipLocal automatically when you log in.
