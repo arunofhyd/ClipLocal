@@ -444,7 +444,7 @@ struct ContentView: View {
                     ForEach(Array(manager.filteredHistory.enumerated()), id: \.element.id) { idx, item in
                         ClipItemRowView(
                             item: item,
-                            shortcutIndex: idx < 9 ? idx + 1 : nil,
+                            shortcutIndex: idx < 9 ? idx : nil,
                             copiedItemId: $copiedItemId,
                             manager: manager
                         )
@@ -486,7 +486,8 @@ struct ContentView: View {
                                     }
                                 }
                                 if let start = dragStartHeight {
-                                    let newHeight = max(300, min(1000, start + Double(value.translation.height)))
+                                    let maxAllowedHeight = Double(NSScreen.main?.visibleFrame.height ?? 1200) - 20
+                                    let newHeight = max(300, min(maxAllowedHeight, start + Double(value.translation.height)))
                                     manager.menuHeight = newHeight
                                     if let appDelegate = NSApp.delegate as? AppDelegate {
                                         appDelegate.popover.contentSize = NSSize(width: 450, height: newHeight)

@@ -1,7 +1,15 @@
 {
-  "version": "1.1.4",
+  "version": "1.1.5",
   "downloadURL": "https://cliplocal.vercel.app/#install",
   "changelog": [
+    {
+      "version": "1.1.5",
+      "date": "2026-07-21",
+      "changes": [
+        "Fixed a bug where the keyboard shortcut badges (⌘1-⌘9) showed the wrong index.",
+        "Fixed a bug where the popover could not be dragged beyond 1000px on large displays like iMacs. It now scales dynamically."
+      ]
+    },
     {
       "version": "1.1.4",
       "date": "2026-07-20",
