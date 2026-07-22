@@ -150,7 +150,7 @@ class ItemTypeCache {
                 else if txt.range(of: "^[0-9 +().-]{5,}$", options: .regularExpression) != nil { t = "number" }
                 else if (txt.hasPrefix("/") || txt.hasPrefix("file://")) && !txt.contains("\n") { t = "file" }
                 else if txt.hasPrefix("[Image") && txt.hasSuffix("]") { t = "image" }
-                else if ["{", "}", "func ", "var ", "let ", "class ", "struct ", "<", ">", ";", "&&", "||", "==", "!=", "=>", "->", "def ", "import ", "const ", "function ", "sudo ", "echo ", "print(", "return ", "#!/bin/", "$ ", "npm ", "brew ", "apt-get", "git ", "docker ", "cat ", "tail ", "head ", "grep ", "awk ", "sed ", "curl ", "wget ", "chmod ", "chown ", "mkdir ", "find ", "ssh ", "kill ", "pkill ", " | "].contains(where: { txt.contains($0) }) { t = "code" }
+                else if ["{", "}", "func ", "var ", "let ", "class ", "struct ", "<", ">", ";", "&&", "||", "==", "!=", "=>", "->", "def ", "import ", "const ", "function ", "sudo ", "echo ", "print(", "return ", "#!/bin/", "$ ", "npm ", "brew ", "apt-get", "git ", "docker ", "chmod ", "chown ", "mkdir ", "pkill ", " | ", " > ", " >> "].contains(where: { txt.contains($0) }) || txt.range(of: "^(cat|tail|head|grep|awk|sed|curl|wget|find|ssh|kill)\\s+([-/.~$\"']|\\S+\\.\\S+)", options: [.regularExpression, .caseInsensitive]) != nil { t = "code" }
                 else { t = "text" }
             }
         }
