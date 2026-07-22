@@ -12,6 +12,7 @@ These rules help guide AI behavior when working inside the ClipLocal repository 
 - **Clean Code**: Use `// MARK: -` comments to keep `main.swift` organized and readable.
 - **Subtle User Feedback**: When performing background actions (like copying or clearing history), ensure there are subtle visual or haptic cues so the user knows it succeeded.
 
-## 3. Workflow
-- **Compile & Verify**: Before presenting a completed feature, compile the app locally using `swiftc`, kill the existing process (`pkill`), and launch the newly compiled `.app` so it can be tested locally.
-- **Wait for Approval**: Avoid unprompted Git pushes. Wait for the user to test the local build and give the green light before pushing to GitHub.
+## 3. Release & Git Workflow
+- **Local Rebuild & Replace**: Always rebuild the app locally using `swiftc`, replace `/Applications/ClipLocal.app/Contents/MacOS/ClipLocal`, re-sign with `codesign`, and launch it so the user can test locally.
+- **NEVER Auto-Push**: NEVER execute `git push` automatically without explicit user instructions. Always wait for the user to test the local build.
+- **Version Prompting**: When the user explicitly requests to push to GitHub, ask/confirm whether the release is a **Major**, **Minor**, or **Patch** bump before updating `version.json` and pushing.

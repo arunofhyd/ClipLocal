@@ -9,7 +9,7 @@
         "Right-Click Edit: Added ability to right-click and edit any saved clipboard item with a indicator icon.",
         "Full Editor Shortcuts: Text editor now supports standard macOS keyboard shortcuts (⌘C, ⌘V, ⌘X, ⌘Z, ⌘A).",
         "Smart Clean on Empty Edit: Completely clearing text when editing automatically deletes the clip from history.",
-        "Broader Code Detection: Enhanced categorization to recognize bash and shell scripts (&&, ||, sudo, echo, etc.)."
+        "Broader Code Detection: Enhanced categorization to recognize bash and shell scripts (cat, tail, grep, curl, etc.) with precise regex to prevent false positives on plain English text."
       ]
     },
     {
