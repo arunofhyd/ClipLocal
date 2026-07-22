@@ -6,7 +6,7 @@ import ServiceManagement
 //  ClipLocal — 100% on-device clipboard history, no third parties
 // ============================================================
 
-let appVersion = "1.1.5"
+let appVersion = "1.1.6"
 let updateCheckURL = "https://raw.githubusercontent.com/arunofhyd/ClipLocal/main/version.json"
 let downloadPageURL = "https://cliplocal.vercel.app/#install"
 
@@ -58,8 +58,9 @@ struct CryptoHelper {
 struct ClipItem: Codable, Identifiable, Hashable {
     /// Stable UUID — never changes, even when the item's date is refreshed after a copy.
     var id: String = UUID().uuidString
-    let text: String
+    var text: String
     var date: Date
+    var isEdited: Bool = false
     var pinned: Bool = false
     var imageData: Data?
     var sourceAppBundleIdentifier: String?
@@ -70,7 +71,7 @@ struct ClipItem: Codable, Identifiable, Hashable {
     }
 
     static func == (lhs: ClipItem, rhs: ClipItem) -> Bool {
-        return lhs.id == rhs.id
+        return lhs.id == rhs.id && lhs.text == rhs.text && lhs.isEdited == rhs.isEdited && lhs.pinned == rhs.pinned && lhs.date == rhs.date
     }
 }
 
@@ -86,6 +87,7 @@ extension ClipItem {
         imageData                 =  try? c.decode(Data.self,   forKey: .imageData)
         sourceAppBundleIdentifier =  try? c.decode(String.self, forKey: .sourceAppBundleIdentifier)
         isRemote                  =  try? c.decode(Bool.self,   forKey: .isRemote)
+        isEdited                  =  (try? c.decode(Bool.self,   forKey: .isEdited))                 ?? false
     }
 }
 
@@ -126,6 +128,10 @@ class ItemTypeCache {
     static let shared = ItemTypeCache()
     private var cache = NSCache<NSString, NSString>()
     
+    func invalidate(for id: String) {
+        cache.removeObject(forKey: id as NSString)
+    }
+    
     func type(for item: ClipItem) -> String {
         if let cached = cache.object(forKey: item.id as NSString) {
             return cached as String
@@ -144,7 +150,7 @@ class ItemTypeCache {
                 else if txt.range(of: "^[0-9 +().-]{5,}$", options: .regularExpression) != nil { t = "number" }
                 else if (txt.hasPrefix("/") || txt.hasPrefix("file://")) && !txt.contains("\n") { t = "file" }
                 else if txt.hasPrefix("[Image") && txt.hasSuffix("]") { t = "image" }
-                else if txt.contains("{") || txt.contains("}") || txt.contains("func ") || txt.contains("var ") || txt.contains("let ") || txt.contains("class ") || txt.contains("struct ") || txt.contains("<") || txt.contains(">") || txt.contains(";") { t = "code" }
+                else if ["{", "}", "func ", "var ", "let ", "class ", "struct ", "<", ">", ";", "&&", "||", "==", "!=", "=>", "->", "def ", "import ", "const ", "function ", "sudo ", "echo ", "print(", "return ", "#!/bin/", "$ ", "npm ", "brew ", "apt-get", "git ", "docker "].contains(where: { txt.contains($0) }) { t = "code" }
                 else { t = "text" }
             }
         }
@@ -537,6 +543,10 @@ struct ClipItemRowView: View {
     /// Local hover state — changes here never propagate up to ContentView.
     @State private var isHovered = false
     @State private var lastClickTime = Date.distantPast
+    
+    // Edit state
+    @State private var isEditing = false
+    @State private var editedText = ""
 
     // MARK: Memoised helpers (computed once per render, not on every sub-view)
     private var itemType: String { clipItemType(for: item) }
@@ -643,6 +653,11 @@ struct ClipItemRowView: View {
                             .font(.system(size: 10))
                             .foregroundColor(.secondary)
                     }
+                    if item.isEdited {
+                        Image(systemName: "square.and.pencil")
+                            .font(.system(size: 10))
+                            .foregroundColor(.secondary)
+                    }
                 }
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
@@ -708,6 +723,47 @@ struct ClipItemRowView: View {
             isHovered = hovering
         }
         .listRowBackground(isHovered ? Color.accentColor.opacity(0.1) : Color.clear)
+        .contextMenu {
+            Button(action: {
+                editedText = item.text
+                isEditing = true
+            }) {
+                Label("Edit", systemImage: "square.and.pencil")
+            }
+        }
+        .sheet(isPresented: $isEditing) {
+            VStack(alignment: .leading) {
+                Text("Edit Clip")
+                    .font(.headline)
+                    .padding(.bottom, 4)
+                TextEditor(text: $editedText)
+                    .font(.system(.body, design: .monospaced))
+                    .frame(minWidth: 300, minHeight: 150)
+                    .overlay(RoundedRectangle(cornerRadius: 4).stroke(Color.secondary.opacity(0.3), lineWidth: 1))
+                HStack {
+                    Spacer()
+                    Button("Cancel") { isEditing = false }
+                    Button("Save") {
+                        if let idx = manager.history.firstIndex(where: { $0.id == item.id }) {
+                            if editedText.isEmpty {
+                                manager.history.remove(at: idx)
+                                ItemTypeCache.shared.invalidate(for: item.id)
+                                manager.saveHistory()
+                            } else if manager.history[idx].text != editedText {
+                                manager.history[idx].text = editedText
+                                manager.history[idx].isEdited = true
+                                ItemTypeCache.shared.invalidate(for: item.id)
+                                manager.saveHistory()
+                            }
+                        }
+                        isEditing = false
+                    }
+                    .keyboardShortcut(.defaultAction)
+                }
+            }
+            .padding()
+            .frame(width: 400, height: 250)
+        }
         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
             Button(role: .destructive) { deleteItem() } label: {
                 Label("Delete", systemImage: "trash")
@@ -926,6 +982,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             btn.sendAction(on: [.leftMouseUp, .rightMouseUp])
         }
 
+        setupMainMenu()
         buildSettingsMenu()
 
         timer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
@@ -969,6 +1026,26 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     func showSettingsMenu() {
         buildSettingsMenu() // Refresh states
         settingsMenu.popUp(positioning: nil, at: NSEvent.mouseLocation, in: nil)
+    }
+
+    func setupMainMenu() {
+        let mainMenu = NSMenu()
+        let editMenuItem = NSMenuItem()
+        mainMenu.addItem(editMenuItem)
+        
+        let editMenu = NSMenu(title: "Edit")
+        editMenu.addItem(withTitle: "Undo", action: Selector(("undo:")), keyEquivalent: "z")
+        let redoItem = NSMenuItem(title: "Redo", action: Selector(("redo:")), keyEquivalent: "Z")
+        redoItem.keyEquivalentModifierMask = [.command, .shift]
+        editMenu.addItem(redoItem)
+        editMenu.addItem(NSMenuItem.separator())
+        editMenu.addItem(withTitle: "Cut", action: #selector(NSText.cut(_:)), keyEquivalent: "x")
+        editMenu.addItem(withTitle: "Copy", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
+        editMenu.addItem(withTitle: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
+        editMenu.addItem(withTitle: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
+        
+        editMenuItem.submenu = editMenu
+        NSApp.mainMenu = mainMenu
     }
 
     func buildSettingsMenu() {
