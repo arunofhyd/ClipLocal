@@ -1,9 +1,9 @@
 {
-  "version": "1.1.6",
+  "version": "1.1.7",
   "downloadURL": "https://cliplocal.vercel.app/#install",
   "changelog": [
     {
-      "version": "1.1.6",
+      "version": "1.1.7",
       "date": "2026-07-22",
       "changes": [
         "Right-Click Edit: Added ability to right-click and edit any saved clipboard item with a indicator icon.",
