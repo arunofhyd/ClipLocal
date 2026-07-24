@@ -1,13 +1,20 @@
 {
-  "version": "1.1.7",
+  "version": "1.1.8",
   "downloadURL": "https://cliplocal.vercel.app/#install",
   "changelog": [
+    {
+      "version": "1.1.8",
+      "date": "2026-07-24",
+      "changes": [
+        "Standardized bundle identifier to com.aoh.cliplocal across app bundle, Info.plist, and launch agent."
+      ]
+    },
     {
       "version": "1.1.7",
       "date": "2026-07-22",
       "changes": [
         "Right-Click Edit: Added ability to right-click and edit any saved clipboard item with a indicator icon.",
-        "Full Editor Shortcuts: Text editor now supports standard macOS keyboard shortcuts (⌘C, ⌘V, ⌘X, ⌘Z, ⌘A).",
+        "Full Editor Shortcuts: Text editor now supports standard macOS keyboard shortcuts (\u2318C, \u2318V, \u2318X, \u2318Z, \u2318A).",
         "Smart Clean on Empty Edit: Completely clearing text when editing automatically deletes the clip from history.",
         "Broader Code Detection: Enhanced categorization to recognize bash and shell scripts (cat, tail, grep, curl, etc.) with precise regex to prevent false positives on plain English text."
       ]
@@ -16,7 +23,7 @@
       "version": "1.1.5",
       "date": "2026-07-21",
       "changes": [
-        "Fixed a bug where the keyboard shortcut badges (⌘1-⌘9) showed the wrong index.",
+        "Fixed a bug where the keyboard shortcut badges (\u23181-\u23189) showed the wrong index.",
         "Fixed a bug where the popover could not be dragged beyond 1000px on large displays like iMacs. It now scales dynamically."
       ]
     },
@@ -91,8 +98,8 @@
       "version": "1.0.5",
       "date": "2026-07-19",
       "changes": [
-        "Clipboard items now have a stable UUID identity — no more ghost references after copying.",
-        "History now saves in the background — no more main-thread stutter on copy.",
+        "Clipboard items now have a stable UUID identity \u2014 no more ghost references after copying.",
+        "History now saves in the background \u2014 no more main-thread stutter on copy.",
         "Trimming history now correctly syncs to disk immediately.",
         "'Keep up to' limit expanded to 1,000 items.",
         "Reducing the item limit now shows a confirmation before deleting older entries.",
@@ -105,7 +112,7 @@
       "date": "2026-07-19",
       "changes": [
         "Smooth 60 fps scrolling: extracted per-row view to isolate hover-state re-renders.",
-        "Cached app icons via AppIconCache — no more repeated disk I/O per render.",
+        "Cached app icons via AppIconCache \u2014 no more repeated disk I/O per render.",
         "Shared DateFormatter singleton to avoid expensive allocations on every row.",
         "Replaced O(n\u00b2) firstIndex scan with O(n) enumerated index for shortcut badges.",
         "Fixed CI build pipeline and homebrew tap workflow."
@@ -116,7 +123,7 @@
       "date": "2026-07-19",
       "changes": [
         "Smooth 60 fps scrolling: extracted per-row view to isolate hover-state re-renders.",
-        "Cached app icons via AppIconCache — no more repeated disk I/O per render.",
+        "Cached app icons via AppIconCache \u2014 no more repeated disk I/O per render.",
         "Shared DateFormatter singleton to avoid expensive allocations on every row.",
         "Replaced O(n\u00b2) firstIndex scan with O(n) enumerated index for shortcut badges."
       ]
@@ -140,7 +147,7 @@
       "date": "August 2026",
       "changes": [
         "First release of ClipLocal",
-        "100% on-device clipboard history — nothing ever leaves your Mac",
+        "100% on-device clipboard history \u2014 nothing ever leaves your Mac",
         "Bottom-right \"Copied\" preview",
         "Session-only and encrypted Persistent privacy modes",
         "Skips password-manager copies by default",
