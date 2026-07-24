@@ -1205,6 +1205,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     @objc func toggleResizableMenu() {
         clipboardManager.resizableMenu.toggle()
         clipboardManager.defaults.set(clipboardManager.resizableMenu, forKey: "resizableMenu")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            self.showPopover(self.statusItem.button)
+        }
     }
 
     @objc func manualUpdateCheck() { checkForUpdates(silentIfCurrent: false) }
