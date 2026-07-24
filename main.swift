@@ -6,7 +6,7 @@ import ServiceManagement
 //  ClipLocal — 100% on-device clipboard history, no third parties
 // ============================================================
 
-let appVersion = "1.1.8"
+var appVersion: String { (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "1.1.8" }
 let updateCheckURL = "https://raw.githubusercontent.com/arunofhyd/ClipLocal/main/version.json"
 let downloadPageURL = "https://cliplocal.vercel.app/#install"
 
