@@ -207,7 +207,7 @@ class ClipboardManager: ObservableObject {
     let defaults = UserDefaults.standard
     var lastChangeCount = NSPasteboard.general.changeCount
     /// Serial background queue for encrypt + disk-write so the main thread never blocks.
-    private let saveQueue = DispatchQueue(label: "com.cliplocal.history.save", qos: .utility)
+    private let saveQueue = DispatchQueue(label: "com.aoh.cliplocal.history.save", qos: .utility)
 
     var mode: PrivacyMode {
         get { PrivacyMode(rawValue: defaults.string(forKey: "mode") ?? "persistent") ?? .persistent }
