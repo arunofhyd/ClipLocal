@@ -1744,11 +1744,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     }
 
     func checkForUpdates(silentIfCurrent: Bool) {
+        URLCache.shared.removeAllCachedResponses()
         let ts = Int(Date().timeIntervalSince1970)
         let urlStr = updateCheckURL.contains("?") ? "\(updateCheckURL)&t=\(ts)" : "\(updateCheckURL)?t=\(ts)"
         guard let url = URL(string: urlStr) else { return }
         var request = URLRequest(url: url)
         request.cachePolicy = .reloadIgnoringLocalAndRemoteCacheData
+        request.addValue("no-cache", forHTTPHeaderField: "Cache-Control")
+        request.addValue("no-cache", forHTTPHeaderField: "Pragma")
         let task = URLSession.shared.dataTask(with: request) { [weak self] data, _, _ in
             guard let self = self else { return }
             guard let data = data,
