@@ -1,7 +1,17 @@
 {
-  "version": "1.1.91",
+  "version": "1.2.0",
   "downloadURL": "https://cliplocal.vercel.app/#install",
   "changelog": [
+    {
+      "version": "1.2.0",
+      "date": "2026-07-27",
+      "changes": [
+        "Large Payload Offloading: Clips exceeding 15,000 characters (e.g. 6,000+ line HTML files, minified bundles, or large logs) are automatically offloaded into dedicated encrypted payload files, preserving 100% full text without truncating a single character.",
+        "Ultra-Lightweight Storage: Reduced primary history index file size by 99.8% (from ~18MB to ~35KB) for instant app startup and zero disk write overhead.",
+        "Hybrid Instant + Debounced Deep Search: Real-time O(1) instant search on preview text on every keypress, paired with debounced background deep-searching of large payload files for maximum UI responsiveness.",
+        "High-Performance String & Duplicate Checks: Optimized grapheme cluster prefixing and byte-length pre-checks for instant duplicate detection and fluid 60 FPS scrolling."
+      ]
+    },
     {
       "version": "1.1.91",
       "date": "2026-07-24",

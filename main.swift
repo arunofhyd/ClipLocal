@@ -1,12 +1,13 @@
 import Cocoa
 import SwiftUI
 import ServiceManagement
+import Combine
 
 // ============================================================
 //  ClipLocal — 100% on-device clipboard history, no third parties
 // ============================================================
 
-let appVersion = "1.1.91"
+let appVersion = "1.2.0"
 let updateCheckURL = "https://raw.githubusercontent.com/arunofhyd/ClipLocal/main/version.json"
 let downloadPageURL = "https://cliplocal.vercel.app/#install"
 
@@ -54,6 +55,47 @@ struct CryptoHelper {
     }
 }
 
+// MARK: - External Large Payload Storage
+struct LargePayloadStore {
+    private static let cache = NSCache<NSString, NSString>()
+
+    static let dir: URL = {
+        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!.appendingPathComponent("ClipLocal/payloads")
+        try? FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
+        return base
+    }()
+
+    static func savePayload(id: String, text: String, key: Data) -> String {
+        let fileName = "\(id).payload"
+        let fileURL = dir.appendingPathComponent(fileName)
+        if let data = text.data(using: .utf8),
+           let enc = try? CryptoHelper.encrypt(data, key: key) {
+            try? enc.write(to: fileURL, options: .atomic)
+        }
+        cache.setObject(text as NSString, forKey: fileName as NSString)
+        return fileName
+    }
+
+    static func loadPayload(fileName: String, key: Data) -> String? {
+        if let cached = cache.object(forKey: fileName as NSString) {
+            return cached as String
+        }
+        let fileURL = dir.appendingPathComponent(fileName)
+        guard let enc = try? Data(contentsOf: fileURL),
+              let dec = try? CryptoHelper.decrypt(enc, key: key),
+              let str = String(data: dec, encoding: .utf8) else { return nil }
+        cache.setObject(str as NSString, forKey: fileName as NSString)
+        return str
+    }
+
+    static func deletePayload(fileName: String?) {
+        guard let pf = fileName else { return }
+        cache.removeObject(forKey: pf as NSString)
+        let fileURL = dir.appendingPathComponent(pf)
+        try? FileManager.default.removeItem(at: fileURL)
+    }
+}
+
 // MARK: - Models
 struct ClipItem: Codable, Identifiable, Hashable {
     /// Stable UUID — never changes, even when the item's date is refreshed after a copy.
@@ -65,13 +107,21 @@ struct ClipItem: Codable, Identifiable, Hashable {
     var imageData: Data?
     var sourceAppBundleIdentifier: String?
     var isRemote: Bool?
+    var payloadFileName: String?
 
     func hash(into hasher: inout Hasher) {
         hasher.combine(id)
     }
 
     static func == (lhs: ClipItem, rhs: ClipItem) -> Bool {
-        return lhs.id == rhs.id && lhs.text == rhs.text && lhs.isEdited == rhs.isEdited && lhs.pinned == rhs.pinned && lhs.date == rhs.date
+        return lhs.id == rhs.id && lhs.text == rhs.text && lhs.isEdited == rhs.isEdited && lhs.pinned == rhs.pinned && lhs.date == rhs.date && lhs.payloadFileName == rhs.payloadFileName
+    }
+
+    func fullText(key: Data) -> String {
+        if let pf = payloadFileName, let full = LargePayloadStore.loadPayload(fileName: pf, key: key) {
+            return full
+        }
+        return text
     }
 }
 
@@ -88,6 +138,7 @@ extension ClipItem {
         sourceAppBundleIdentifier =  try? c.decode(String.self, forKey: .sourceAppBundleIdentifier)
         isRemote                  =  try? c.decode(Bool.self,   forKey: .isRemote)
         isEdited                  =  (try? c.decode(Bool.self,   forKey: .isEdited))                 ?? false
+        payloadFileName           =  try? c.decode(String.self, forKey: .payloadFileName)
     }
 }
 
@@ -140,8 +191,8 @@ class ItemTypeCache {
         let t: String
         if item.imageData != nil { t = "image" }
         else {
-            // Clamp type detection to the first 2000 characters to prevent running regex on massive strings
-            let rawTxt = item.text.count > 2000 ? String(item.text.prefix(2000)) : item.text
+            // Clamp type detection to prefix(2000) directly without computing total string count
+            let rawTxt = String(item.text.prefix(2000))
             let txt = rawTxt.trimmingCharacters(in: .whitespacesAndNewlines)
             if txt.hasPrefix("http://") || txt.hasPrefix("https://") || txt.hasPrefix("www.") { t = "link" }
             else {
@@ -197,6 +248,7 @@ class ClipboardManager: ObservableObject {
     @Published var expandedIdx: Set<String> = []
     @Published var currentSearchText = "" { didSet { updateFilteredHistory() } }
     @Published var activeFilters: Set<String> = [] { didSet { updateFilteredHistory() } }
+    private var deepSearchCancellable: AnyCancellable?
     @Published var filteredHistory: [ClipItem] = []
     @Published var filterCounts: [String: TypeCount] = [:]
     @Published var resizableMenu: Bool
@@ -228,6 +280,11 @@ class ClipboardManager: ObservableObject {
         self.resizableMenu = UserDefaults.standard.object(forKey: "resizableMenu") as? Bool ?? false
         self.menuHeight = UserDefaults.standard.object(forKey: "menuHeight") as? Double ?? 500.0
         if mode == .persistent { loadHistory() }
+        // Debounced deep-search: after 300ms of no typing, search inside large payload files
+        deepSearchCancellable = $currentSearchText
+            .debounce(for: .milliseconds(300), scheduler: RunLoop.main)
+            .removeDuplicates()
+            .sink { [weak self] _ in self?.deepSearchPayloads() }
     }
 
     var historyFile: URL {
@@ -238,8 +295,21 @@ class ClipboardManager: ObservableObject {
 
     func loadHistory() {
         if let dec = try? Data(contentsOf: historyFile) {
-            let arr = try? JSONDecoder().decode([ClipItem].self, from: CryptoHelper.decrypt(dec, key: key))
-            self.history = arr ?? []
+            var arr = (try? JSONDecoder().decode([ClipItem].self, from: CryptoHelper.decrypt(dec, key: key))) ?? []
+            // Auto-migrate legacy oversized items out of history.enc into LargePayloadStore
+            var migrated = false
+            for i in 0..<arr.count {
+                if arr[i].payloadFileName == nil && arr[i].text.utf8.count > 15000 && arr[i].text.count > 15000 {
+                    let pf = LargePayloadStore.savePayload(id: arr[i].id, text: arr[i].text, key: key)
+                    arr[i].payloadFileName = pf
+                    arr[i].text = String(arr[i].text.prefix(1500)) + "\n… [Large Clip: 100% full \(arr[i].text.count) characters saved in background storage]"
+                    migrated = true
+                }
+            }
+            self.history = arr
+            if migrated {
+                saveHistory()
+            }
         }
         updateFilteredHistory()
     }
@@ -262,6 +332,9 @@ class ClipboardManager: ObservableObject {
     }
 
     func clearHistoryFile() {
+        for item in history {
+            LargePayloadStore.deletePayload(fileName: item.payloadFileName)
+        }
         try? FileManager.default.removeItem(at: historyFile)
     }
 
@@ -274,14 +347,20 @@ class ClipboardManager: ObservableObject {
         if history.count > max {
             // Keep pinned items
             let pinned   = history.filter {  $0.pinned }
-            let unpinned = history.filter { !$0.pinned }.prefix(Swift.max(0, max - pinned.count))
-            history = pinned + Array(unpinned)
+            let unpinned = history.filter { !$0.pinned }
+            let keepUnpinned = Array(unpinned.prefix(Swift.max(0, max - pinned.count)))
+            let dropped = unpinned.dropFirst(keepUnpinned.count)
+            for item in dropped {
+                LargePayloadStore.deletePayload(fileName: item.payloadFileName)
+            }
+            history = pinned + keepUnpinned
             // Sort back by date
             history.sort { $0.date > $1.date }
             persistIfNeeded()  // keep the on-disk file in sync after a trim
         }
     }
 
+    // MARK: - Instant search (preview text only, runs on every keystroke)
     func updateFilteredHistory() {
         var counts = [String: TypeCount]()
         var all = TypeCount()
@@ -321,14 +400,59 @@ class ClipboardManager: ObservableObject {
         }
 
         if !currentSearchText.isEmpty {
-            let lower = currentSearchText.lowercased()
-            result = result.filter { $0.text.lowercased().contains(lower) }
+            let search = currentSearchText
+            result = result.filter { item in
+                item.text.range(of: search, options: .caseInsensitive) != nil
+            }
         }
 
         filteredHistory = result.sorted {
             if $0.pinned && !$1.pinned { return true }
             if !$0.pinned && $1.pinned { return false }
             return $0.date > $1.date
+        }
+    }
+
+    // MARK: - Debounced deep search (payload files, runs 300ms after last keystroke)
+    private func deepSearchPayloads() {
+        let search = currentSearchText
+        guard !search.isEmpty else { return }
+
+        // Only check items that have payloads AND weren't already matched by preview search
+        let matchedIds = Set(filteredHistory.map { $0.id })
+        let currentKey = key
+
+        // Build the base set (pinned/type filtered) to find payload items not yet matched
+        var candidates = history
+        if activeFilters.contains("pinned") {
+            candidates = candidates.filter { $0.pinned }
+        } else {
+            candidates = candidates.filter { !$0.pinned }
+        }
+        let typeFilters = activeFilters.subtracting(["pinned"])
+        if !typeFilters.isEmpty {
+            candidates = candidates.filter { typeFilters.contains(clipItemType(for: $0)) }
+        }
+
+        let payloadCandidates = candidates.filter { $0.payloadFileName != nil && !matchedIds.contains($0.id) }
+        guard !payloadCandidates.isEmpty else { return }
+
+        var extraMatches: [ClipItem] = []
+        for item in payloadCandidates {
+            let full = item.fullText(key: currentKey)
+            if full.range(of: search, options: .caseInsensitive) != nil {
+                extraMatches.append(item)
+            }
+        }
+
+        if !extraMatches.isEmpty {
+            var merged = filteredHistory + extraMatches
+            merged.sort {
+                if $0.pinned && !$1.pinned { return true }
+                if !$0.pinned && $1.pinned { return false }
+                return $0.date > $1.date
+            }
+            filteredHistory = merged
         }
     }
 }
@@ -568,10 +692,12 @@ struct ClipItemRowView: View {
         case "code": return "Code"
         case "email": return "Email"
         case "file":
-            let ext = (item.text.trimmingCharacters(in: .whitespacesAndNewlines) as NSString).pathExtension.uppercased()
+            let trimmed = String(item.text.prefix(300)).trimmingCharacters(in: .whitespacesAndNewlines)
+            let ext = (trimmed as NSString).pathExtension.uppercased()
             return ext.isEmpty ? "File" : "\(ext) file"
         case "image":
-            let ext = (item.text.trimmingCharacters(in: .whitespacesAndNewlines) as NSString).pathExtension.uppercased()
+            let trimmed = String(item.text.prefix(300)).trimmingCharacters(in: .whitespacesAndNewlines)
+            let ext = (trimmed as NSString).pathExtension.uppercased()
             return ext.isEmpty ? "PNG image" : "\(ext) image"
         case "link": return "Link"
         case "number": return "Number"
@@ -581,7 +707,9 @@ struct ClipItemRowView: View {
 
     private var snippet: String {
         let maxChars = 500
-        let txt = item.text.count > maxChars ? String(item.text.prefix(maxChars)) + "…" : item.text
+        let prefixStr = String(item.text.prefix(maxChars + 1))
+        let hasMore = prefixStr.utf8.count > maxChars
+        let txt = hasMore ? String(prefixStr.prefix(maxChars)) + "…" : prefixStr
         return txt
             .replacingOccurrences(of: "\n", with: " ↵ ")
             .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -725,7 +853,7 @@ struct ClipItemRowView: View {
         .listRowBackground(isHovered ? Color.accentColor.opacity(0.1) : Color.clear)
         .contextMenu {
             Button(action: {
-                editedText = item.text
+                editedText = item.fullText(key: manager.key)
                 isEditing = true
             }) {
                 Label("Edit", systemImage: "square.and.pencil")
@@ -746,12 +874,23 @@ struct ClipItemRowView: View {
                     Button("Save") {
                         if let idx = manager.history.firstIndex(where: { $0.id == item.id }) {
                             if editedText.isEmpty {
-                                manager.history.remove(at: idx)
+                                let deleted = manager.history.remove(at: idx)
+                                LargePayloadStore.deletePayload(fileName: deleted.payloadFileName)
                                 ItemTypeCache.shared.invalidate(for: item.id)
                                 manager.saveHistory()
-                            } else if manager.history[idx].text != editedText {
-                                manager.history[idx].text = editedText
-                                manager.history[idx].isEdited = true
+                            } else {
+                                var target = manager.history[idx]
+                                LargePayloadStore.deletePayload(fileName: target.payloadFileName)
+                                if editedText.count > 15000 {
+                                    let pf = LargePayloadStore.savePayload(id: target.id, text: editedText, key: manager.key)
+                                    target.payloadFileName = pf
+                                    target.text = String(editedText.prefix(1500)) + "\n… [Large Clip: 100% full \(editedText.count) characters saved in background storage]"
+                                } else {
+                                    target.payloadFileName = nil
+                                    target.text = editedText
+                                }
+                                target.isEdited = true
+                                manager.history[idx] = target
                                 ItemTypeCache.shared.invalidate(for: item.id)
                                 manager.saveHistory()
                             }
@@ -785,13 +924,15 @@ struct ClipItemRowView: View {
         let pb = NSPasteboard.general
         pb.clearContents()
 
+        let fullText = item.fullText(key: manager.key)
+
         if let data = item.imageData, let img = NSImage(data: data) {
             pb.writeObjects([img])
-        } else if item.text.hasPrefix("file://") {
-            let path = String(item.text.dropFirst(7))
+        } else if fullText.hasPrefix("file://") {
+            let path = String(fullText.dropFirst(7))
             pb.writeObjects([URL(fileURLWithPath: path) as NSURL])
         } else {
-            pb.setString(item.text, forType: .string)
+            pb.setString(fullText, forType: .string)
         }
 
         manager.lastChangeCount = pb.changeCount
@@ -803,7 +944,7 @@ struct ClipItemRowView: View {
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
             (NSApp.delegate as? AppDelegate)?.closePopover()
-            (NSApp.delegate as? AppDelegate)?.showPreview(item.text)
+            (NSApp.delegate as? AppDelegate)?.showPreview(fullText)
 
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                 if let idx = manager.history.firstIndex(where: { $0.id == item.id }) {
@@ -849,7 +990,8 @@ struct ClipItemRowView: View {
         NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .default)
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
             if let idx = manager.history.firstIndex(where: { $0.id == item.id }) {
-                manager.history.remove(at: idx)
+                let deleted = manager.history.remove(at: idx)
+                LargePayloadStore.deletePayload(fileName: deleted.payloadFileName)
                 manager.persistIfNeeded()
             }
         }
@@ -1465,14 +1607,15 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         }
 
         var newText: String?
-        var newImage: Data?
+        var newImageData: Data?
+        var newPayloadFileName: String?
         let sourceApp = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
 
         if let urls = pb.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL], let first = urls.first {
             newText = "file://" + first.path
         } else if let images = pb.readObjects(forClasses: [NSImage.self], options: nil) as? [NSImage], let img = images.first {
             if let tiff = img.tiffRepresentation, let rep = NSBitmapImageRep(data: tiff), let png = rep.representation(using: .png, properties: [:]) {
-                newImage = png
+                newImageData = png
                 var extractedName = "[Image]"
                 if let html = pb.string(forType: NSPasteboard.PasteboardType("public.html")) {
                     if let range = html.range(of: "alt=\"([^\"]+)\"", options: .regularExpression) {
@@ -1496,7 +1639,16 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         } else if let str = pb.string(forType: .string) {
             let t = str.trimmingCharacters(in: .whitespacesAndNewlines)
             if t.isEmpty { return }
-            newText = str
+            
+            // Large Payload Storage: If text > 15,000 chars, offload full text to encrypted payload file
+            if str.utf8.count > 15000 && str.count > 15000 {
+                let itemId = UUID().uuidString
+                let pf = LargePayloadStore.savePayload(id: itemId, text: str, key: self.clipboardManager.key)
+                newPayloadFileName = pf
+                newText = String(str.prefix(1500)) + "\n… [Large Clip: 100% full \(str.count) characters saved in background storage]"
+            } else {
+                newText = str
+            }
         }
 
         guard let text = newText else { return }
@@ -1505,13 +1657,17 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
         // Needs to be run on main thread since it updates @Published history
         DispatchQueue.main.async {
-            if let idx = self.clipboardManager.history.firstIndex(where: { $0.text == text && $0.imageData == newImage }) {
+            // Fast duplicate detection: check O(1) byte length before full string equality check
+            if let idx = self.clipboardManager.history.firstIndex(where: {
+                $0.imageData == newImageData && $0.text.utf8.count == text.utf8.count && $0.text == text
+            }) {
                 let pinned = self.clipboardManager.history[idx].pinned
+                let oldPayload = self.clipboardManager.history[idx].payloadFileName
                 self.clipboardManager.history.remove(at: idx)
-                let newItem = ClipItem(text: text, date: Date(), pinned: pinned, imageData: newImage, sourceAppBundleIdentifier: sourceApp, isRemote: isRemote)
+                let newItem = ClipItem(text: text, date: Date(), pinned: pinned, imageData: newImageData, sourceAppBundleIdentifier: sourceApp, isRemote: isRemote, payloadFileName: newPayloadFileName ?? oldPayload)
                 self.clipboardManager.history.insert(newItem, at: 0)
             } else {
-                let newItem = ClipItem(text: text, date: Date(), pinned: false, imageData: newImage, sourceAppBundleIdentifier: sourceApp, isRemote: isRemote)
+                let newItem = ClipItem(text: text, date: Date(), pinned: false, imageData: newImageData, sourceAppBundleIdentifier: sourceApp, isRemote: isRemote, payloadFileName: newPayloadFileName)
                 self.clipboardManager.history.insert(newItem, at: 0)
                 self.showPreview(text)
             }
