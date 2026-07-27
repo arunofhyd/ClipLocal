@@ -1,7 +1,15 @@
 {
-  "version": "1.2.0",
+  "version": "1.2.1",
   "downloadURL": "https://cliplocal.vercel.app/#install",
   "changelog": [
+    {
+      "version": "1.2.1",
+      "date": "2026-07-27",
+      "changes": [
+        "Smooth Changelog Scrolling: Replaced legacy AppKit NSTextView inside Update Alert with hardware-accelerated SwiftUI ScrollView for 60 FPS / 120 FPS ProMotion trackpad scrolling.",
+        "Update Check Cache Bypass: Added dynamic cache-busting timestamp parameter to update checker to guarantee real-time update notifications without CDN caching delays."
+      ]
+    },
     {
       "version": "1.2.0",
       "date": "2026-07-27",
