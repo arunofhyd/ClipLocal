@@ -1790,6 +1790,29 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         return false
     }
 
+struct UpdateChangelogView: View {
+    let changelog: String
+
+    var body: some View {
+        ScrollView(.vertical, showsIndicators: true) {
+            Text(changelog)
+                .font(.system(size: 12, weight: .regular))
+                .foregroundColor(.primary)
+                .lineSpacing(3)
+                .multilineTextAlignment(.leading)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(10)
+        }
+        .frame(width: 340, height: 140)
+        .background(Color(NSColor.controlBackgroundColor))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(Color.secondary.opacity(0.2), lineWidth: 1)
+        )
+    }
+}
+
     func showUpdateResult(_ remote: String?, changelog: String, newer: Bool, downloadURL: String = downloadPageURL) {
         let alert = NSAlert()
         NSApp.activate(ignoringOtherApps: true)
@@ -1797,33 +1820,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             alert.messageText = "ClipLocal \(remote) is available"
             alert.informativeText = "You have v\(appVersion). Here's what's new:"
             if !changelog.isEmpty {
-                let width: CGFloat = 340
-                let height: CGFloat = 140
-                let scroll = NSScrollView(frame: NSRect(x: 0, y: 0, width: width, height: height))
-                scroll.hasVerticalScroller = true
-                scroll.hasHorizontalScroller = false
-                scroll.autohidesScrollers = false
-                scroll.drawsBackground = false
-                scroll.scrollsDynamically = true
-                scroll.wantsLayer = true
-
-                let contentWidth = scroll.contentSize.width
-                let tv = NSTextView(frame: NSRect(x: 0, y: 0, width: contentWidth, height: height))
-                tv.isEditable = false
-                tv.isSelectable = true
-                tv.drawsBackground = false
-                tv.font = NSFont.systemFont(ofSize: 12)
-                tv.textColor = .labelColor
-                tv.string = changelog
-
-                tv.isVerticallyResizable = true
-                tv.isHorizontallyResizable = false
-                tv.autoresizingMask = [.width]
-                tv.textContainer?.containerSize = NSSize(width: contentWidth, height: .greatestFiniteMagnitude)
-                tv.textContainer?.widthTracksTextView = true
-
-                scroll.documentView = tv
-                alert.accessoryView = scroll
+                let hosting = NSHostingView(rootView: UpdateChangelogView(changelog: changelog))
+                hosting.frame = NSRect(x: 0, y: 0, width: 340, height: 140)
+                alert.accessoryView = hosting
             }
             alert.addButton(withTitle: "Update Now")
             alert.addButton(withTitle: "Later")
