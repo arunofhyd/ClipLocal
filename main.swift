@@ -1764,10 +1764,19 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             }
             let dl = (json["downloadURL"] as? String) ?? downloadPageURL
             var notes = ""
-            if let logs = json["changelog"] as? [[String: Any]],
-               let entry = logs.first(where: { ($0["version"] as? String) == remote }),
-               let changes = entry["changes"] as? [String] {
-                notes = changes.map { "•  \($0)" }.joined(separator: "\n")
+            if let logs = json["changelog"] as? [[String: Any]] {
+                let unreadEntries = logs.filter { entry in
+                    if let v = entry["version"] as? String {
+                        return self.isNewer(v, than: appVersion)
+                    }
+                    return false
+                }
+                notes = unreadEntries.compactMap { entry -> String? in
+                    guard let v = entry["version"] as? String,
+                          let changes = entry["changes"] as? [String] else { return nil }
+                    let changeList = changes.map { "•  \($0)" }.joined(separator: "\n")
+                    return "Version \(v):\n\(changeList)"
+                }.joined(separator: "\n\n")
             }
             let newer = self.isNewer(remote, than: appVersion)
             DispatchQueue.main.async {
