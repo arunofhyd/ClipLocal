@@ -1797,14 +1797,31 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             alert.messageText = "ClipLocal \(remote) is available"
             alert.informativeText = "You have v\(appVersion). Here's what's new:"
             if !changelog.isEmpty {
-                let tv = NSTextView(frame: NSRect(x: 0, y: 0, width: 340, height: 130))
-                tv.isEditable = false; tv.drawsBackground = false
-                tv.font = NSFont.systemFont(ofSize: 12)
-                tv.string = changelog
-                tv.autoresizingMask = [.width]
-                let scroll = NSScrollView(frame: NSRect(x: 0, y: 0, width: 340, height: 130))
-                scroll.hasVerticalScroller = true; scroll.drawsBackground = false
+                let width: CGFloat = 340
+                let height: CGFloat = 140
+                let scroll = NSScrollView(frame: NSRect(x: 0, y: 0, width: width, height: height))
+                scroll.hasVerticalScroller = true
+                scroll.hasHorizontalScroller = false
+                scroll.autohidesScrollers = false
+                scroll.drawsBackground = false
+                scroll.scrollsDynamically = true
                 scroll.wantsLayer = true
+
+                let contentWidth = scroll.contentSize.width
+                let tv = NSTextView(frame: NSRect(x: 0, y: 0, width: contentWidth, height: height))
+                tv.isEditable = false
+                tv.isSelectable = true
+                tv.drawsBackground = false
+                tv.font = NSFont.systemFont(ofSize: 12)
+                tv.textColor = .labelColor
+                tv.string = changelog
+
+                tv.isVerticallyResizable = true
+                tv.isHorizontallyResizable = false
+                tv.autoresizingMask = [.width]
+                tv.textContainer?.containerSize = NSSize(width: contentWidth, height: .greatestFiniteMagnitude)
+                tv.textContainer?.widthTracksTextView = true
+
                 scroll.documentView = tv
                 alert.accessoryView = scroll
             }
