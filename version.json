@@ -1,7 +1,16 @@
 {
-  "version": "1.2.2",
+  "version": "1.3.0",
   "downloadURL": "https://cliplocal.vercel.app/#install",
   "changelog": [
+    {
+      "version": "1.3.0",
+      "date": "2026-07-27",
+      "changes": [
+        "Virtualized Large File Editor: Replaced SwiftUI TextEditor with AppKit NSTextView non-contiguous layout virtualization (allowsNonContiguousLayout = true) for 0% CPU scrolling through 50,000+ line files.",
+        "Read-Only Safety Guard: Added Read-Only mode for massive files exceeding 100,000 characters to prevent main-thread re-encryption freezes on save.",
+        "Async Background Loading: Offloaded large clip content loading to background queues for instant modal presentation."
+      ]
+    },
     {
       "version": "1.2.2",
       "date": "2026-07-27",

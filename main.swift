@@ -7,7 +7,7 @@ import Combine
 //  ClipLocal — 100% on-device clipboard history, no third parties
 // ============================================================
 
-let appVersion = "1.2.2"
+let appVersion = "1.3.0"
 let updateCheckURL = "https://raw.githubusercontent.com/arunofhyd/ClipLocal/main/version.json"
 let downloadPageURL = "https://cliplocal.vercel.app/#install"
 
@@ -650,8 +650,72 @@ struct ContentView: View {
             copiedItemId = nil
         }
     }
+}
 
-    // MARK: - Helpers
+// MARK: - High-Performance Virtualized Large Text Editor
+struct LargeTextEditor: NSViewRepresentable {
+    @Binding var text: String
+    var isEditable: Bool = true
+
+    func makeNSView(context: Context) -> NSScrollView {
+        let scrollView = NSScrollView()
+        scrollView.hasVerticalScroller = true
+        scrollView.hasHorizontalScroller = true
+        scrollView.autohidesScrollers = true
+        scrollView.drawsBackground = false
+
+        let contentSize = scrollView.contentSize
+        let textView = NSTextView(frame: NSRect(origin: .zero, size: contentSize))
+        textView.minSize = NSSize(width: 0, height: contentSize.height)
+        textView.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
+        textView.isVerticallyResizable = true
+        textView.isHorizontallyResizable = true
+        textView.autoresizingMask = [.width]
+
+        textView.textContainer?.containerSize = NSSize(width: contentSize.width, height: CGFloat.greatestFiniteMagnitude)
+        textView.textContainer?.widthTracksTextView = true
+
+        textView.isEditable = isEditable
+        textView.isSelectable = true
+        textView.isRichText = false
+        textView.importsGraphics = false
+        textView.allowsUndo = true
+        textView.font = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
+        textView.textColor = .labelColor
+
+        // HIGH PERFORMANCE VIRTUALIZATION: Only calculate layout for lines visible on screen!
+        textView.layoutManager?.allowsNonContiguousLayout = true
+
+        textView.string = text
+        textView.delegate = context.coordinator
+
+        scrollView.documentView = textView
+        return scrollView
+    }
+
+    func updateNSView(_ nsView: NSScrollView, context: Context) {
+        if let textView = nsView.documentView as? NSTextView {
+            if textView.string != text {
+                textView.string = text
+            }
+        }
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(self)
+    }
+
+    class Coordinator: NSObject, NSTextViewDelegate {
+        var parent: LargeTextEditor
+        init(_ parent: LargeTextEditor) {
+            self.parent = parent
+        }
+
+        func textDidChange(_ notification: Notification) {
+            guard let textView = notification.object as? NSTextView else { return }
+            self.parent.text = textView.string
+        }
+    }
 }
 
 // MARK: - ClipItemRowView
@@ -671,6 +735,7 @@ struct ClipItemRowView: View {
     // Edit state
     @State private var isEditing = false
     @State private var editedText = ""
+    @State private var isLoadingEdit = false
 
     // MARK: Memoised helpers (computed once per render, not on every sub-view)
     private var itemType: String { clipItemType(for: item) }
@@ -853,55 +918,90 @@ struct ClipItemRowView: View {
         .listRowBackground(isHovered ? Color.accentColor.opacity(0.1) : Color.clear)
         .contextMenu {
             Button(action: {
-                editedText = item.fullText(key: manager.key)
+                let currentKey = manager.key
+                let currentItem = item
                 isEditing = true
+                isLoadingEdit = true
+                DispatchQueue.global(qos: .userInitiated).async {
+                    let full = currentItem.fullText(key: currentKey)
+                    DispatchQueue.main.async {
+                        editedText = full
+                        isLoadingEdit = false
+                    }
+                }
             }) {
                 Label("Edit", systemImage: "square.and.pencil")
             }
         }
         .sheet(isPresented: $isEditing) {
-            VStack(alignment: .leading) {
-                Text("Edit Clip")
-                    .font(.headline)
-                    .padding(.bottom, 4)
-                TextEditor(text: $editedText)
-                    .font(.system(.body, design: .monospaced))
-                    .frame(minWidth: 300, minHeight: 150)
-                    .overlay(RoundedRectangle(cornerRadius: 4).stroke(Color.secondary.opacity(0.3), lineWidth: 1))
+            VStack(alignment: .leading, spacing: 8) {
+                let isReadOnly = editedText.count > 100000
+                HStack {
+                    Text(isReadOnly ? "View Large Clip" : "Edit Clip")
+                        .font(.headline)
+                    Spacer()
+                    if isReadOnly {
+                        HStack(spacing: 4) {
+                            Image(systemName: "info.circle.fill")
+                                .foregroundColor(.orange)
+                            Text("Read-Only (Over 100k chars)")
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundColor(.secondary)
+                        }
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(Color.orange.opacity(0.12))
+                        .cornerRadius(6)
+                    }
+                }
+                if isLoadingEdit {
+                    VStack {
+                        Spacer()
+                        ProgressView("Loading clip content...")
+                        Spacer()
+                    }
+                    .frame(maxWidth: .infinity, minHeight: 200)
+                } else {
+                    LargeTextEditor(text: $editedText, isEditable: !isReadOnly)
+                        .frame(minWidth: 450, minHeight: 220)
+                        .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.secondary.opacity(0.3), lineWidth: 1))
+                }
                 HStack {
                     Spacer()
-                    Button("Cancel") { isEditing = false }
-                    Button("Save") {
-                        if let idx = manager.history.firstIndex(where: { $0.id == item.id }) {
-                            if editedText.isEmpty {
-                                let deleted = manager.history.remove(at: idx)
-                                LargePayloadStore.deletePayload(fileName: deleted.payloadFileName)
-                                ItemTypeCache.shared.invalidate(for: item.id)
-                                manager.saveHistory()
-                            } else {
-                                var target = manager.history[idx]
-                                LargePayloadStore.deletePayload(fileName: target.payloadFileName)
-                                if editedText.count > 15000 {
-                                    let pf = LargePayloadStore.savePayload(id: target.id, text: editedText, key: manager.key)
-                                    target.payloadFileName = pf
-                                    target.text = String(editedText.prefix(1500)) + "\n… [Large Clip: 100% full \(editedText.count) characters saved in background storage]"
+                    Button(isReadOnly ? "Done" : "Cancel") { isEditing = false }
+                    if !isReadOnly {
+                        Button("Save") {
+                            if let idx = manager.history.firstIndex(where: { $0.id == item.id }) {
+                                if editedText.isEmpty {
+                                    let deleted = manager.history.remove(at: idx)
+                                    LargePayloadStore.deletePayload(fileName: deleted.payloadFileName)
+                                    ItemTypeCache.shared.invalidate(for: item.id)
+                                    manager.saveHistory()
                                 } else {
-                                    target.payloadFileName = nil
-                                    target.text = editedText
+                                    var target = manager.history[idx]
+                                    LargePayloadStore.deletePayload(fileName: target.payloadFileName)
+                                    if editedText.count > 15000 {
+                                        let pf = LargePayloadStore.savePayload(id: target.id, text: editedText, key: manager.key)
+                                        target.payloadFileName = pf
+                                        target.text = String(editedText.prefix(1500)) + "\n… [Large Clip: 100% full \(editedText.count) characters saved in background storage]"
+                                    } else {
+                                        target.payloadFileName = nil
+                                        target.text = editedText
+                                    }
+                                    target.isEdited = true
+                                    manager.history[idx] = target
+                                    ItemTypeCache.shared.invalidate(for: item.id)
+                                    manager.saveHistory()
                                 }
-                                target.isEdited = true
-                                manager.history[idx] = target
-                                ItemTypeCache.shared.invalidate(for: item.id)
-                                manager.saveHistory()
                             }
+                            isEditing = false
                         }
-                        isEditing = false
+                        .keyboardShortcut(.defaultAction)
                     }
-                    .keyboardShortcut(.defaultAction)
                 }
             }
             .padding()
-            .frame(width: 400, height: 250)
+            .frame(width: 520, height: 320)
         }
         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
             Button(role: .destructive) { deleteItem() } label: {
