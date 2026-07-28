@@ -90,7 +90,7 @@ if [ "$_NEED_BRIDGING_FIX" = true ]; then
         printf "  ${YELLOW}Your admin password may be required:${NC}\n"
 
         # Build a patched copy with only the SwiftBridging block removed.
-        _PATCHED="$BUILD_DIR/module.modulemap.patched"
+        _PATCHED="/tmp/module.modulemap.patched"
         python3 -c "
 import re, sys
 try:
