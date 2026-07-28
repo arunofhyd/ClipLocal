@@ -155,7 +155,9 @@ if let tiff = img.tiffRepresentation,
 }
 ICONEOF
 
-swiftc MakeIcon.swift -o MakeIcon >/dev/null 2>&1 && ./MakeIcon
+SWIFT_SDK=$(xcrun --show-sdk-path 2>/dev/null)
+SWIFT_CACHE="$BUILD_DIR/.swiftcache"
+xcrun swiftc ${SWIFT_SDK:+-sdk "$SWIFT_SDK"} -module-cache-path "$SWIFT_CACHE" MakeIcon.swift -o MakeIcon > /dev/null 2>&1 && ./MakeIcon
 if [ -f AppIcon.png ]; then
     mkdir -p AppIcon.iconset
     for pair in "16 16" "32 16@2x" "32 32" "64 32@2x" "128 128" "256 128@2x" "256 256" "512 256@2x" "512 512" "1024 512@2x"; do
@@ -198,7 +200,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 </plist>
 PLIST
 
-if ! swiftc -O -o "$APP/Contents/MacOS/$APP_NAME" main.swift -framework Cocoa 2>build_errors.txt; then
+if ! xcrun swiftc -O ${SWIFT_SDK:+-sdk "$SWIFT_SDK"} -module-cache-path "$SWIFT_CACHE" -o "$APP/Contents/MacOS/$APP_NAME" main.swift -framework Cocoa 2>build_errors.txt; then
     fail "Compilation failed."
     printf "${GREY}"; cat build_errors.txt; printf "${NC}\n"
     exit 1
@@ -355,7 +357,7 @@ app.activate(ignoringOtherApps: true)
 app.run()
 INSTEOF
 
-if ! swiftc -O -o Installer Installer.swift -framework Cocoa >/dev/null 2>&1; then
+if ! xcrun swiftc -O ${SWIFT_SDK:+-sdk "$SWIFT_SDK"} -module-cache-path "$SWIFT_CACHE" -o Installer Installer.swift -framework Cocoa > /dev/null 2>&1; then
     # Fall back to plain auto-copy if the installer window can't build.
     warn "Using direct install…"
     DEST="/Applications/$APP_NAME.app"
