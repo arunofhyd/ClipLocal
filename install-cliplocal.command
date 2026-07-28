@@ -31,38 +31,73 @@ printf "\n"
 
 # ---- Step 1: Command Line Tools (compiler) -------------------------------
 step "Checking for build tools…"
-if ! xcode-select -p > /dev/null 2>&1; then
+if ! xcode-select -p >/dev/null 2>&1; then
     warn "Apple's Command Line Tools are needed to build the app."
     printf "  ${GREY}A small official Apple installer will pop up. Please click ${BOLD}Install${NC}${GREY} and wait for it to finish.${NC}\n\n"
-    xcode-select --install > /dev/null 2>&1
+    xcode-select --install >/dev/null 2>&1
     printf "  ${YELLOW}When the installation is COMPLETE, press [Enter] here to continue…${NC}"
     read -r
-    if ! xcode-select -p > /dev/null 2>&1; then
+    if ! xcode-select -p >/dev/null 2>&1; then
         fail "Build tools still not found."
         printf "  ${GREY}Please finish the Apple installer, then run this file again.${NC}\n\n"
         exit 1
     fi
 fi
 
-# Detect the CLT 16.x 'redefinition of SwiftBridging' bug:
-# Both module.modulemap AND bridging.modulemap define SwiftBridging,
-# which causes Foundation/Cocoa to fail to build.
-_CLT_MODMAP="/Library/Developer/CommandLineTools/usr/include/swift/module.modulemap"
-_CLT_BRIDGE="/Library/Developer/CommandLineTools/usr/include/swift/bridging.modulemap"
-if grep -q "module SwiftBridging" "$_CLT_MODMAP" 2>/dev/null && \
+# ---- Workaround for CLT "redefinition of module 'SwiftBridging'" bug ------
+# Some CLT versions (notably 16.x on macOS 15) ship both module.modulemap and
+# bridging.modulemap in /Library/Developer/CommandLineTools/usr/include/swift/,
+# and both define 'module SwiftBridging', which makes Foundation/Cocoa fail.
+_CLT_SWIFT="/Library/Developer/CommandLineTools/usr/include/swift"
+_CLT_MODMAP="$_CLT_SWIFT/module.modulemap"
+_CLT_BRIDGE="$_CLT_SWIFT/bridging.modulemap"
+
+_NEED_BRIDGING_FIX=false
+if [ -f "$_CLT_MODMAP" ] && [ -f "$_CLT_BRIDGE" ] && \
+   grep -q "module SwiftBridging" "$_CLT_MODMAP" 2>/dev/null && \
    grep -q "module SwiftBridging" "$_CLT_BRIDGE" 2>/dev/null; then
-    warn "Conflicting Command Line Tools detected (SwiftBridging redefinition bug)."
-    # Prefer Xcode's toolchain if available — it doesn't have the conflict.
-    if [ -d "/Applications/Xcode.app/Contents/Developer" ]; then
-        printf "  ${GREY}Switching to Xcode toolchain to work around CLT bug…${NC}\n"
-        sudo xcode-select -s "/Applications/Xcode.app/Contents/Developer" 2>/dev/null || true
+    _NEED_BRIDGING_FIX=true
+fi
+
+if [ "$_NEED_BRIDGING_FIX" = true ]; then
+    warn "Known compiler bug detected (SwiftBridging module conflict)."
+
+    # Strategy 1: If ANY Xcode.app exists, use its toolchain for this build
+    #             via DEVELOPER_DIR (per-process only — no system-wide changes).
+    _XCODE_DEV=""
+    for _candidate in \
+        "/Applications/Xcode.app/Contents/Developer" \
+        "/Applications/Xcode-beta.app/Contents/Developer" \
+        "/Applications/Xcode_*.app/Contents/Developer"; do
+        # shellcheck disable=SC2086
+        for _path in $_candidate; do
+            if [ -d "$_path" ] && [ -x "$_path/usr/bin/swiftc" ]; then
+                _XCODE_DEV="$_path"
+                break 2
+            fi
+        done
+    done
+
+    if [ -n "$_XCODE_DEV" ]; then
+        printf "  ${GREY}Using Xcode toolchain at ${_XCODE_DEV}${NC}\n"
+        export DEVELOPER_DIR="$_XCODE_DEV"
     else
-        # No Xcode. Re-installing CLT is the fix.
-        printf "\n  ${RED}Your Command Line Tools have a known compiler bug.${NC}\n"
-        printf "  ${GREY}To fix it, run these two commands in Terminal, then re-run this installer:${NC}\n\n"
-        printf "  ${BOLD}  sudo rm -rf /Library/Developer/CommandLineTools${NC}\n"
-        printf "  ${BOLD}  xcode-select --install${NC}\n\n"
-        exit 1
+        # Strategy 2: No Xcode — rename the duplicate file (needs admin once).
+        #             bridging.modulemap already has the correct definition,
+        #             so module.modulemap is pure duplicate and safe to move.
+        printf "  ${GREY}No Xcode installation found. Attempting one-time fix…${NC}\n"
+        printf "  ${YELLOW}Your admin password may be required to repair the compiler:${NC}\n"
+        if sudo mv "$_CLT_MODMAP" "${_CLT_MODMAP}.bak" 2>/dev/null; then
+            ok "Compiler repaired (renamed conflicting module.modulemap)."
+        else
+            fail "Could not auto-repair. Please run these commands manually, then re-run this installer:"
+            printf "\n"
+            printf "  ${BOLD}  sudo mv '$_CLT_MODMAP' '${_CLT_MODMAP}.bak'${NC}\n\n"
+            printf "  ${GREY}Or, do a clean reinstall of Command Line Tools:${NC}\n"
+            printf "  ${BOLD}  sudo rm -rf /Library/Developer/CommandLineTools${NC}\n"
+            printf "  ${BOLD}  xcode-select --install${NC}\n\n"
+            exit 1
+        fi
     fi
 fi
 
