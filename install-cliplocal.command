@@ -31,18 +31,41 @@ printf "\n"
 
 # ---- Step 1: Command Line Tools (compiler) -------------------------------
 step "Checking for build tools…"
-if ! xcode-select -p >/dev/null 2>&1; then
+if ! xcode-select -p > /dev/null 2>&1; then
     warn "Apple's Command Line Tools are needed to build the app."
     printf "  ${GREY}A small official Apple installer will pop up. Please click ${BOLD}Install${NC}${GREY} and wait for it to finish.${NC}\n\n"
-    xcode-select --install >/dev/null 2>&1
+    xcode-select --install > /dev/null 2>&1
     printf "  ${YELLOW}When the installation is COMPLETE, press [Enter] here to continue…${NC}"
     read -r
-    if ! xcode-select -p >/dev/null 2>&1; then
+    if ! xcode-select -p > /dev/null 2>&1; then
         fail "Build tools still not found."
         printf "  ${GREY}Please finish the Apple installer, then run this file again.${NC}\n\n"
         exit 1
     fi
 fi
+
+# Detect the CLT 16.x 'redefinition of SwiftBridging' bug:
+# Both module.modulemap AND bridging.modulemap define SwiftBridging,
+# which causes Foundation/Cocoa to fail to build.
+_CLT_MODMAP="/Library/Developer/CommandLineTools/usr/include/swift/module.modulemap"
+_CLT_BRIDGE="/Library/Developer/CommandLineTools/usr/include/swift/bridging.modulemap"
+if grep -q "module SwiftBridging" "$_CLT_MODMAP" 2>/dev/null && \
+   grep -q "module SwiftBridging" "$_CLT_BRIDGE" 2>/dev/null; then
+    warn "Conflicting Command Line Tools detected (SwiftBridging redefinition bug)."
+    # Prefer Xcode's toolchain if available — it doesn't have the conflict.
+    if [ -d "/Applications/Xcode.app/Contents/Developer" ]; then
+        printf "  ${GREY}Switching to Xcode toolchain to work around CLT bug…${NC}\n"
+        sudo xcode-select -s "/Applications/Xcode.app/Contents/Developer" 2>/dev/null || true
+    else
+        # No Xcode. Re-installing CLT is the fix.
+        printf "\n  ${RED}Your Command Line Tools have a known compiler bug.${NC}\n"
+        printf "  ${GREY}To fix it, run these two commands in Terminal, then re-run this installer:${NC}\n\n"
+        printf "  ${BOLD}  sudo rm -rf /Library/Developer/CommandLineTools${NC}\n"
+        printf "  ${BOLD}  xcode-select --install${NC}\n\n"
+        exit 1
+    fi
+fi
+
 ok "Build tools ready."
 printf "\n"
 
