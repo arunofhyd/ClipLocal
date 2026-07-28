@@ -82,18 +82,45 @@ if [ "$_NEED_BRIDGING_FIX" = true ]; then
         printf "  ${GREY}Using Xcode toolchain at ${_XCODE_DEV}${NC}\n"
         export DEVELOPER_DIR="$_XCODE_DEV"
     else
-        # Strategy 2: No Xcode — rename the duplicate file (needs admin once).
-        #             bridging.modulemap already has the correct definition,
-        #             so module.modulemap is pure duplicate and safe to move.
-        printf "  ${GREY}No Xcode installation found. Attempting one-time fix…${NC}\n"
-        printf "  ${YELLOW}Your admin password may be required to repair the compiler:${NC}\n"
-        if sudo mv "$_CLT_MODMAP" "${_CLT_MODMAP}.bak" 2>/dev/null; then
-            ok "Compiler repaired (renamed conflicting module.modulemap)."
+        # Strategy 2: No Xcode — surgically remove ONLY the duplicate SwiftBridging
+        #             block from module.modulemap. We do NOT rename the whole file
+        #             because it may contain other module definitions we must keep.
+        #             bridging.modulemap already has the correct definition.
+        printf "  ${GREY}No Xcode installation found. Attempting one-time compiler repair…${NC}\n"
+        printf "  ${YELLOW}Your admin password may be required:${NC}\n"
+
+        # Build a patched copy with only the SwiftBridging block removed.
+        _PATCHED="$BUILD_DIR/module.modulemap.patched"
+        python3 -c "
+import re, sys
+try:
+    with open('$_CLT_MODMAP', 'r') as f:
+        content = f.read()
+    # Remove the 'module SwiftBridging { ... }' block (single-level braces only)
+    patched = re.sub(r'module\s+SwiftBridging\s*\{[^}]*\}', '', content)
+    with open('$_PATCHED', 'w') as f:
+        f.write(patched)
+    sys.exit(0)
+except Exception as e:
+    sys.exit(1)
+" 2>/dev/null
+
+        if [ -f "$_PATCHED" ]; then
+            if sudo cp "$_CLT_MODMAP" "${_CLT_MODMAP}.bak" 2>/dev/null && \
+               sudo cp "$_PATCHED"    "$_CLT_MODMAP"        2>/dev/null; then
+                ok "Compiler repaired (removed duplicate SwiftBridging from module.modulemap)."
+            else
+                fail "Could not auto-repair (sudo required). Please run this manually, then re-run this installer:"
+                printf "\n"
+                printf "  ${BOLD}  sudo cp '$_CLT_MODMAP' '${_CLT_MODMAP}.bak'${NC}\n"
+                printf "  ${BOLD}  sudo cp '$_PATCHED' '$_CLT_MODMAP'${NC}\n\n"
+                printf "  ${GREY}Or reinstall Command Line Tools cleanly:${NC}\n"
+                printf "  ${BOLD}  sudo rm -rf /Library/Developer/CommandLineTools${NC}\n"
+                printf "  ${BOLD}  xcode-select --install${NC}\n\n"
+                exit 1
+            fi
         else
-            fail "Could not auto-repair. Please run these commands manually, then re-run this installer:"
-            printf "\n"
-            printf "  ${BOLD}  sudo mv '$_CLT_MODMAP' '${_CLT_MODMAP}.bak'${NC}\n\n"
-            printf "  ${GREY}Or, do a clean reinstall of Command Line Tools:${NC}\n"
+            fail "Could not prepare patch. Please reinstall Command Line Tools:"
             printf "  ${BOLD}  sudo rm -rf /Library/Developer/CommandLineTools${NC}\n"
             printf "  ${BOLD}  xcode-select --install${NC}\n\n"
             exit 1
