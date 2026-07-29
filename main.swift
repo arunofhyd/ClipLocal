@@ -1147,17 +1147,17 @@ struct FilterButton: View {
             let label = title ?? (filterType == "pinned" ? "Pinned" : "Items")
             let c = manager.filterCounts[filterType] ?? TypeCount()
             
-            Button(action: {
-                for i in 0..<manager.history.count {
-                    if filterType == "pinned" {
-                        if manager.history[i].pinned { manager.history[i].pinned = true }
-                    } else if clipItemType(for: manager.history[i]) == filterType {
-                        manager.history[i].pinned = true
+            if filterType != "pinned" {
+                Button(action: {
+                    for i in 0..<manager.history.count {
+                        if clipItemType(for: manager.history[i]) == filterType {
+                            manager.history[i].pinned = true
+                        }
                     }
+                    manager.saveHistory()
+                }) {
+                    Label("Pin All \(label) (\(c.unpinned))", systemImage: "pin")
                 }
-                manager.saveHistory()
-            }) {
-                Label("Pin All \(label) (\(c.unpinned))", systemImage: "pin")
             }
             
             Button(action: {
