@@ -266,7 +266,7 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 [ -f AppIcon.icns ] && cp AppIcon.icns "$APP/Contents/Resources/"
 
 APP_VERSION=$(grep -m1 'let appVersion =' main.swift | cut -d'"' -f2)
-if [ -z "$APP_VERSION" ]; then APP_VERSION="1.2.3"; fi
+if [ -z "$APP_VERSION" ]; then APP_VERSION="1.2.4"; fi
 
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
