@@ -293,7 +293,7 @@ if ! xcrun swiftc -O ${SWIFT_SDK:+-sdk "$SWIFT_SDK"} -module-cache-path "$SWIFT_
     exit 1
 fi
 chmod +x "$APP/Contents/MacOS/$APP_NAME"
-codesign --force --deep --sign - "$APP" >/dev/null 2>&1 || true
+codesign --force --deep --sign - --requirements '=designated => identifier "com.aoh.cliplocal"' "$APP" >/dev/null 2>&1 || true
 ok "App built."
 printf "\n"
 
