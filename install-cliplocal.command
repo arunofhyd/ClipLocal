@@ -37,11 +37,10 @@ if ! xcode-select -p >/dev/null 2>&1; then
     xcode-select --install >/dev/null 2>&1
     printf "  ${YELLOW}When the installation is COMPLETE, press [Enter] here to continue…${NC}"
     read -r
-    if ! xcode-select -p >/dev/null 2>&1; then
-        fail "Build tools still not found."
-        printf "  ${GREY}Please finish the Apple installer, then run this file again.${NC}\n\n"
-        exit 1
-    fi
+    while ! xcode-select -p >/dev/null 2>&1; do
+        printf "  ${GREY}Waiting for Command Line Tools installation to finish…${NC}\n"
+        sleep 5
+    done
 fi
 
 # ---- Workaround for CLT "redefinition of module 'SwiftBridging'" bug ------
@@ -64,6 +63,9 @@ if [ "$_NEED_BRIDGING_FIX" = true ]; then
 
     # Strategy 1: If ANY Xcode.app exists, use its toolchain for this build
     #             via DEVELOPER_DIR (per-process only — no system-wide changes).
+    #             Check for Toolchains/XcodeDefault.xctoolchain — this is the
+    #             reliable indicator of a valid Xcode developer directory.
+    #             (swiftc lives in Toolchains/, NOT in usr/bin/ inside Xcode.app)
     _XCODE_DEV=""
     for _candidate in \
         "/Applications/Xcode.app/Contents/Developer" \
@@ -71,7 +73,7 @@ if [ "$_NEED_BRIDGING_FIX" = true ]; then
         "/Applications/Xcode_*.app/Contents/Developer"; do
         # shellcheck disable=SC2086
         for _path in $_candidate; do
-            if [ -d "$_path" ] && [ -x "$_path/usr/bin/swiftc" ]; then
+            if [ -d "$_path/Toolchains/XcodeDefault.xctoolchain" ]; then
                 _XCODE_DEV="$_path"
                 break 2
             fi
