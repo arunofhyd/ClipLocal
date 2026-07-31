@@ -7,7 +7,7 @@ import Combine
 //  ClipLocal — 100% on-device clipboard history, no third parties
 // ============================================================
 
-let appVersion = "1.2.4"
+let appVersion = "1.2.5"
 let updateCheckURL = "https://raw.githubusercontent.com/arunofhyd/ClipLocal/main/version.json"
 let downloadPageURL = "https://cliplocal.vercel.app/#install"
 
@@ -901,7 +901,7 @@ struct ClipItemRowView: View {
         .onTapGesture {
             let now = Date()
             if now.timeIntervalSince(lastClickTime) < 0.3 {
-                copyItem()
+                pasteItem()
             } else {
                 if manager.expandedIdx.contains(item.id) {
                     manager.expandedIdx.remove(item.id)
@@ -1020,6 +1020,54 @@ struct ClipItemRowView: View {
     }
 
     // MARK: - Row actions
+    private func pasteItem() {
+        let pb = NSPasteboard.general
+        pb.clearContents()
+
+        let fullText = item.fullText(key: manager.key)
+
+        if let data = item.imageData, let img = NSImage(data: data) {
+            pb.writeObjects([img])
+        } else if fullText.hasPrefix("file://") {
+            let path = String(fullText.dropFirst(7))
+            pb.writeObjects([URL(fileURLWithPath: path) as NSURL])
+        } else {
+            pb.setString(fullText, forType: .string)
+        }
+
+        manager.lastChangeCount = pb.changeCount
+        NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .default)
+
+        (NSApp.delegate as? AppDelegate)?.closePopover()
+
+        if let idx = manager.history.firstIndex(where: { $0.id == item.id }) {
+            var updated = item
+            updated.date = Date()
+            manager.history.remove(at: idx)
+            manager.history.insert(updated, at: 0)
+            manager.history.sort {
+                if $0.pinned == $1.pinned { return $0.date > $1.date }
+                return $0.pinned && !$1.pinned
+            }
+            manager.persistIfNeeded()
+        }
+
+        // Synthesize Command+V to paste directly at active cursor location
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+            let src = CGEventSource(stateID: .combinedSessionState)
+            let vKeyCode: CGKeyCode = 0x09 // 'v' key code
+
+            if let keyDown = CGEvent(keyboardEventSource: src, virtualKey: vKeyCode, keyDown: true),
+               let keyUp = CGEvent(keyboardEventSource: src, virtualKey: vKeyCode, keyDown: false) {
+                keyDown.flags = .maskCommand
+                keyUp.flags = .maskCommand
+
+                keyDown.post(tap: .cghidEventTap)
+                keyUp.post(tap: .cghidEventTap)
+            }
+        }
+    }
+
     private func copyItem() {
         let pb = NSPasteboard.general
         pb.clearContents()

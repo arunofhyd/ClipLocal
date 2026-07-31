@@ -1,7 +1,14 @@
 {
-  "version": "1.2.4",
+  "version": "1.2.5",
   "downloadURL": "https://cliplocal.vercel.app/#install",
   "changelog": [
+    {
+      "version": "1.2.5",
+      "date": "2026-07-31",
+      "changes": [
+        "Direct Paste on Double-Click: Double-clicking any item now instantly closes the popover and pastes the selection directly to wherever the active cursor is."
+      ]
+    },
     {
       "version": "1.2.4",
       "date": "2026-07-29",
