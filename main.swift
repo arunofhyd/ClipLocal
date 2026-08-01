@@ -2,12 +2,13 @@ import Cocoa
 import SwiftUI
 import ServiceManagement
 import Combine
+import AVFoundation
 
 // ============================================================
 //  ClipLocal — 100% on-device clipboard history, no third parties
 // ============================================================
 
-let appVersion = "1.2.5"
+let appVersion = "1.2.6"
 let updateCheckURL = "https://raw.githubusercontent.com/arunofhyd/ClipLocal/main/version.json"
 let downloadPageURL = "https://cliplocal.vercel.app/#install"
 
@@ -199,7 +200,7 @@ class ItemTypeCache {
                 let parts = txt.split(separator: "@")
                 if parts.count == 2 && parts[1].contains(".") && !txt.contains(" ") { t = "email" }
                 else if txt.range(of: "^[0-9 +().-]{5,}$", options: .regularExpression) != nil { t = "number" }
-                else if (txt.hasPrefix("/") || txt.hasPrefix("file://")) && !txt.contains("\n") { t = "file" }
+                else if txt.hasPrefix("/") || txt.hasPrefix("file://") { t = "file" }
                 else if txt.hasPrefix("[Image") && txt.hasSuffix("]") { t = "image" }
                 else if ["{", "}", "func ", "var ", "let ", "class ", "struct ", "<", ">", ";", "&&", "||", "==", "!=", "=>", "->", "def ", "import ", "const ", "function ", "sudo ", "echo ", "print(", "return ", "#!/bin/", "$ ", "npm ", "brew ", "apt-get", "git ", "docker ", "chmod ", "chown ", "mkdir ", "pkill ", " | ", " > ", " >> "].contains(where: { txt.contains($0) }) || txt.range(of: "^(cat|tail|head|grep|awk|sed|curl|wget|find|ssh|kill)\\s+([-/.~$\"']|\\S+\\.\\S+)", options: [.regularExpression, .caseInsensitive]) != nil { t = "code" }
                 else { t = "text" }
@@ -231,9 +232,69 @@ class ImagePreviewCache {
         if let cached = cache.object(forKey: item.id as NSString) {
             return cached
         }
-        guard let data = item.imageData, let img = NSImage(data: data) else { return nil }
-        cache.setObject(img, forKey: item.id as NSString)
-        return img
+        
+        // 1. Direct in-memory image data
+        if let data = item.imageData, let img = NSImage(data: data) {
+            cache.setObject(img, forKey: item.id as NSString)
+            return img
+        }
+
+        // 2. Local file paths (images, videos, documents)
+        let raw = item.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let path = getFilePath(from: raw), FileManager.default.fileExists(atPath: path) {
+            let ext = (path as NSString).pathExtension.lowercased()
+            let fileURL = URL(fileURLWithPath: path)
+            
+            // Video snapshot
+            if ["mp4", "mov", "m4v", "avi", "webm", "mkv"].contains(ext) {
+                if let thumb = generateVideoThumbnail(url: fileURL) {
+                    cache.setObject(thumb, forKey: item.id as NSString)
+                    return thumb
+                }
+            }
+            // Image file from disk
+            else if ["png", "jpg", "jpeg", "gif", "heic", "heif", "webp", "tiff", "bmp", "icns"].contains(ext) {
+                if let img = NSImage(contentsOfFile: path) {
+                    cache.setObject(img, forKey: item.id as NSString)
+                    return img
+                }
+            }
+            
+            // System Finder File Icon fallback for documents/other files
+            let icon = NSWorkspace.shared.icon(forFile: path)
+            cache.setObject(icon, forKey: item.id as NSString)
+            return icon
+        }
+
+        return nil
+    }
+
+    private func getFilePath(from text: String) -> String? {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let firstLine = trimmed.components(separatedBy: .newlines).first ?? trimmed
+        if firstLine.hasPrefix("file://") {
+            if let url = URL(string: firstLine) {
+                return url.path
+            }
+            return String(firstLine.dropFirst(7))
+        } else if firstLine.hasPrefix("/") {
+            return firstLine
+        }
+        return nil
+    }
+
+    private func generateVideoThumbnail(url: URL) -> NSImage? {
+        let asset = AVURLAsset(url: url)
+        let imageGenerator = AVAssetImageGenerator(asset: asset)
+        imageGenerator.appliesPreferredTrackTransform = true
+        let time = CMTime(seconds: 1.0, preferredTimescale: 60)
+        if let cgImage = try? imageGenerator.copyCGImage(at: time, actualTime: nil) {
+            return NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
+        }
+        if let cgImage = try? imageGenerator.copyCGImage(at: .zero, actualTime: nil) {
+            return NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
+        }
+        return nil
     }
 }
 
@@ -757,9 +818,16 @@ struct ClipItemRowView: View {
         case "code": return "Code"
         case "email": return "Email"
         case "file":
-            let trimmed = String(item.text.prefix(300)).trimmingCharacters(in: .whitespacesAndNewlines)
-            let ext = (trimmed as NSString).pathExtension.uppercased()
-            return ext.isEmpty ? "File" : "\(ext) file"
+            let raw = item.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            let firstLine = raw.components(separatedBy: .newlines).first ?? raw
+            let clean = firstLine.hasPrefix("file://") ? (URL(string: firstLine)?.path ?? String(firstLine.dropFirst(7))) : firstLine
+            let ext = (clean as NSString).pathExtension.lowercased()
+            if ["mp4", "mov", "m4v", "avi", "webm", "mkv"].contains(ext) {
+                return "\(ext.uppercased()) video"
+            } else if ["png", "jpg", "jpeg", "gif", "heic", "heif", "webp", "tiff", "bmp", "svg", "icns"].contains(ext) {
+                return "\(ext.uppercased()) image"
+            }
+            return ext.isEmpty ? "File" : "\(ext.uppercased()) file"
         case "image":
             let trimmed = String(item.text.prefix(300)).trimmingCharacters(in: .whitespacesAndNewlines)
             let ext = (trimmed as NSString).pathExtension.uppercased()
@@ -771,6 +839,26 @@ struct ClipItemRowView: View {
     }
 
     private var snippet: String {
+        let raw = item.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if itemType == "file" || raw.hasPrefix("file://") || (raw.hasPrefix("/") && !raw.contains("\n")) {
+            let lines = raw.components(separatedBy: .newlines).filter { !$0.isEmpty }
+            let fileNames = lines.compactMap { line -> String? in
+                let clean: String
+                if line.hasPrefix("file://") {
+                    clean = URL(string: line)?.path ?? String(line.dropFirst(7))
+                } else if line.hasPrefix("/") {
+                    clean = line
+                } else {
+                    return nil
+                }
+                let name = (clean as NSString).lastPathComponent
+                return name.isEmpty ? clean : name
+            }
+            if !fileNames.isEmpty {
+                return fileNames.joined(separator: " ↵ ")
+            }
+        }
+
         let maxChars = 500
         let prefixStr = String(item.text.prefix(maxChars + 1))
         let hasMore = prefixStr.utf8.count > maxChars

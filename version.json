@@ -1,7 +1,14 @@
 {
-  "version": "1.2.5",
+  "version": "1.2.6",
   "downloadURL": "https://cliplocal.vercel.app/#install",
   "changelog": [
+    {
+      "version": "1.2.6",
+      "date": "2026-08-01",
+      "changes": [
+        "Clean File Display & Video Previews: File paths are now displayed as clean file names instead of full path URIs. Added video frame snapshot previews for video files and file icon thumbnails for documents."
+      ]
+    },
     {
       "version": "1.2.5",
       "date": "2026-07-31",
