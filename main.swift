@@ -898,18 +898,15 @@ struct ClipItemRowView: View {
         .padding(.vertical, 8)
         .padding(.horizontal, 12)
         .contentShape(Rectangle())
-        .onTapGesture {
-            let now = Date()
-            if now.timeIntervalSince(lastClickTime) < 0.3 {
-                pasteItem()
+        .onTapGesture(count: 2) {
+            pasteItem()
+        }
+        .onTapGesture(count: 1) {
+            if manager.expandedIdx.contains(item.id) {
+                manager.expandedIdx.remove(item.id)
             } else {
-                if manager.expandedIdx.contains(item.id) {
-                    manager.expandedIdx.remove(item.id)
-                } else {
-                    manager.expandedIdx.insert(item.id)
-                }
+                manager.expandedIdx.insert(item.id)
             }
-            lastClickTime = now
         }
         .onHover { hovering in
             // Only this row re-renders — ContentView is untouched
@@ -1311,6 +1308,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
     func closePopover() {
         popover.performClose(nil)
+        NSApp.hide(nil)
     }
 
     func showSettingsMenu() {
@@ -1557,6 +1555,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
         let features = [
             ("lock.shield", "100% On-Device & Private", "Your clipboard data never leaves your Mac. No cloud, no tracking, no accounts."),
+            ("doc.on.clipboard", "Double-Click Direct Paste", "Double-click any clip item to instantly close the menu and paste it directly where your active cursor is."),
             ("key", "Skips Secrets", "By default, passwords copied from 1Password, Bitwarden, etc., are completely ignored."),
             ("eye.slash", "No Analytics", "Zero telemetry. The app only connects to GitHub manually when you check for updates."),
             ("externaldrive.fill", "Encrypted Storage", "In Persistent mode, your history is encrypted (AES-GCM) on disk. Only your Mac account can read it."),
