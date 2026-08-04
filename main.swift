@@ -200,39 +200,34 @@ struct ColorParser {
             str = "#" + String(str.dropFirst(2))
         }
         
-        // 1. HEX format: #RGB, #RGBA, #RRGGBB, #RRGGBBAA or clean 6/8 digit hex without #
+        // 1. HEX format: #RGB, #RGBA, #RRGGBB, #RRGGBBAA
+        // Must start with '#' (or 0x / CSS property prefix) to prevent false positives on random alphanumeric strings like '24A402'
         let isHexWithHash = str.hasPrefix("#")
         let cleanHex = isHexWithHash ? String(str.dropFirst()) : str
         
         let hexCharacterSet = CharacterSet(charactersIn: "0123456789abcdefABCDEF")
-        if !cleanHex.isEmpty && cleanHex.unicodeScalars.allSatisfy({ hexCharacterSet.contains($0) }) {
+        if isHexWithHash && !cleanHex.isEmpty && cleanHex.unicodeScalars.allSatisfy({ hexCharacterSet.contains($0) }) {
             var fullHex = cleanHex
+            if cleanHex.count == 3 {
+                fullHex = cleanHex.map { "\($0)\($0)" }.joined()
+            } else if cleanHex.count == 4 {
+                fullHex = cleanHex.map { "\($0)\($0)" }.joined()
+            }
             
-            // Require '#' prefix if 3 or 4 digits to prevent false positives with short words
-            if !isHexWithHash && (cleanHex.count == 3 || cleanHex.count == 4) {
-                // Skip short hex without #
-            } else {
-                if cleanHex.count == 3 {
-                    fullHex = cleanHex.map { "\($0)\($0)" }.joined()
-                } else if cleanHex.count == 4 {
-                    fullHex = cleanHex.map { "\($0)\($0)" }.joined()
-                }
-                
-                if let val = UInt64(fullHex, radix: 16) {
-                    let r, g, b, a: CGFloat
-                    if fullHex.count == 6 {
-                        r = CGFloat((val >> 16) & 0xFF) / 255.0
-                        g = CGFloat((val >> 8) & 0xFF) / 255.0
-                        b = CGFloat(val & 0xFF) / 255.0
-                        a = 1.0
-                        return NSColor(srgbRed: r, green: g, blue: b, alpha: a)
-                    } else if fullHex.count == 8 {
-                        r = CGFloat((val >> 24) & 0xFF) / 255.0
-                        g = CGFloat((val >> 16) & 0xFF) / 255.0
-                        b = CGFloat((val >> 8) & 0xFF) / 255.0
-                        a = CGFloat(val & 0xFF) / 255.0
-                        return NSColor(srgbRed: r, green: g, blue: b, alpha: a)
-                    }
+            if let val = UInt64(fullHex, radix: 16) {
+                let r, g, b, a: CGFloat
+                if fullHex.count == 6 {
+                    r = CGFloat((val >> 16) & 0xFF) / 255.0
+                    g = CGFloat((val >> 8) & 0xFF) / 255.0
+                    b = CGFloat(val & 0xFF) / 255.0
+                    a = 1.0
+                    return NSColor(srgbRed: r, green: g, blue: b, alpha: a)
+                } else if fullHex.count == 8 {
+                    r = CGFloat((val >> 24) & 0xFF) / 255.0
+                    g = CGFloat((val >> 16) & 0xFF) / 255.0
+                    b = CGFloat((val >> 8) & 0xFF) / 255.0
+                    a = CGFloat(val & 0xFF) / 255.0
+                    return NSColor(srgbRed: r, green: g, blue: b, alpha: a)
                 }
             }
         }
