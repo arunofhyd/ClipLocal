@@ -117,9 +117,10 @@
                 <a href="#install" class="hover:text-brand-blue transition-colors">Install</a>
                 <a href="#changelog" class="hover:text-brand-blue transition-colors">Changelog</a>
             </div>
-            <a href="install-cliplocal.command" download
-               class="bg-brand-blue text-white px-4 py-1.5 rounded-md text-sm font-semibold hover:bg-brand-deep transition-all shadow-[0_0_10px_rgba(10,132,255,0.35)]">
-               Download
+            <a href="https://raw.githubusercontent.com/arunofhyd/ClipLocal/main/install-cliplocal.command" target="_blank" rel="noopener noreferrer"
+               class="bg-white/10 text-white px-4 py-1.5 rounded-md text-sm font-semibold hover:bg-white/20 transition-all border border-white/10 flex items-center gap-1.5">
+               <svg class="w-4 h-4 fill-current" viewBox="0 0 24 24"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+               <span>View Code</span>
             </a>
         </div>
     </nav>
@@ -146,12 +147,12 @@
             macOS
         </p>
         <div class="flex flex-col sm:flex-row gap-4 justify-center items-center">
-            <a href="install-cliplocal.command" download class="bg-brand-blue text-white px-8 py-3 rounded-lg font-bold hover:bg-brand-deep transition-all shadow-[0_0_20px_rgba(10,132,255,0.4)]">
-                Download Installer
+            <a href="#install" class="bg-brand-blue text-white px-8 py-3 rounded-lg font-bold hover:bg-brand-deep transition-all shadow-[0_0_20px_rgba(10,132,255,0.4)] flex items-center gap-2">
+                <span>⚡ Install via Terminal</span>
             </a>
-            <a href="#how-it-works" class="text-gray-400 hover:text-white px-6 py-3 transition-colors flex items-center gap-2">
-                <span>See how it works</span>
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+            <a href="install-cliplocal.command" download="install-cliplocal.command" class="bg-white/5 border border-white/10 text-gray-300 hover:text-white hover:bg-white/10 px-6 py-3 rounded-lg font-semibold transition-all flex items-center gap-2">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                <span>Download .command</span>
             </a>
         </div>
 
@@ -323,7 +324,7 @@
                 <div class="bg-black/40 border border-white/10 rounded-2xl p-8">
                     <h3 class="text-lg font-bold mb-4 text-white">Manual Installation (Fallback)</h3>
                     <ol class="space-y-3 text-gray-300 list-decimal list-inside text-sm">
-                        <li><span class="font-semibold text-white">Download</span> the installer using the button above.</li>
+                        <li><a href="install-cliplocal.command" download="install-cliplocal.command" class="text-brand-blue underline font-semibold hover:text-white transition-colors">Download install-cliplocal.command</a> file manually.</li>
                         <li><span class="font-semibold text-white">Open Terminal</span> (⌘+Space, type "Terminal", press Enter).</li>
                         <li>Type <span class="text-brand-blue font-mono">sh </span> — that's <span class="font-semibold text-white">s</span>, <span class="font-semibold text-white">h</span>, then a <span class="font-semibold text-white">space</span>.</li>
                         <li><span class="font-semibold text-white">Drag and drop</span> the downloaded file into the Terminal window (its path fills in automatically).</li>
