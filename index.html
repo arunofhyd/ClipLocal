@@ -67,6 +67,18 @@
                 setTimeout(() => { btn.innerText = original; btn.classList.remove('text-brand-blue'); }, 2000);
             });
         }
+        function copyToClipboard(text, elementId) {
+            navigator.clipboard.writeText(text).then(() => {
+                const toast = document.getElementById(elementId);
+                if (toast) {
+                    const originalText = toast.innerText;
+                    toast.innerText = 'Copied!';
+                    setTimeout(() => {
+                        toast.innerText = originalText;
+                    }, 2000);
+                }
+            });
+        }
     </script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
@@ -289,9 +301,27 @@
     <section id="install" class="py-20 bg-white/5 border-y border-white/5">
         <div class="max-w-6xl mx-auto px-6">
             <h2 class="text-3xl font-bold mb-12 text-center">Installation</h2>
-            <div class="max-w-2xl mx-auto">
+            <div class="max-w-2xl mx-auto space-y-6">
+                <!-- One-liner Command -->
                 <div class="bg-black/40 border border-white/10 rounded-2xl p-8">
-                    <h3 class="text-lg font-bold mb-4 text-white">Install via Terminal</h3>
+                    <h3 class="text-lg font-bold mb-4 text-white flex items-center gap-2">
+                        <span>⚡ One-Click Terminal Install (Recommended)</span>
+                    </h3>
+                    <p class="text-gray-400 text-sm mb-6 leading-relaxed">
+                        The easiest and fastest way to install ClipLocal. Simply copy and paste this command into your Terminal:
+                    </p>
+                    <div class="bg-black/60 border border-white/10 rounded-xl p-4 flex items-center justify-between font-mono text-sm overflow-x-auto gap-4">
+                        <span class="text-brand-blue select-all break-all text-left">/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/arunofhyd/ClipLocal/main/install-cliplocal.command)"</span>
+                        <button id="btn-copy-command" onclick="copyToClipboard('/bin/bash -c &quot;$(curl -fsSL https://raw.githubusercontent.com/arunofhyd/ClipLocal/main/install-cliplocal.command)&quot;', 'btn-copy-command')"
+                                class="flex-shrink-0 bg-brand-blue/10 border border-brand-blue/30 text-brand-blue hover:bg-brand-blue hover:text-white px-3 py-1.5 rounded-lg text-xs font-semibold font-sans transition-all">
+                            Copy
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Manual fallback -->
+                <div class="bg-black/40 border border-white/10 rounded-2xl p-8">
+                    <h3 class="text-lg font-bold mb-4 text-white">Manual Installation (Fallback)</h3>
                     <ol class="space-y-3 text-gray-300 list-decimal list-inside text-sm">
                         <li><span class="font-semibold text-white">Download</span> the installer using the button above.</li>
                         <li><span class="font-semibold text-white">Open Terminal</span> (⌘+Space, type "Terminal", press Enter).</li>
@@ -301,7 +331,7 @@
                     </ol>
                 </div>
             </div>
-            <div class="mt-6 p-4 bg-black rounded border border-white/10 text-xs text-gray-500 font-mono break-all whitespace-pre-wrap max-w-2xl mx-auto"><span class="text-green-400">user@macbook ~ %</span> sh ~/Downloads/install-cliplocal.command<br><span class="text-brand-blue">▸</span> Checking for build tools…</div>
+            <div class="mt-6 p-4 bg-black rounded border border-white/10 text-xs text-gray-500 font-mono break-all whitespace-pre-wrap max-w-2xl mx-auto"><span class="text-green-400">user@macbook ~ %</span> /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/arunofhyd/ClipLocal/main/install-cliplocal.command)"<br><span class="text-brand-blue">▸</span> Checking for build tools…</div>
             <p class="text-center text-gray-500 text-sm mt-6 max-w-2xl mx-auto">First time only: the installer may ask to install Apple's Command Line Tools (a small official Apple download). This lets your Mac build the app locally — which is why macOS trusts it, with no "damaged app" warnings.</p>
         </div>
     </section>
