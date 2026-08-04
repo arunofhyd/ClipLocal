@@ -3,6 +3,7 @@ import SwiftUI
 import ServiceManagement
 import Combine
 import AVFoundation
+import QuickLookThumbnailing
 
 // ============================================================
 //  ClipLocal — 100% on-device clipboard history, no third parties
@@ -176,6 +177,135 @@ final class AppIconCache {
     }
 }
 
+// MARK: - Color Parser
+struct ColorParser {
+    static func parse(_ text: String) -> NSColor? {
+        var str = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if str.count > 60 || str.isEmpty { return nil }
+        
+        // Strip common code wrappers/prefixes/suffixes: quotes, semicolons, css properties
+        str = str.trimmingCharacters(in: CharacterSet(charactersIn: "\"'`;,"))
+        let lower = str.lowercased()
+        if lower.hasPrefix("color:") {
+            str = String(str.dropFirst(6)).trimmingCharacters(in: .whitespacesAndNewlines)
+        } else if lower.hasPrefix("background-color:") {
+            str = String(str.dropFirst(17)).trimmingCharacters(in: .whitespacesAndNewlines)
+        } else if lower.hasPrefix("background:") {
+            str = String(str.dropFirst(11)).trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        str = str.trimmingCharacters(in: CharacterSet(charactersIn: "\"'`;,"))
+        
+        // Handle 0x prefix if present
+        if str.lowercased().hasPrefix("0x") {
+            str = "#" + String(str.dropFirst(2))
+        }
+        
+        // 1. HEX format: #RGB, #RGBA, #RRGGBB, #RRGGBBAA or clean 6/8 digit hex without #
+        let isHexWithHash = str.hasPrefix("#")
+        let cleanHex = isHexWithHash ? String(str.dropFirst()) : str
+        
+        let hexCharacterSet = CharacterSet(charactersIn: "0123456789abcdefABCDEF")
+        if !cleanHex.isEmpty && cleanHex.unicodeScalars.allSatisfy({ hexCharacterSet.contains($0) }) {
+            var fullHex = cleanHex
+            
+            // Require '#' prefix if 3 or 4 digits to prevent false positives with short words
+            if !isHexWithHash && (cleanHex.count == 3 || cleanHex.count == 4) {
+                // Skip short hex without #
+            } else {
+                if cleanHex.count == 3 {
+                    fullHex = cleanHex.map { "\($0)\($0)" }.joined()
+                } else if cleanHex.count == 4 {
+                    fullHex = cleanHex.map { "\($0)\($0)" }.joined()
+                }
+                
+                if let val = UInt64(fullHex, radix: 16) {
+                    let r, g, b, a: CGFloat
+                    if fullHex.count == 6 {
+                        r = CGFloat((val >> 16) & 0xFF) / 255.0
+                        g = CGFloat((val >> 8) & 0xFF) / 255.0
+                        b = CGFloat(val & 0xFF) / 255.0
+                        a = 1.0
+                        return NSColor(srgbRed: r, green: g, blue: b, alpha: a)
+                    } else if fullHex.count == 8 {
+                        r = CGFloat((val >> 24) & 0xFF) / 255.0
+                        g = CGFloat((val >> 16) & 0xFF) / 255.0
+                        b = CGFloat((val >> 8) & 0xFF) / 255.0
+                        a = CGFloat(val & 0xFF) / 255.0
+                        return NSColor(srgbRed: r, green: g, blue: b, alpha: a)
+                    }
+                }
+            }
+        }
+        
+        // 2. RGB / RGBA format: rgb(r, g, b) or rgba(r, g, b, a)
+        let rgbaPattern = "^rgba?\\(\\s*(\\d{1,3}%?)\\s*,\\s*(\\d{1,3}%?)\\s*,\\s*(\\d{1,3}%?)(?:\\s*,\\s*([\\d.]+))?\\s*\\)$"
+        if let regex = try? NSRegularExpression(pattern: rgbaPattern, options: .caseInsensitive),
+           let match = regex.firstMatch(in: str, range: NSRange(location: 0, length: str.utf16.count)) {
+            func parseVal(_ range: NSRange) -> CGFloat {
+                let s = (str as NSString).substring(with: range)
+                if s.hasSuffix("%") {
+                    let v = Double(s.dropLast()) ?? 0
+                    return CGFloat(v / 100.0)
+                }
+                let v = Double(s) ?? 0
+                return CGFloat(v / 255.0)
+            }
+            let r = parseVal(match.range(at: 1))
+            let g = parseVal(match.range(at: 2))
+            let b = parseVal(match.range(at: 3))
+            var a: CGFloat = 1.0
+            if match.range(at: 4).location != NSNotFound {
+                let aStr = (str as NSString).substring(with: match.range(at: 4))
+                a = CGFloat(Double(aStr) ?? 1.0)
+            }
+            return NSColor(srgbRed: min(1.0, max(0.0, r)), green: min(1.0, max(0.0, g)), blue: min(1.0, max(0.0, b)), alpha: min(1.0, max(0.0, a)))
+        }
+        
+        // 3. HSL / HSLA format: hsl(h, s%, l%) or hsla(h, s%, l%, a)
+        let hslaPattern = "^hsla?\\(\\s*(\\d{1,3})\\s*,\\s*(\\d{1,3})%\\s*,\\s*(\\d{1,3})%(?:\\s*,\\s*([\\d.]+))?\\s*\\)$"
+        if let regex = try? NSRegularExpression(pattern: hslaPattern, options: .caseInsensitive),
+           let match = regex.firstMatch(in: str, range: NSRange(location: 0, length: str.utf16.count)) {
+            let hStr = (str as NSString).substring(with: match.range(at: 1))
+            let sStr = (str as NSString).substring(with: match.range(at: 2))
+            let lStr = (str as NSString).substring(with: match.range(at: 3))
+            
+            let h = (CGFloat(Double(hStr) ?? 0).truncatingRemainder(dividingBy: 360)) / 360.0
+            let s = CGFloat(Double(sStr) ?? 0) / 100.0
+            let l = CGFloat(Double(lStr) ?? 0) / 100.0
+            var a: CGFloat = 1.0
+            if match.range(at: 4).location != NSNotFound {
+                let aStr = (str as NSString).substring(with: match.range(at: 4))
+                a = CGFloat(Double(aStr) ?? 1.0)
+            }
+            
+            let (r, g, b) = hslToRgb(h: h, s: s, l: l)
+            return NSColor(srgbRed: r, green: g, blue: b, alpha: a)
+        }
+        
+        return nil
+    }
+    
+    private static func hslToRgb(h: CGFloat, s: CGFloat, l: CGFloat) -> (CGFloat, CGFloat, CGFloat) {
+        if s == 0 {
+            return (l, l, l)
+        }
+        let qVal = l < 0.5 ? l * (1 + s) : l + s - l * s
+        let pVal = 2 * l - qVal
+        
+        func hueToRgb(_ tParam: CGFloat) -> CGFloat {
+            var t = tParam
+            if t < 0 { t += 1 }
+            if t > 1 { t -= 1 }
+            if t < 1/6 { return pVal + (qVal - pVal) * 6 * t }
+            if t < 1/2 { return qVal }
+            if t < 2/3 { return pVal + (qVal - pVal) * (2/3 - t) * 6 }
+            return pVal
+        }
+        
+        return (hueToRgb(h + 1/3), hueToRgb(h), hueToRgb(h - 1/3))
+    }
+}
+
 class ItemTypeCache {
     static let shared = ItemTypeCache()
     private var cache = NSCache<NSString, NSString>()
@@ -195,7 +325,8 @@ class ItemTypeCache {
             // Clamp type detection to prefix(2000) directly without computing total string count
             let rawTxt = String(item.text.prefix(2000))
             let txt = rawTxt.trimmingCharacters(in: .whitespacesAndNewlines)
-            if txt.hasPrefix("http://") || txt.hasPrefix("https://") || txt.hasPrefix("www.") { t = "link" }
+            if ColorParser.parse(txt) != nil { t = "color" }
+            else if txt.hasPrefix("http://") || txt.hasPrefix("https://") || txt.hasPrefix("www.") { t = "link" }
             else {
                 let parts = txt.split(separator: "@")
                 if parts.count == 2 && parts[1].contains(".") && !txt.contains(" ") { t = "email" }
@@ -227,43 +358,61 @@ enum PrivacyMode: String {
 class ImagePreviewCache {
     static let shared = ImagePreviewCache()
     private var cache = NSCache<NSString, NSImage>()
-    
+    private var inFlight = Set<String>()
+    private var failedIds = Set<String>()
+
     func image(for item: ClipItem) -> NSImage? {
-        if let cached = cache.object(forKey: item.id as NSString) {
+        let itemId = item.id as NSString
+        if let cached = cache.object(forKey: itemId) {
             return cached
         }
-        
+        if failedIds.contains(item.id) {
+            return nil
+        }
+
         // 1. Direct in-memory image data
         if let data = item.imageData, let img = NSImage(data: data) {
-            cache.setObject(img, forKey: item.id as NSString)
+            cache.setObject(img, forKey: itemId)
             return img
         }
 
-        // 2. Local file paths (images, videos, documents)
+        // 2. Local file paths (images, videos, document previews)
         let raw = item.text.trimmingCharacters(in: .whitespacesAndNewlines)
         if let path = getFilePath(from: raw), FileManager.default.fileExists(atPath: path) {
             let ext = (path as NSString).pathExtension.lowercased()
             let fileURL = URL(fileURLWithPath: path)
-            
-            // Video snapshot
-            if ["mp4", "mov", "m4v", "avi", "webm", "mkv"].contains(ext) {
-                if let thumb = generateVideoThumbnail(url: fileURL) {
-                    cache.setObject(thumb, forKey: item.id as NSString)
-                    return thumb
-                }
-            }
+
             // Image file from disk
-            else if ["png", "jpg", "jpeg", "gif", "heic", "heif", "webp", "tiff", "bmp", "icns"].contains(ext) {
+            if ["png", "jpg", "jpeg", "gif", "heic", "heif", "webp", "tiff", "bmp", "icns", "svg"].contains(ext) {
                 if let img = NSImage(contentsOfFile: path) {
-                    cache.setObject(img, forKey: item.id as NSString)
+                    cache.setObject(img, forKey: itemId)
                     return img
                 }
             }
-            
-            // System Finder File Icon fallback for documents/other files
-            let icon = NSWorkspace.shared.icon(forFile: path)
-            cache.setObject(icon, forKey: item.id as NSString)
-            return icon
+
+            // Async non-blocking thumbnail generation for videos and document previews (zero UI thread lag!)
+            if ["mp4", "mov", "m4v", "avi", "webm", "mkv", "pdf", "pptx", "ppt", "docx", "doc", "xlsx", "xls", "key", "pages", "numbers"].contains(ext) {
+                if !inFlight.contains(item.id) {
+                    inFlight.insert(item.id)
+                    DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+                        let thumb: NSImage?
+                        if ["mp4", "mov", "m4v", "avi", "webm", "mkv"].contains(ext) {
+                            thumb = self?.generateVideoThumbnail(url: fileURL)
+                        } else {
+                            thumb = self?.generateDocumentThumbnail(url: fileURL)
+                        }
+
+                        DispatchQueue.main.async {
+                            self?.inFlight.remove(item.id)
+                            if let thumb = thumb {
+                                self?.cache.setObject(thumb, forKey: itemId)
+                            } else {
+                                self?.failedIds.insert(item.id)
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         return nil
@@ -287,6 +436,7 @@ class ImagePreviewCache {
         let asset = AVURLAsset(url: url)
         let imageGenerator = AVAssetImageGenerator(asset: asset)
         imageGenerator.appliesPreferredTrackTransform = true
+        imageGenerator.maximumSize = CGSize(width: 320, height: 320)
         let time = CMTime(seconds: 1.0, preferredTimescale: 60)
         if let cgImage = try? imageGenerator.copyCGImage(at: time, actualTime: nil) {
             return NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
@@ -295,6 +445,30 @@ class ImagePreviewCache {
             return NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
         }
         return nil
+    }
+
+    private func generateDocumentThumbnail(url: URL) -> NSImage? {
+        let semaphore = DispatchSemaphore(value: 0)
+        var resultImage: NSImage? = nil
+
+        let request = QLThumbnailGenerator.Request(
+            fileAt: url,
+            size: CGSize(width: 320, height: 320),
+            scale: NSScreen.main?.backingScaleFactor ?? 2.0,
+            representationTypes: .thumbnail
+        )
+
+        QLThumbnailGenerator.shared.generateBestRepresentation(for: request) { representation, error in
+            defer { semaphore.signal() }
+            guard let rep = representation, error == nil else { return }
+            // Only accept actual thumbnail previews, reject generic system icons!
+            if rep.type == .thumbnail {
+                resultImage = rep.nsImage
+            }
+        }
+
+        _ = semaphore.wait(timeout: .now() + 0.3)
+        return resultImage
     }
 }
 
@@ -610,6 +784,7 @@ struct ContentView: View {
 
                     FilterButton(title: nil, systemImage: "pin.fill", filterType: "pinned", manager: manager)
                     FilterButton(title: "Code", systemImage: "chevron.left.forwardslash.chevron.right", filterType: "code", manager: manager)
+                    FilterButton(title: "Color", systemImage: "paintpalette", filterType: "color", manager: manager)
                     FilterButton(title: "Email", systemImage: "envelope", filterType: "email", manager: manager)
                     FilterButton(title: "Files", systemImage: "doc", filterType: "file", manager: manager)
                     FilterButton(title: "Images", systemImage: "photo", filterType: "image", manager: manager)
@@ -653,7 +828,7 @@ struct ContentView: View {
             }
             .listStyle(.plain)
             .background(Color.clear)
-            .scrollContentBackground(colorScheme == .light ? .hidden : .visible)
+            .scrollContentBackground(.hidden)
 
             if manager.resizableMenu {
                 VStack(spacing: 0) {
@@ -804,6 +979,7 @@ struct ClipItemRowView: View {
     private var iconSystemName: String {
         switch itemType {
         case "code": return "chevron.left.forwardslash.chevron.right"
+        case "color": return "paintpalette"
         case "email": return "envelope"
         case "file": return "doc"
         case "image": return "photo"
@@ -816,6 +992,12 @@ struct ClipItemRowView: View {
     private var typeLabel: String {
         switch itemType {
         case "code": return "Code"
+        case "color":
+            let txt = item.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            if txt.hasPrefix("#") { return "HEX Color" }
+            if txt.lowercased().hasPrefix("rgb") { return "RGB Color" }
+            if txt.lowercased().hasPrefix("hsl") { return "HSL Color" }
+            return "Color"
         case "email": return "Email"
         case "file":
             let raw = item.text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -880,6 +1062,17 @@ struct ClipItemRowView: View {
                     .scaledToFill()
                     .frame(width: 32, height: 32)
                     .clipShape(RoundedRectangle(cornerRadius: 6))
+            } else if let parsedColor = ColorParser.parse(item.text) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 6)
+                        .fill(Color.secondary.opacity(0.15))
+                    RoundedRectangle(cornerRadius: 6)
+                        .strokeBorder(Color.white.opacity(0.3), lineWidth: 1)
+                    RoundedRectangle(cornerRadius: 6)
+                        .fill(Color(nsColor: parsedColor))
+                }
+                .frame(width: 32, height: 32)
+                .shadow(color: Color(nsColor: parsedColor).opacity(0.4), radius: 3, x: 0, y: 1.5)
             } else {
                 Image(systemName: iconSystemName)
                     .font(.system(size: 16, weight: .light))
@@ -986,15 +1179,18 @@ struct ClipItemRowView: View {
         .padding(.vertical, 8)
         .padding(.horizontal, 12)
         .contentShape(Rectangle())
-        .onTapGesture(count: 2) {
-            pasteItem()
-        }
-        .onTapGesture(count: 1) {
-            if manager.expandedIdx.contains(item.id) {
-                manager.expandedIdx.remove(item.id)
+        .onTapGesture {
+            let now = Date()
+            if now.timeIntervalSince(lastClickTime) < 0.35 {
+                pasteItem()
             } else {
-                manager.expandedIdx.insert(item.id)
+                if manager.expandedIdx.contains(item.id) {
+                    manager.expandedIdx.remove(item.id)
+                } else {
+                    manager.expandedIdx.insert(item.id)
+                }
             }
+            lastClickTime = now
         }
         .onHover { hovering in
             // Only this row re-renders — ContentView is untouched
@@ -1100,6 +1296,7 @@ struct ClipItemRowView: View {
             }
             .tint(.orange)
         }
+        .transition(.asymmetric(insertion: .identity, removal: .opacity.combined(with: .move(edge: item.pinned ? .leading : .trailing))))
         .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
         .listRowSeparator(.hidden)
     }
@@ -1198,21 +1395,19 @@ struct ClipItemRowView: View {
 
     private func togglePin() {
         NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .default)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+        withAnimation(.easeInOut(duration: 0.25)) {
             if let idx = manager.history.firstIndex(where: { $0.id == item.id }) {
-                withAnimation {
-                    manager.history[idx].pinned.toggle()
-                    let wasPinned = manager.history[idx].pinned
-                    manager.history.sort {
-                        if $0.pinned == $1.pinned { return $0.date > $1.date }
-                        return $0.pinned && !$1.pinned
-                    }
-                    manager.persistIfNeeded()
-                    if wasPinned {
-                        manager.pinFlash = true
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
-                            manager.pinFlash = false
-                        }
+                manager.history[idx].pinned.toggle()
+                let wasPinned = manager.history[idx].pinned
+                manager.history.sort {
+                    if $0.pinned == $1.pinned { return $0.date > $1.date }
+                    return $0.pinned && !$1.pinned
+                }
+                manager.persistIfNeeded()
+                if wasPinned {
+                    manager.pinFlash = true
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                        manager.pinFlash = false
                     }
                 }
             }
@@ -1221,7 +1416,7 @@ struct ClipItemRowView: View {
 
     private func deleteItem() {
         NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .default)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+        withAnimation(.easeInOut(duration: 0.25)) {
             if let idx = manager.history.firstIndex(where: { $0.id == item.id }) {
                 let deleted = manager.history.remove(at: idx)
                 LargePayloadStore.deletePayload(fileName: deleted.payloadFileName)
@@ -1949,12 +2144,26 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         container.maskImage = mask
 
         let title = NSTextField(labelWithString: "✓ Copied")
-        title.frame = NSRect(x: 14, y: height - 26, width: width - 28, height: 18)
+        let parsedColor = ColorParser.parse(text)
+        let bodyX: CGFloat = parsedColor != nil ? 44 : 14
+        let bodyWidth: CGFloat = parsedColor != nil ? width - 58 : width - 28
+
+        if let color = parsedColor {
+            let swatch = NSView(frame: NSRect(x: 14, y: 12, width: 22, height: 22))
+            swatch.wantsLayer = true
+            swatch.layer?.backgroundColor = color.cgColor
+            swatch.layer?.cornerRadius = 5
+            swatch.layer?.borderColor = NSColor.white.withAlphaComponent(0.4).cgColor
+            swatch.layer?.borderWidth = 1
+            container.addSubview(swatch)
+        }
+
+        title.frame = NSRect(x: bodyX, y: height - 26, width: bodyWidth, height: 18)
         title.font = NSFont.boldSystemFont(ofSize: 12)
         title.textColor = .secondaryLabelColor
 
         let body = NSTextField(labelWithString: snippet)
-        body.frame = NSRect(x: 14, y: 8, width: width - 28, height: 30)
+        body.frame = NSRect(x: bodyX, y: 8, width: bodyWidth, height: 30)
         body.font = NSFont.systemFont(ofSize: 13)
         body.lineBreakMode = .byTruncatingTail
         body.maximumNumberOfLines = 2
