@@ -51,7 +51,14 @@ Built specifically for people who handle **sensitive text** and don't want their
 
 ## 📦 Install
 
-Install by running the installer in **Terminal**:
+The fastest way to install ClipLocal is to run the following one-liner in your **Terminal**:
+
+```bash
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/arunofhyd/ClipLocal/main/install-cliplocal.command)"
+```
+
+### Manual Installation (Fallback)
+If you prefer to download and run the installer script manually:
 
 1. **Download** [`install-cliplocal.command`](install-cliplocal.command) (open the file, then click **Download raw file**).
 2. Open **Terminal** (`⌘ + Space`, type `Terminal`, press Enter).
