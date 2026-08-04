@@ -1,7 +1,17 @@
 {
-  "version": "1.2.6",
+  "version": "1.2.7",
   "downloadURL": "https://cliplocal.vercel.app/#install",
   "changelog": [
+    {
+      "version": "1.2.7",
+      "date": "2026-08-04",
+      "changes": [
+        "Color Preview Swatches: Added automatic detection of hex, RGB, and HSL color codes with inline 32x32 color swatches, color filter bar, and toast preview. Requires explicit '#' prefix for hex codes to avoid false positives.",
+        "QuickLook Document Previews: Integrated QLThumbnailGenerator for PDF, PPTX, DOCX, XLSX, and Keynote 1st-page document thumbnails at 320x320 Retina quality with async non-blocking generation.",
+        "Instant Single Click Expand: Eliminated 400ms double-click timeout delay for instant row expansion.",
+        "Translucent Glass Polish: Standardized popover translucent glass background in Light and Dark modes."
+      ]
+    },
     {
       "version": "1.2.6",
       "date": "2026-08-01",
