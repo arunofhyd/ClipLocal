@@ -964,8 +964,10 @@ struct ClipItemRowView: View {
     @Binding var copiedItemId: String?
     @ObservedObject var manager: ClipboardManager
 
-    /// Local hover state — changes here never propagate up to ContentView.
+    /// Local hover & removal animation state — changes here never propagate up to ContentView.
     @State private var isHovered = false
+    @State private var isRemoving = false
+    @State private var removalDirection: Edge = .trailing
     @State private var lastClickTime = Date.distantPast
     
     // Edit state
@@ -1296,7 +1298,11 @@ struct ClipItemRowView: View {
             }
             .tint(.orange)
         }
-        .transition(.asymmetric(insertion: .identity, removal: .opacity.combined(with: .move(edge: item.pinned ? .leading : .trailing))))
+        .offset(x: isRemoving ? (removalDirection == .trailing ? 360 : -360) : 0)
+        .opacity(isRemoving ? 0 : 1)
+        .scaleEffect(y: isRemoving ? 0.01 : 1.0, anchor: .center)
+        .frame(maxHeight: isRemoving ? 0 : nil)
+        .clipped()
         .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
         .listRowSeparator(.hidden)
     }
@@ -1395,7 +1401,11 @@ struct ClipItemRowView: View {
 
     private func togglePin() {
         NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .default)
-        withAnimation(.easeInOut(duration: 0.25)) {
+        removalDirection = .leading
+        withAnimation(.spring(response: 0.28, dampingFraction: 0.85)) {
+            isRemoving = true
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
             if let idx = manager.history.firstIndex(where: { $0.id == item.id }) {
                 manager.history[idx].pinned.toggle()
                 let wasPinned = manager.history[idx].pinned
@@ -1416,7 +1426,11 @@ struct ClipItemRowView: View {
 
     private func deleteItem() {
         NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .default)
-        withAnimation(.easeInOut(duration: 0.25)) {
+        removalDirection = .trailing
+        withAnimation(.spring(response: 0.28, dampingFraction: 0.85)) {
+            isRemoving = true
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
             if let idx = manager.history.firstIndex(where: { $0.id == item.id }) {
                 let deleted = manager.history.remove(at: idx)
                 LargePayloadStore.deletePayload(fileName: deleted.payloadFileName)
