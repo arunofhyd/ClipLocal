@@ -1625,10 +1625,16 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
                 globalClickMonitor = nil
             }
 
-            // Instantly close popover when user clicks anywhere outside
+            // Instantly close popover ONLY when user clicks strictly outside popover window frame
             globalClickMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
-                DispatchQueue.main.async {
-                    self?.closePopover()
+                guard let self = self, self.popover.isShown,
+                      let window = self.popover.contentViewController?.view.window else { return }
+                
+                let mouseLocation = NSEvent.mouseLocation
+                if !window.frame.contains(mouseLocation) {
+                    DispatchQueue.main.async {
+                        self.closePopover()
+                    }
                 }
             }
         }
