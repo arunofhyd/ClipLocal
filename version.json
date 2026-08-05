@@ -1,7 +1,15 @@
 {
-  "version": "1.2.7",
+  "version": "1.2.8",
   "downloadURL": "https://cliplocal.vercel.app/#install",
   "changelog": [
+    {
+      "version": "1.2.8",
+      "date": "2026-08-05",
+      "changes": [
+        "Auto-Close on Outside Clicks: Added precise window frame bounds checking so clicking anywhere outside the popover automatically closes it without desaturating the background.",
+        "Seamless Launch Accessibility Permission Prompt: Automatically prompts for macOS Accessibility permissions once on first launch so double-click direct paste works seamlessly out of the box without pestering."
+      ]
+    },
     {
       "version": "1.2.7",
       "date": "2026-08-04",
