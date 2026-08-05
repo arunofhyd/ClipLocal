@@ -1576,6 +1576,21 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         if let btn = statusItem.button {
             popover.show(relativeTo: btn.bounds, of: btn, preferredEdge: .minY)
             NSApp.activate(ignoringOtherApps: true)
+            
+            // Force popover backdrop NSVisualEffectView state to .active so it stays vivid and never turns washed out/lighter when clicking outside
+            if let window = popover.contentViewController?.view.window {
+                func forceActiveState(in view: NSView) {
+                    if let vev = view as? NSVisualEffectView {
+                        vev.state = .active
+                    }
+                    for sub in view.subviews {
+                        forceActiveState(in: sub)
+                    }
+                }
+                if let root = window.contentView?.superview ?? window.contentView {
+                    forceActiveState(in: root)
+                }
+            }
         }
     }
 
