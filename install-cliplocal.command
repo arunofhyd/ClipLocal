@@ -304,12 +304,33 @@ if [ "$CI" = "true" ]; then
     exit 0
 fi
 
-# ---- Step 6: Build the drag-to-Applications installer window -------------
-step "Preparing installer window…"
+# ---- Step 6: Install to /Applications -------------------------------------
+step "Installing ClipLocal to /Applications…"
 
-# If it's already running, quit it so a fresh copy can replace it later.
 pkill -x "$APP_NAME" >/dev/null 2>&1 || true
+DEST="/Applications/$APP_NAME.app"
+INSTALLED=false
 
+if [ -w "/Applications" ]; then
+    rm -rf "$DEST" 2>/dev/null || true
+    if cp -R "$APP" "$DEST" 2>/dev/null; then
+        INSTALLED=true
+    fi
+fi
+
+if [ "$INSTALLED" = "true" ]; then
+    xattr -dr com.apple.quarantine "$DEST" >/dev/null 2>&1 || true
+    ok "ClipLocal installed to /Applications."
+    printf "\n"
+    line
+    printf "\n  ${GREEN}${BOLD}✓ ClipLocal is installed and running!${NC}\n\n"
+    printf "  ${GREY}Look for the paperclip icon in your menu bar (top-right).${NC}\n\n"
+    open "$DEST"
+    exit 0
+fi
+
+# Fallback: Build drag-and-drop installer modal if permission required
+warn "Standard install required elevated privileges. Opening installer modal…"
 cat > Installer.swift <<'INSTEOF'
 import Cocoa
 import QuartzCore
@@ -489,31 +510,11 @@ app.activate(ignoringOtherApps: true)
 app.run()
 INSTEOF
 
-if ! xcrun swiftc -O ${SWIFT_SDK:+-sdk "$SWIFT_SDK"} -module-cache-path "$SWIFT_CACHE" -o Installer Installer.swift -framework Cocoa > /dev/null 2>&1; then
-    # Fall back to plain auto-copy if the installer window can't build.
-    warn "Using direct install…"
-    DEST="/Applications/$APP_NAME.app"
-    if [ -w "/Applications" ]; then rm -rf "$DEST"; cp -R "$APP" "$DEST"
-    else osascript -e "do shell script \"rm -rf '$DEST'; cp -R '$BUILD_DIR/$APP' '/Applications/'\" with administrator privileges" >/dev/null 2>&1; fi
+if xcrun swiftc -O ${SWIFT_SDK:+-sdk "$SWIFT_SDK"} -module-cache-path "$SWIFT_CACHE" -o Installer Installer.swift -framework Cocoa > /dev/null 2>&1; then
+    ./Installer "$BUILD_DIR/$APP"
+else
+    osascript -e "do shell script \"rm -rf '$DEST'; cp -R '$BUILD_DIR/$APP' '/Applications/'\" with administrator privileges" >/dev/null 2>&1 || true
     xattr -dr com.apple.quarantine "$DEST" >/dev/null 2>&1 || true
-    ok "Installed to Applications."
-    printf "\n"; line
-    printf "\n  ${GREEN}${BOLD}✓ ClipLocal is installed!${NC}\n\n"
-    printf "  ${GREY}Look for the paperclip icon in your menu bar (top-right).${NC}\n\n"
-    printf "  Launch ClipLocal now? [Y/n] "
-    read -r ans
-    case "$ans" in [Nn]*) : ;; *) open "$DEST" ;; esac
-    printf "\n"
-    exit 0
+    open "$DEST"
 fi
-ok "Installer ready."
-printf "\n"
-
-line
-printf "\n  ${GREEN}${BOLD}✓ Build complete!${NC}\n\n"
-printf "  ${GREY}A window will open — drag the ClipLocal icon onto the${NC}\n"
-printf "  ${GREY}Applications folder to finish installing.${NC}\n\n"
-
-# Launch the drag-install window (blocks until the user finishes).
-./Installer "$BUILD_DIR/$APP"
 printf "\n"
