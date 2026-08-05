@@ -1568,7 +1568,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     }
 
     func checkAndPromptAccessibilityPermission() {
-        if !AXIsProcessTrusted() {
+        if AXIsProcessTrusted() {
+            defaults.set(true, forKey: "hasPromptedAccessibility")
+            return
+        }
+
+        // Only prompt ONCE on first launch if not yet granted
+        if !defaults.bool(forKey: "hasPromptedAccessibility") {
+            defaults.set(true, forKey: "hasPromptedAccessibility")
             let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
             _ = AXIsProcessTrustedWithOptions(options)
         }
