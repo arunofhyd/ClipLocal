@@ -1330,6 +1330,15 @@ struct ClipItemRowView: View {
 
         // Synthesize Command+V to paste directly at active cursor location
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+            if !AXIsProcessTrusted() {
+                let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
+                _ = AXIsProcessTrustedWithOptions(options)
+                if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
+                    NSWorkspace.shared.open(url)
+                }
+                return
+            }
+
             let src = CGEventSource(stateID: .combinedSessionState)
             let vKeyCode: CGKeyCode = 0x09 // 'v' key code
 
@@ -1517,6 +1526,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     let defaults = UserDefaults.standard
     var aboutWindow: NSWindow?
     var settingsMenu: NSMenu!
+    private var globalClickMonitor: Any?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         if defaults.object(forKey: "hasLaunchedBefore") == nil {
@@ -1550,8 +1560,18 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         }
         RunLoop.main.add(timer!, forMode: .common)
 
+        // Automatically prompt for macOS Accessibility Permission on launch so double-click paste works out of the box
+        checkAndPromptAccessibilityPermission()
+
         if !defaults.bool(forKey: "hideAbout") { showAbout(onLaunch: true) }
         checkForUpdates(silentIfCurrent: true)
+    }
+
+    func checkAndPromptAccessibilityPermission() {
+        if !AXIsProcessTrusted() {
+            let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
+            _ = AXIsProcessTrustedWithOptions(options)
+        }
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -1577,7 +1597,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             popover.show(relativeTo: btn.bounds, of: btn, preferredEdge: .minY)
             NSApp.activate(ignoringOtherApps: true)
             
-            // Force popover backdrop NSVisualEffectView state to .active so it stays vivid and never turns washed out/lighter when clicking outside
+            // Force popover backdrop NSVisualEffectView state to .active so it stays vivid
             if let window = popover.contentViewController?.view.window {
                 func forceActiveState(in view: NSView) {
                     if let vev = view as? NSVisualEffectView {
@@ -1591,10 +1611,27 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
                     forceActiveState(in: root)
                 }
             }
+
+            // Remove any stale click monitor
+            if let monitor = globalClickMonitor {
+                NSEvent.removeMonitor(monitor)
+                globalClickMonitor = nil
+            }
+
+            // Instantly close popover when user clicks anywhere outside
+            globalClickMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
+                DispatchQueue.main.async {
+                    self?.closePopover()
+                }
+            }
         }
     }
 
     func closePopover() {
+        if let monitor = globalClickMonitor {
+            NSEvent.removeMonitor(monitor)
+            globalClickMonitor = nil
+        }
         popover.performClose(nil)
         NSApp.hide(nil)
     }
