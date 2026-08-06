@@ -4,17 +4,21 @@ import ServiceManagement
 import Combine
 import AVFoundation
 import QuickLookThumbnailing
+import Security
 
 // ============================================================
 //  ClipLocal — 100% on-device clipboard history, no third parties
 // ============================================================
 
-let appVersion = "1.2.9"
+let appVersion = "1.3.0"
 let updateCheckURL = "https://raw.githubusercontent.com/arunofhyd/ClipLocal/main/version.json"
 let downloadPageURL = "https://cliplocal.vercel.app/#install"
 
 // MARK: - KeyStore
 struct KeyStore {
+    private static let service = "com.aoh.cliplocal"
+    private static let account = "clipboardKey"
+
     static let keyFile: URL = {
         let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!.appendingPathComponent("ClipLocal")
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
@@ -30,8 +34,76 @@ struct KeyStore {
         fatalError("Failed to generate encryption key")
     }
 
+    /// Primary: macOS Keychain. Fallback: key.bin on disk.
+    /// Migrates existing users' key.bin into Keychain seamlessly.
+    /// New users get Keychain-only storage with no key.bin on disk.
     static func loadOrCreateKey() -> Data {
-        if let data = try? Data(contentsOf: keyFile) {
+        // 1. Try loading key from macOS Keychain
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account,
+            kSecReturnData as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne
+        ]
+
+        var item: AnyObject?
+        let status = SecItemCopyMatching(query as CFDictionary, &item)
+
+        if status == errSecSuccess, let data = item as? Data, data.count == 32 {
+            // Only sync key.bin if user was an existing migrated user (file exists)
+            // For brand-new users, key remains strictly isolated in Keychain!
+            if FileManager.default.fileExists(atPath: keyFile.path) {
+                syncKeyFile(with: data)
+            }
+            return data
+        }
+
+        // 2. If key doesn't exist in Keychain yet, migrate existing key.bin or generate a new one
+        if status == errSecItemNotFound {
+            let keyToUse: Data
+            let isMigration: Bool
+
+            if let existingFileKey = try? Data(contentsOf: keyFile), existingFileKey.count == 32 {
+                keyToUse = existingFileKey // Migration for existing users
+                isMigration = true
+            } else {
+                keyToUse = generateKey()   // Fresh key for new users (Keychain only)
+                isMigration = false
+            }
+
+            let addQuery: [String: Any] = [
+                kSecClass as String: kSecClassGenericPassword,
+                kSecAttrService as String: service,
+                kSecAttrAccount as String: account,
+                kSecValueData as String: keyToUse,
+                kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock
+            ]
+            let addStatus = SecItemAdd(addQuery as CFDictionary, nil)
+            if addStatus == errSecSuccess {
+                if isMigration { syncKeyFile(with: keyToUse) }
+                return keyToUse
+            }
+
+            // Fallback: If Keychain add failed, write to key.bin so app still functions
+            syncKeyFile(with: keyToUse)
+            return keyToUse
+        }
+
+        // 3. Fallback to local file key.bin if Keychain is unavailable or restricted
+        return loadOrCreateFallbackFileKey()
+    }
+
+    /// Helper to ensure `key.bin` backup is always in sync with Keychain key
+    private static func syncKeyFile(with key: Data) {
+        if let existing = try? Data(contentsOf: keyFile), existing == key {
+            return
+        }
+        try? key.write(to: keyFile, options: .atomic)
+    }
+
+    private static func loadOrCreateFallbackFileKey() -> Data {
+        if let data = try? Data(contentsOf: keyFile), data.count == 32 {
             return data
         }
         let newKey = generateKey()
@@ -1526,7 +1598,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     let defaults = UserDefaults.standard
     var aboutWindow: NSWindow?
     var settingsMenu: NSMenu!
-    private var globalClickMonitor: Any?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         if defaults.object(forKey: "hasLaunchedBefore") == nil {
@@ -1601,6 +1672,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
     func showPopover(_ sender: AnyObject?) {
         if let btn = statusItem.button {
+            popover.animates = true
             popover.show(relativeTo: btn.bounds, of: btn, preferredEdge: .minY)
             NSApp.activate(ignoringOtherApps: true)
             
@@ -1618,35 +1690,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
                     forceActiveState(in: root)
                 }
             }
-
-            // Remove any stale click monitor
-            if let monitor = globalClickMonitor {
-                NSEvent.removeMonitor(monitor)
-                globalClickMonitor = nil
-            }
-
-            // Instantly close popover ONLY when user clicks strictly outside popover window frame
-            globalClickMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
-                guard let self = self, self.popover.isShown,
-                      let window = self.popover.contentViewController?.view.window else { return }
-                
-                let mouseLocation = NSEvent.mouseLocation
-                if !window.frame.contains(mouseLocation) {
-                    DispatchQueue.main.async {
-                        self.closePopover()
-                    }
-                }
-            }
         }
     }
 
     func closePopover() {
-        if let monitor = globalClickMonitor {
-            NSEvent.removeMonitor(monitor)
-            globalClickMonitor = nil
-        }
         popover.performClose(nil)
-        NSApp.hide(nil)
     }
 
     func showSettingsMenu() {
