@@ -1944,7 +1944,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             ("doc.on.clipboard", "Double-Click Direct Paste", "Double-click any clip item to instantly close the menu and paste it directly where your active cursor is."),
             ("key", "Skips Secrets", "By default, passwords copied from 1Password, Bitwarden, etc., are completely ignored."),
             ("eye.slash", "No Analytics", "Zero telemetry. The app only connects to GitHub manually when you check for updates."),
-            ("externaldrive.fill", "Encrypted Storage", "In Persistent mode, your history is encrypted (AES-GCM) on disk. Only your Mac account can read it."),
+            ("key.fill", "Keychain Encrypted Storage", "In Persistent mode, your history is encrypted (AES-256 GCM) using hardware-secured keys in Apple's native macOS Keychain."),
             ("chevron.left.forwardslash.chevron.right", "Free & Open Source", "ClipLocal is completely free and open source. Check out the code on GitHub.")
         ]
 
