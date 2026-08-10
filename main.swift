@@ -1887,6 +1887,25 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     @objc func manualUpdateCheck() { checkForUpdates(silentIfCurrent: false) }
     @objc func quitApp() { NSApp.terminate(nil) }
 
+func getAppLogoImage() -> NSImage {
+    if let img = NSImage(named: "AppIcon") {
+        return img
+    }
+    if let path = Bundle.main.path(forResource: "AppIcon", ofType: "icns"), let img = NSImage(contentsOfFile: path) {
+        return img
+    }
+    if let path = Bundle.main.path(forResource: "AppIcon", ofType: "png"), let img = NSImage(contentsOfFile: path) {
+        return img
+    }
+    if let img = NSImage(contentsOfFile: "AppIcon.png") {
+        return img
+    }
+    if let img = NSImage(contentsOfFile: "../AppIcon.png") {
+        return img
+    }
+    return NSApp.applicationIconImage ?? (NSImage(systemSymbolName: "paperclip.circle", accessibilityDescription: nil) ?? NSImage())
+}
+
     // MARK: - About window (privacy-first splash)
 
     @objc func showAboutMenu() { showAbout(onLaunch: false) }
@@ -1912,11 +1931,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         bg.state = .active
         bg.wantsLayer = true
 
-        let icon = NSImageView(frame: NSRect(x: (width - 72)/2, y: height - 120, width: 72, height: 72))
-        let cfg = NSImage.SymbolConfiguration(pointSize: 60, weight: .regular)
-        icon.image = NSImage(systemSymbolName: "paperclip.circle", accessibilityDescription: nil)?
-            .withSymbolConfiguration(cfg)
-        icon.contentTintColor = NSColor.controlAccentColor
+        let iconSize: CGFloat = 80
+        let icon = NSImageView(frame: NSRect(x: (width - iconSize)/2, y: height - 128, width: iconSize, height: iconSize))
+        icon.image = getAppLogoImage()
+        icon.imageScaling = .scaleProportionallyUpOrDown
         bg.addSubview(icon)
 
         let name = NSTextField(labelWithString: "ClipLocal")
