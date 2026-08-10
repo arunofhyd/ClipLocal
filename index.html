@@ -37,7 +37,20 @@
     }
     </script>
 
-    <link rel="icon" href="logo.svg" type="image/svg+xml">
+    <!-- Dynamic Cache-Busted Favicons -->
+    <script>
+        const APP_VERSION = '1.3.1';
+        [
+            { rel: 'shortcut icon', href: `favicon.ico?v=${APP_VERSION}` },
+            { rel: 'icon', href: `logo.svg?v=${APP_VERSION}`, type: 'image/svg+xml' },
+            { rel: 'icon', href: `AppIcon.png?v=${APP_VERSION}`, type: 'image/png' },
+            { rel: 'apple-touch-icon', href: `AppIcon.png?v=${APP_VERSION}` }
+        ].forEach(attr => {
+            const link = document.createElement('link');
+            Object.assign(link, attr);
+            document.head.appendChild(link);
+        });
+    </script>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         if (history.scrollRestoration) { history.scrollRestoration = 'manual'; }
@@ -395,6 +408,15 @@
                     json.softwareVersion = data.version;
                     schema.textContent = JSON.stringify(json);
                 }
+
+                // Dynamically update favicon cache-busters from version.json
+                document.querySelectorAll('link[rel*="icon"]').forEach(link => {
+                    if (link.href) {
+                        const u = new URL(link.href, window.location.href);
+                        u.searchParams.set('v', data.version);
+                        link.href = u.toString();
+                    }
+                });
             }
             // Changelog Horizontal Carousel
             const container = document.getElementById('changelog-container');

@@ -1,7 +1,14 @@
 {
-  "version": "1.3.0",
+  "version": "1.3.1",
   "downloadURL": "https://cliplocal.vercel.app/#install",
   "changelog": [
+    {
+      "version": "1.3.1",
+      "date": "2026-08-10",
+      "changes": [
+        "Classic Brand Logo & Vector App Icon: Refined ClipLocal classic paperclip circle app icon, status bar icon, and browser tab branding."
+      ]
+    },
     {
       "version": "1.3.0",
       "date": "2026-08-06",
