@@ -1,7 +1,14 @@
 {
-  "version": "1.3.4",
+  "version": "1.3.5",
   "downloadURL": "https://cliplocal.vercel.app/#install",
   "changelog": [
+    {
+      "version": "1.3.5",
+      "date": "2026-08-13",
+      "changes": [
+        "Double-Click Direct Paste Fix: Separated single and double tap gestures into native SwiftUI count handlers to eliminate layout shifts, added instant app window hide, and optimized CGEvent Command+V timing for flawless direct pasting."
+      ]
+    },
     {
       "version": "1.3.4",
       "date": "2026-08-10",
