@@ -867,35 +867,51 @@ struct ContentView: View {
             Divider()
 
             // List
-            List {
-                if manager.filteredHistory.isEmpty {
-                    Text("— empty —")
-                        .foregroundColor(.secondary)
-                        .frame(maxWidth: .infinity, alignment: .center)
-                        .padding()
-                } else if manager.activeFilters.isEmpty && manager.currentSearchText.isEmpty {
-                    ForEach(Array(manager.filteredHistory.enumerated()), id: \.element.id) { idx, item in
-                        ClipItemRowView(
-                            item: item,
-                            shortcutIndex: idx < 9 ? idx : nil,
-                            copiedItemId: $copiedItemId,
-                            manager: manager
-                        )
+            ScrollViewReader { proxy in
+                List {
+                    if manager.filteredHistory.isEmpty {
+                        Text("— empty —")
+                            .foregroundColor(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .center)
+                            .padding()
+                    } else if manager.activeFilters.isEmpty && manager.currentSearchText.isEmpty {
+                        ForEach(Array(manager.filteredHistory.enumerated()), id: \.element.id) { idx, item in
+                            ClipItemRowView(
+                                item: item,
+                                shortcutIndex: idx < 9 ? idx : nil,
+                                copiedItemId: $copiedItemId,
+                                manager: manager
+                            )
+                            .id(item.id)
+                        }
+                    } else {
+                        ForEach(manager.filteredHistory) { item in
+                            ClipItemRowView(
+                                item: item,
+                                shortcutIndex: nil,
+                                copiedItemId: $copiedItemId,
+                                manager: manager
+                            )
+                            .id(item.id)
+                        }
                     }
-                } else {
-                    ForEach(manager.filteredHistory) { item in
-                        ClipItemRowView(
-                            item: item,
-                            shortcutIndex: nil,
-                            copiedItemId: $copiedItemId,
-                            manager: manager
-                        )
+                }
+                .listStyle(.plain)
+                .background(Color.clear)
+                .scrollContentBackground(.hidden)
+                .onAppear {
+                    if let firstId = manager.filteredHistory.first?.id {
+                        proxy.scrollTo(firstId, anchor: .top)
+                    }
+                }
+                .onChange(of: manager.filteredHistory.first?.id) { firstId in
+                    if let firstId = firstId {
+                        withAnimation(.easeInOut(duration: 0.15)) {
+                            proxy.scrollTo(firstId, anchor: .top)
+                        }
                     }
                 }
             }
-            .listStyle(.plain)
-            .background(Color.clear)
-            .scrollContentBackground(.hidden)
 
             if manager.resizableMenu {
                 VStack(spacing: 0) {
@@ -1674,18 +1690,22 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             popover.show(relativeTo: btn.bounds, of: btn, preferredEdge: .minY)
             NSApp.activate(ignoringOtherApps: true)
             
-            // Force popover backdrop NSVisualEffectView state to .active so it stays vivid
+            // Force popover backdrop NSVisualEffectView state to .active and reset scroll position to top
             if let window = popover.contentViewController?.view.window {
-                func forceActiveState(in view: NSView) {
+                func forceActiveStateAndResetScroll(in view: NSView) {
                     if let vev = view as? NSVisualEffectView {
                         vev.state = .active
                     }
+                    if let sv = view as? NSScrollView {
+                        sv.contentView.scroll(to: NSPoint(x: 0, y: 0))
+                        sv.reflectScrolledClipView(sv.contentView)
+                    }
                     for sub in view.subviews {
-                        forceActiveState(in: sub)
+                        forceActiveStateAndResetScroll(in: sub)
                     }
                 }
                 if let root = window.contentView?.superview ?? window.contentView {
-                    forceActiveState(in: root)
+                    forceActiveStateAndResetScroll(in: root)
                 }
             }
         }
