@@ -1246,18 +1246,15 @@ struct ClipItemRowView: View {
         .padding(.vertical, 8)
         .padding(.horizontal, 12)
         .contentShape(Rectangle())
-        .onTapGesture {
-            let now = Date()
-            if now.timeIntervalSince(lastClickTime) < 0.35 {
-                pasteItem()
+        .onTapGesture(count: 2) {
+            pasteItem()
+        }
+        .onTapGesture(count: 1) {
+            if manager.expandedIdx.contains(item.id) {
+                manager.expandedIdx.remove(item.id)
             } else {
-                if manager.expandedIdx.contains(item.id) {
-                    manager.expandedIdx.remove(item.id)
-                } else {
-                    manager.expandedIdx.insert(item.id)
-                }
+                manager.expandedIdx.insert(item.id)
             }
-            lastClickTime = now
         }
         .onHover { hovering in
             // Only this row re-renders — ContentView is untouched
@@ -1387,6 +1384,7 @@ struct ClipItemRowView: View {
         NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .default)
 
         (NSApp.delegate as? AppDelegate)?.closePopover()
+        NSApp.hide(nil)
 
         if let idx = manager.history.firstIndex(where: { $0.id == item.id }) {
             var updated = item
@@ -1401,7 +1399,7 @@ struct ClipItemRowView: View {
         }
 
         // Synthesize Command+V to paste directly at active cursor location
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
             if !AXIsProcessTrusted() {
                 let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
                 _ = AXIsProcessTrustedWithOptions(options)
