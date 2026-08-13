@@ -1050,6 +1050,7 @@ struct ClipItemRowView: View {
     /// Local hover state — changes here never propagate up to ContentView.
     @State private var isHovered = false
     @State private var lastClickTime = Date.distantPast
+    @State private var pendingExpandWorkItem: DispatchWorkItem? = nil
     
     // Edit state
     @State private var isEditing = false
@@ -1262,15 +1263,28 @@ struct ClipItemRowView: View {
         .padding(.vertical, 8)
         .padding(.horizontal, 12)
         .contentShape(Rectangle())
-        .onTapGesture(count: 2) {
-            pasteItem()
-        }
-        .onTapGesture(count: 1) {
-            if manager.expandedIdx.contains(item.id) {
-                manager.expandedIdx.remove(item.id)
+        .onTapGesture {
+            let now = Date()
+            if now.timeIntervalSince(lastClickTime) < 0.28 {
+                // Double-click: cancel pending expansion immediately so row layout never shifts
+                pendingExpandWorkItem?.cancel()
+                pendingExpandWorkItem = nil
+                pasteItem()
             } else {
-                manager.expandedIdx.insert(item.id)
+                // Single-click: schedule ultra-fast 120ms expansion (2.5x faster than SwiftUI default delay)
+                pendingExpandWorkItem?.cancel()
+                let targetId = item.id
+                let workItem = DispatchWorkItem {
+                    if manager.expandedIdx.contains(targetId) {
+                        manager.expandedIdx.remove(targetId)
+                    } else {
+                        manager.expandedIdx.insert(targetId)
+                    }
+                }
+                pendingExpandWorkItem = workItem
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.12, execute: workItem)
             }
+            lastClickTime = now
         }
         .onHover { hovering in
             // Only this row re-renders — ContentView is untouched
