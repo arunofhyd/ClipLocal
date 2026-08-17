@@ -1867,19 +1867,21 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     @objc func quitApp() { NSApp.terminate(nil) }
 
 func getAppLogoImage() -> NSImage {
-    if let img = NSImage(named: "AppIcon") {
+    let candidates = [
+        "/Applications/ClipLocal.app/Contents/Resources/AppIcon.png",
+        "AppIcon.png",
+        "/Users/arunthomas/ClipLocal/AppIcon.png"
+    ]
+    for c in candidates {
+        if let img = NSImage(contentsOfFile: c) { return img }
+    }
+    if let path = Bundle.main.path(forResource: "AppIcon", ofType: "png"), let img = NSImage(contentsOfFile: path) {
         return img
     }
     if let path = Bundle.main.path(forResource: "AppIcon", ofType: "icns"), let img = NSImage(contentsOfFile: path) {
         return img
     }
-    if let path = Bundle.main.path(forResource: "AppIcon", ofType: "png"), let img = NSImage(contentsOfFile: path) {
-        return img
-    }
-    if let img = NSImage(contentsOfFile: "AppIcon.png") {
-        return img
-    }
-    if let img = NSImage(contentsOfFile: "../AppIcon.png") {
+    if let img = NSImage(named: "AppIcon") {
         return img
     }
     return NSApp.applicationIconImage ?? (NSImage(systemSymbolName: "paperclip.circle", accessibilityDescription: nil) ?? NSImage())

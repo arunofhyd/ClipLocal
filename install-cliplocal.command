@@ -193,8 +193,8 @@ ctx.replacePathWithStrokedPath()
 ctx.clip()
 let shine0 = NSColor(white: 1.0, alpha: 0.6)
 let shine1 = NSColor(white: 1.0, alpha: 0.0)
-if let shineGrad = NSGradient(colors: [shine0, shine1, shine1, shine0], atLocations: [0.0, 0.3, 0.7, 1.0], colorSpace: .sRGB) {
-    shineGrad.draw(from: NSPoint(x: 0, y: 0), to: NSPoint(x: 0, y: 120), options: [])
+if let shineGrad = NSGradient(colors: [shine0, shine1, shine1, shine0], atLocations: [0.0, 0.3, 0.7, 1.0], colorSpace: .deviceRGB) {
+    shineGrad.draw(in: NSRect(x: 0, y: 0, width: 120, height: 120), angle: -45)
 }
 ctx.restoreGState()
 
