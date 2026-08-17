@@ -2206,7 +2206,7 @@ func getAppLogoImage() -> NSImage {
         totalFeaturesHeight -= 20 // remove last spacing
 
         let textTop = (height - 210) - 24
-        let bottomSpaceNeeded: CGFloat = 160
+        let bottomSpaceNeeded: CGFloat = 110
         let newHeight = (height - textTop) + totalFeaturesHeight + bottomSpaceNeeded
         let finalHeight = max(height, newHeight)
 
@@ -2261,26 +2261,13 @@ func getAppLogoImage() -> NSImage {
         }
 
         let credit = NSTextField(labelWithString: "Built by Arun Thomas")
-        credit.frame = NSRect(x: 0, y: currentY - 34, width: width, height: 18)
+        credit.frame = NSRect(x: 0, y: currentY - 28, width: width, height: 18)
         credit.alignment = .center
         credit.font = NSFont.systemFont(ofSize: 12, weight: .semibold)
         credit.textColor = .secondaryLabelColor
         bg.addSubview(credit)
 
-        let dontShow = NSButton(checkboxWithTitle: "Don't show again",
-                                target: self, action: #selector(toggleHideAbout(_:)))
-        dontShow.font = NSFont.systemFont(ofSize: 11)
-        dontShow.sizeToFit()
-        let dsW = dontShow.frame.width
-        let dontShowY = credit.frame.minY - 40
-        dontShow.frame = NSRect(x: (width - dsW)/2, y: dontShowY, width: dsW, height: 20)
-        dontShow.state = defaults.object(forKey: "hideAbout") == nil ? .on : (defaults.bool(forKey: "hideAbout") ? .on : .off)
-        if defaults.object(forKey: "hideAbout") == nil {
-            defaults.set(true, forKey: "hideAbout")
-        }
-        bg.addSubview(dontShow)
-
-        let buttonsY = dontShow.frame.minY - 48
+        let buttonsY = credit.frame.minY - 48
         
         let contactW: CGFloat = 100
         let gitW: CGFloat = 100
@@ -2347,10 +2334,6 @@ func getAppLogoImage() -> NSImage {
         if let url = URL(string: "https://github.com/arunofhyd/ClipLocal") {
             NSWorkspace.shared.open(url)
         }
-    }
-
-    @objc func toggleHideAbout(_ sender: NSButton) {
-        defaults.set(sender.state == .on, forKey: "hideAbout")
     }
 
     @objc func closeAbout() {
