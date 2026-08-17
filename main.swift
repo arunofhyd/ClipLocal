@@ -2140,7 +2140,7 @@ func getAppLogoImage() -> NSImage {
         totalFeaturesHeight -= 20 // remove last spacing
 
         let textTop = (height - 210) - 24
-        let bottomSpaceNeeded: CGFloat = 110
+        let bottomSpaceNeeded: CGFloat = 86
         let newHeight = (height - textTop) + totalFeaturesHeight + bottomSpaceNeeded
         let finalHeight = max(height, newHeight)
 
@@ -2195,18 +2195,18 @@ func getAppLogoImage() -> NSImage {
         }
 
         let credit = NSTextField(labelWithString: "Built by Arun Thomas")
-        credit.frame = NSRect(x: 0, y: currentY - 28, width: width, height: 18)
+        credit.frame = NSRect(x: 0, y: 78, width: width, height: 16)
         credit.alignment = .center
-        credit.font = NSFont.systemFont(ofSize: 12, weight: .semibold)
+        credit.font = NSFont.systemFont(ofSize: 11.5, weight: .semibold)
         credit.textColor = .secondaryLabelColor
         bg.addSubview(credit)
 
-        let buttonsY = credit.frame.minY - 48
+        let buttonsY: CGFloat = 26
         
         let contactW: CGFloat = 100
         let gitW: CGFloat = 100
         let closeW: CGFloat = 120
-        let spacing: CGFloat = 16
+        let spacing: CGFloat = 14
         let totalW = contactW + gitW + closeW + (2 * spacing)
         let startX = (width - totalW) / 2
         
@@ -2219,7 +2219,7 @@ func getAppLogoImage() -> NSImage {
         contact.layer?.masksToBounds = true
         contact.attributedTitle = NSAttributedString(string: "Contact", attributes: [
             .foregroundColor: NSColor.black,
-            .font: NSFont.systemFont(ofSize: 13, weight: .medium)
+            .font: NSFont.systemFont(ofSize: 12.5, weight: .medium)
         ])
         bg.addSubview(contact)
 
@@ -2232,7 +2232,7 @@ func getAppLogoImage() -> NSImage {
         github.layer?.masksToBounds = true
         github.attributedTitle = NSAttributedString(string: "GitHub", attributes: [
             .foregroundColor: NSColor.white,
-            .font: NSFont.systemFont(ofSize: 13, weight: .medium)
+            .font: NSFont.systemFont(ofSize: 12.5, weight: .medium)
         ])
         bg.addSubview(github)
 
@@ -2246,7 +2246,7 @@ func getAppLogoImage() -> NSImage {
         close.keyEquivalent = "\r"
         close.attributedTitle = NSAttributedString(string: "Get Started", attributes: [
             .foregroundColor: NSColor.white,
-            .font: NSFont.systemFont(ofSize: 13, weight: .medium)
+            .font: NSFont.systemFont(ofSize: 12.5, weight: .medium)
         ])
         bg.addSubview(close)
 
