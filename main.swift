@@ -34,80 +34,22 @@ struct KeyStore {
         fatalError("Failed to generate encryption key")
     }
 
-    /// Primary: macOS Keychain. Fallback: key.bin on disk.
-    /// Migrates existing users' key.bin into Keychain seamlessly.
-    /// New users get Keychain-only storage with no key.bin on disk.
+    /// Loads or creates the 256-bit AES-GCM encryption key stored securely on-device
+    /// with strict 0600 user-only POSIX permissions in ~/Library/Application Support/ClipLocal/
     static func loadOrCreateKey() -> Data {
-        // 1. Try loading key from macOS Keychain
-        let query: [String: Any] = [
+        // Clean up legacy keychain item to eliminate repetitive macOS security prompts
+        let delQuery: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: account,
-            kSecReturnData as String: true,
-            kSecMatchLimit as String: kSecMatchLimitOne
+            kSecAttrService as String: service
         ]
+        SecItemDelete(delQuery as CFDictionary)
 
-        var item: AnyObject?
-        let status = SecItemCopyMatching(query as CFDictionary, &item)
-
-        if status == errSecSuccess, let data = item as? Data, data.count == 32 {
-            // Only sync key.bin if user was an existing migrated user (file exists)
-            // For brand-new users, key remains strictly isolated in Keychain!
-            if FileManager.default.fileExists(atPath: keyFile.path) {
-                syncKeyFile(with: data)
-            }
-            return data
-        }
-
-        // 2. If key doesn't exist in Keychain yet, migrate existing key.bin or generate a new one
-        if status == errSecItemNotFound {
-            let keyToUse: Data
-            let isMigration: Bool
-
-            if let existingFileKey = try? Data(contentsOf: keyFile), existingFileKey.count == 32 {
-                keyToUse = existingFileKey // Migration for existing users
-                isMigration = true
-            } else {
-                keyToUse = generateKey()   // Fresh key for new users (Keychain only)
-                isMigration = false
-            }
-
-            let addQuery: [String: Any] = [
-                kSecClass as String: kSecClassGenericPassword,
-                kSecAttrService as String: service,
-                kSecAttrAccount as String: account,
-                kSecValueData as String: keyToUse,
-                kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock
-            ]
-            let addStatus = SecItemAdd(addQuery as CFDictionary, nil)
-            if addStatus == errSecSuccess {
-                if isMigration { syncKeyFile(with: keyToUse) }
-                return keyToUse
-            }
-
-            // Fallback: If Keychain add failed, write to key.bin so app still functions
-            syncKeyFile(with: keyToUse)
-            return keyToUse
-        }
-
-        // 3. Fallback to local file key.bin if Keychain is unavailable or restricted
-        return loadOrCreateFallbackFileKey()
-    }
-
-    /// Helper to ensure `key.bin` backup is always in sync with Keychain key
-    private static func syncKeyFile(with key: Data) {
-        if let existing = try? Data(contentsOf: keyFile), existing == key {
-            return
-        }
-        try? key.write(to: keyFile, options: .atomic)
-    }
-
-    private static func loadOrCreateFallbackFileKey() -> Data {
         if let data = try? Data(contentsOf: keyFile), data.count == 32 {
             return data
         }
         let newKey = generateKey()
         try? newKey.write(to: keyFile, options: .atomic)
+        try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: keyFile.path)
         return newKey
     }
 }
@@ -1660,10 +1602,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         }
         RunLoop.main.add(timer!, forMode: .common)
 
-        // Automatically prompt for macOS Accessibility Permission on launch so double-click paste works out of the box
         checkAndPromptAccessibilityPermission()
-
-        if !defaults.bool(forKey: "hideAbout") { showAbout(onLaunch: true) }
         checkForUpdates(silentIfCurrent: true)
     }
 
@@ -1673,14 +1612,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     }
 
     func checkAndPromptAccessibilityPermission() {
-        let isTrusted = AXIsProcessTrusted()
         let key = "hasSeenPermissionsGuide_v1"
         let hasSeen = defaults.bool(forKey: key)
-        if !isTrusted {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
-                self?.showPermissionsGuide(isFirstLaunch: !hasSeen)
-            }
-        } else if !hasSeen {
+        if !hasSeen {
             defaults.set(true, forKey: key)
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
                 self?.showPermissionsGuide(isFirstLaunch: true)
