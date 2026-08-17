@@ -1,7 +1,17 @@
 {
-  "version": "1.3.8",
+  "version": "1.3.9",
   "downloadURL": "https://cliplocal.vercel.app/#install",
   "changelog": [
+    {
+      "version": "1.3.9",
+      "date": "2026-08-17",
+      "changes": [
+        "Unified About Window Typography & Dynamic Spacing: Enhanced About window layout with 24pt bold header, rich vibrant SF Symbol accents, multiline text measurement, and exact 26px bottom clearance.",
+        "Apple Keychain with 0600 On-Disk Fallback: Seamless hardware-backed encryption with zero-prompt launch security.",
+        "Signature Diagonal Corner Shine Icon: Updated app icon and logo with subtle top-left and bottom-right corner light accents.",
+        "High-Performance Native Update Changelog: Replaced update sheet with smooth 120 FPS trackpad-accelerated native AppKit scroll view."
+      ]
+    },
     {
       "version": "1.3.8",
       "date": "2026-08-17",
