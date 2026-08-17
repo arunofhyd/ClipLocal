@@ -2063,137 +2063,93 @@ func getAppLogoImage() -> NSImage {
     func showAbout(onLaunch: Bool = false) {
         if onLaunch && defaults.bool(forKey: "hideAbout") { return }
 
-        aboutWindow?.close()
-        let width: CGFloat = 460, height: CGFloat = 700
-        let win = NSWindow(contentRect: NSRect(x: 0, y: 0, width: width, height: height),
-                           styleMask: [.titled, .closable, .fullSizeContentView],
-                           backing: .buffered, defer: false)
-        win.title = "ClipLocal"
-        win.isReleasedWhenClosed = false
-        win.titlebarAppearsTransparent = true
+        if aboutWindow != nil {
+            aboutWindow?.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            return
+        }
+
+        let width: CGFloat = 440
+        let height: CGFloat = 510
+        let win = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: width, height: height),
+            styleMask: [.titled, .closable, .fullSizeContentView],
+            backing: .buffered, defer: false
+        )
         win.titleVisibility = .hidden
+        win.titlebarAppearsTransparent = true
         win.isMovableByWindowBackground = true
+        win.standardWindowButton(.miniaturizeButton)?.isHidden = true
+        win.standardWindowButton(.zoomButton)?.isHidden = true
         win.center()
+        win.isReleasedWhenClosed = false
         win.level = .floating
 
         let bg = NSVisualEffectView(frame: NSRect(x: 0, y: 0, width: width, height: height))
-        bg.material = .underWindowBackground
+        bg.material = .popover
+        bg.blendingMode = .behindWindow
         bg.state = .active
-        bg.wantsLayer = true
-
-        let iconSize: CGFloat = 80
-        let icon = NSImageView(frame: NSRect(x: (width - iconSize)/2, y: height - 128, width: iconSize, height: iconSize))
+        
+        let icon = NSImageView(frame: NSRect(x: (width - 58)/2, y: 426, width: 58, height: 58))
         icon.image = getAppLogoImage()
         icon.imageScaling = .scaleProportionallyUpOrDown
         bg.addSubview(icon)
 
-        let name = NSTextField(labelWithString: "ClipLocal")
-        name.frame = NSRect(x: 0, y: height - 164, width: width, height: 32)
-        name.alignment = .center
-        name.font = NSFont.systemFont(ofSize: 26, weight: .bold)
-        bg.addSubview(name)
+        let title = NSTextField(labelWithString: "ClipLocal")
+        title.font = NSFont.systemFont(ofSize: 22, weight: .bold)
+        title.alignment = .center
+        title.frame = NSRect(x: 0, y: 388, width: width, height: 26)
+        bg.addSubview(title)
 
-        let version = NSTextField(labelWithString: "Version \(appVersion)")
-        version.frame = NSRect(x: 0, y: height - 186, width: width, height: 16)
-        version.alignment = .center
-        version.font = NSFont.systemFont(ofSize: 11, weight: .medium)
-        version.textColor = .tertiaryLabelColor
-        bg.addSubview(version)
+        let ver = NSTextField(labelWithString: "Version \(appVersion)")
+        ver.font = NSFont.systemFont(ofSize: 11.5, weight: .medium)
+        ver.textColor = .tertiaryLabelColor
+        ver.alignment = .center
+        ver.frame = NSRect(x: 0, y: 368, width: width, height: 15)
+        bg.addSubview(ver)
+        
+        let sub = NSTextField(labelWithString: "Your clipboard. Yours alone.")
+        sub.font = NSFont.systemFont(ofSize: 11.5, weight: .regular)
+        sub.textColor = .secondaryLabelColor
+        sub.alignment = .center
+        sub.frame = NSRect(x: 16, y: 346, width: width - 32, height: 16)
+        bg.addSubview(sub)
 
-        let tagline = NSTextField(labelWithString: "Your clipboard. Yours alone.")
-        tagline.frame = NSRect(x: 0, y: height - 210, width: width, height: 18)
-        tagline.alignment = .center
-        tagline.font = NSFont.systemFont(ofSize: 13, weight: .medium)
-        tagline.textColor = .secondaryLabelColor
-        bg.addSubview(tagline)
-
-        let features = [
-            ("lock.shield", "100% On-Device & Private", "Your clipboard data never leaves your Mac. No cloud, no tracking, no accounts."),
-            ("doc.on.clipboard", "Double-Click Direct Paste", "Double-click any clip item to instantly close the menu and paste it directly where your active cursor is."),
-            ("key", "Skips Secrets", "By default, passwords copied from 1Password, Bitwarden, etc., are completely ignored."),
-            ("eye.slash", "No Analytics", "Zero telemetry. The app only connects to GitHub manually when you check for updates."),
-            ("key.fill", "Keychain Encrypted Storage", "In Persistent mode, your history is encrypted (AES-256 GCM) using hardware-secured keys in Apple's native macOS Keychain."),
-            ("chevron.left.forwardslash.chevron.right", "Free & Open Source", "ClipLocal is completely free and open source. Check out the code on GitHub.")
+        let features: [(String, String, String)] = [
+            ("lock.shield.fill", "100% On-Device & Private", "Zero telemetry. Your clipboard never leaves your local Mac."),
+            ("doc.on.clipboard.fill", "Smart History & Quick Paste", "Search and paste copied text, images, and links instantly."),
+            ("key.fill", "Hardware-Secured Storage", "AES-256 GCM encrypted storage locked with 0600 permissions."),
+            ("chevron.left.forwardslash.chevron.right", "Free & Open Source", "ClipLocal is completely free. Check out the source on GitHub.")
         ]
 
-        let bodyWidth = width - 80
-        let textWidth = bodyWidth - 44
-        let para = NSMutableParagraphStyle()
-        para.lineSpacing = 2
-        let textFont = NSFont.systemFont(ofSize: 12.5)
-        let titleFont = NSFont.systemFont(ofSize: 13.5, weight: .bold)
+        let textWidth = width - 82
+        let rowYPositions: [CGFloat] = [286, 232, 178, 124]
 
-        var featureHeights: [CGFloat] = []
-        var totalFeaturesHeight: CGFloat = 0
-        for f in features {
-            let attr = NSAttributedString(string: f.2, attributes: [
-                .font: textFont,
-                .paragraphStyle: para
-            ])
-            let measured = attr.boundingRect(
-                with: NSSize(width: textWidth, height: .greatestFiniteMagnitude),
-                options: [.usesLineFragmentOrigin, .usesFontLeading])
-            let h = ceil(measured.height) + 24 // title height + spacing
-            featureHeights.append(h)
-            totalFeaturesHeight += h + 20 // item spacing
-        }
-        totalFeaturesHeight -= 20 // remove last spacing
+        for (idx, item) in features.enumerated() {
+            let rowY = rowYPositions[idx]
+            let (sym, head, desc) = item
 
-        let textTop = (height - 210) - 24
-        let bottomSpaceNeeded: CGFloat = 86
-        let newHeight = (height - textTop) + totalFeaturesHeight + bottomSpaceNeeded
-        let finalHeight = max(height, newHeight)
+            let symSize: CGFloat = 22
+            let symView = NSImageView(frame: NSRect(x: 28, y: rowY + 11, width: symSize, height: symSize))
+            let symCfg = NSImage.SymbolConfiguration(pointSize: 17, weight: .semibold)
+            symView.image = NSImage(systemSymbolName: sym, accessibilityDescription: nil)?.withSymbolConfiguration(symCfg)
+            symView.contentTintColor = .white
+            bg.addSubview(symView)
 
-        let oldFrame = win.frame
-        win.setFrame(NSRect(x: oldFrame.minX, y: oldFrame.maxY - finalHeight, width: width, height: finalHeight), display: true)
-        bg.frame = NSRect(x: 0, y: 0, width: width, height: finalHeight)
+            let hLabel = NSTextField(labelWithString: head)
+            hLabel.font = NSFont.systemFont(ofSize: 12.5, weight: .semibold)
+            hLabel.frame = NSRect(x: 62, y: rowY + 22, width: textWidth, height: 16)
+            bg.addSubview(hLabel)
 
-        icon.frame.origin.y = finalHeight - 120
-        name.frame.origin.y = finalHeight - 164
-        version.frame.origin.y = finalHeight - 186
-        tagline.frame.origin.y = finalHeight - 210
-        let newTextTop = (finalHeight - 210) - 24
-
-        var currentY = newTextTop
-        for (i, f) in features.enumerated() {
-            let itemH = featureHeights[i]
-            let itemY = currentY - itemH
-
-            let iconSize: CGFloat = 32
-            let iconY = itemY + (itemH - iconSize) / 2
-            let iconView = NSImageView(frame: NSRect(x: 40, y: iconY, width: iconSize, height: iconSize))
-            let iconCfg = NSImage.SymbolConfiguration(pointSize: 22, weight: .regular)
-            iconView.image = NSImage(systemSymbolName: f.0, accessibilityDescription: nil)?
-                .withSymbolConfiguration(iconCfg)
-            iconView.contentTintColor = NSColor.controlAccentColor
-            bg.addSubview(iconView)
-
-            let titleLabel = NSTextField(labelWithString: f.1)
-            titleLabel.frame = NSRect(x: 84, y: itemY + itemH - 22, width: textWidth, height: 18)
-            titleLabel.font = titleFont
-            titleLabel.textColor = .labelColor
-            titleLabel.isEditable = false
-            titleLabel.drawsBackground = false
-            titleLabel.isBordered = false
-            bg.addSubview(titleLabel)
-
-            let attr = NSAttributedString(string: f.2, attributes: [
-                .font: textFont,
-                .foregroundColor: NSColor.secondaryLabelColor,
-                .paragraphStyle: para
-            ])
-            let descLabel = NSTextField(labelWithAttributedString: attr)
-            descLabel.frame = NSRect(x: 84, y: itemY, width: textWidth, height: itemH - 24)
-            descLabel.lineBreakMode = .byWordWrapping
-            descLabel.maximumNumberOfLines = 0
-            descLabel.isEditable = false
-            descLabel.drawsBackground = false
-            descLabel.isBordered = false
-            bg.addSubview(descLabel)
-
-            currentY = itemY - 20
+            let dLabel = NSTextField(labelWithString: desc)
+            dLabel.font = NSFont.systemFont(ofSize: 11, weight: .regular)
+            dLabel.textColor = .secondaryLabelColor
+            dLabel.lineBreakMode = .byTruncatingTail
+            dLabel.frame = NSRect(x: 62, y: rowY + 3, width: textWidth, height: 16)
+            bg.addSubview(dLabel)
         }
 
+        // Author Note
         let credit = NSTextField(labelWithString: "Built by Arun Thomas")
         credit.frame = NSRect(x: 0, y: 78, width: width, height: 16)
         credit.alignment = .center
@@ -2201,8 +2157,8 @@ func getAppLogoImage() -> NSImage {
         credit.textColor = .secondaryLabelColor
         bg.addSubview(credit)
 
+        // Action Buttons
         let buttonsY: CGFloat = 26
-        
         let contactW: CGFloat = 100
         let gitW: CGFloat = 100
         let closeW: CGFloat = 120
