@@ -2069,10 +2069,51 @@ func getAppLogoImage() -> NSImage {
             return
         }
 
-        let width: CGFloat = 440
-        let height: CGFloat = 510
+        struct AboutFeature {
+            let symbol: String
+            let color: NSColor
+            let title: String
+            let desc: String
+        }
+
+        let features: [AboutFeature] = [
+            AboutFeature(symbol: "lock.shield.fill", color: .systemPurple, title: "100% On-Device & Private", desc: "Your clipboard data never leaves your Mac. No cloud, no tracking, no accounts."),
+            AboutFeature(symbol: "doc.on.clipboard.fill", color: .systemBlue, title: "Double-Click Direct Paste", desc: "Double-click any clip item to instantly paste it directly where your active cursor is."),
+            AboutFeature(symbol: "key.fill", color: .systemOrange, title: "Skips Sensitive Passwords", desc: "By default, passwords copied from 1Password, Bitwarden, etc., are completely ignored."),
+            AboutFeature(symbol: "eye.slash.fill", color: .systemTeal, title: "Zero Telemetry", desc: "No analytics or data collection. Only connects to GitHub manually when checking updates."),
+            AboutFeature(symbol: "lock.fill", color: .systemGreen, title: "Encrypted On-Disk Storage", desc: "History is encrypted on-disk with AES-256 GCM and user-isolated 0600 permissions."),
+            AboutFeature(symbol: "chevron.left.forwardslash.chevron.right", color: .systemPink, title: "Free & Open Source", desc: "ClipLocal is completely free and open source. Check out the code on GitHub.")
+        ]
+
+        let width: CGFloat = 460
+        let textWidth: CGFloat = width - 115
+        let para = NSMutableParagraphStyle()
+        para.lineSpacing = 2
+        let textFont = NSFont.systemFont(ofSize: 11.5, weight: .regular)
+        let titleFont = NSFont.systemFont(ofSize: 13, weight: .semibold)
+
+        var featureHeights: [CGFloat] = []
+        var totalFeaturesHeight: CGFloat = 0
+        for f in features {
+            let attr = NSAttributedString(string: f.desc, attributes: [
+                .font: textFont,
+                .paragraphStyle: para
+            ])
+            let measured = attr.boundingRect(
+                with: NSSize(width: textWidth, height: .greatestFiniteMagnitude),
+                options: [.usesLineFragmentOrigin, .usesFontLeading])
+            let h = ceil(measured.height) + 24 // title height + spacing
+            featureHeights.append(h)
+            totalFeaturesHeight += h + 16 // gap between feature items
+        }
+        totalFeaturesHeight -= 16 // remove last item gap
+
+        let headerHeight: CGFloat = 204
+        let bottomSpaceNeeded: CGFloat = 124 // 28px gap + 16px credit + 20px gap + 34px buttons + 26px bottom padding
+        let finalHeight = headerHeight + totalFeaturesHeight + bottomSpaceNeeded
+
         let win = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: width, height: height),
+            contentRect: NSRect(x: 0, y: 0, width: width, height: finalHeight),
             styleMask: [.titled, .closable, .fullSizeContentView],
             backing: .buffered, defer: false
         )
@@ -2085,71 +2126,76 @@ func getAppLogoImage() -> NSImage {
         win.isReleasedWhenClosed = false
         win.level = .floating
 
-        let bg = NSVisualEffectView(frame: NSRect(x: 0, y: 0, width: width, height: height))
+        let bg = NSVisualEffectView(frame: NSRect(x: 0, y: 0, width: width, height: finalHeight))
         bg.material = .popover
         bg.blendingMode = .behindWindow
         bg.state = .active
         
-        let icon = NSImageView(frame: NSRect(x: (width - 58)/2, y: 426, width: 58, height: 58))
+        let icon = NSImageView(frame: NSRect(x: (width - 64)/2, y: finalHeight - 88, width: 64, height: 64))
         icon.image = getAppLogoImage()
         icon.imageScaling = .scaleProportionallyUpOrDown
         bg.addSubview(icon)
 
         let title = NSTextField(labelWithString: "ClipLocal")
-        title.font = NSFont.systemFont(ofSize: 22, weight: .bold)
+        title.font = NSFont.systemFont(ofSize: 24, weight: .bold)
         title.alignment = .center
-        title.frame = NSRect(x: 0, y: 388, width: width, height: 26)
+        title.frame = NSRect(x: 0, y: finalHeight - 124, width: width, height: 28)
         bg.addSubview(title)
 
         let ver = NSTextField(labelWithString: "Version \(appVersion)")
         ver.font = NSFont.systemFont(ofSize: 11.5, weight: .medium)
         ver.textColor = .tertiaryLabelColor
         ver.alignment = .center
-        ver.frame = NSRect(x: 0, y: 368, width: width, height: 15)
+        ver.frame = NSRect(x: 0, y: finalHeight - 144, width: width, height: 15)
         bg.addSubview(ver)
         
         let sub = NSTextField(labelWithString: "Your clipboard. Yours alone.")
-        sub.font = NSFont.systemFont(ofSize: 11.5, weight: .regular)
+        sub.font = NSFont.systemFont(ofSize: 12, weight: .medium)
         sub.textColor = .secondaryLabelColor
         sub.alignment = .center
-        sub.frame = NSRect(x: 16, y: 346, width: width - 32, height: 16)
+        sub.frame = NSRect(x: 16, y: finalHeight - 168, width: width - 32, height: 16)
         bg.addSubview(sub)
 
-        let features: [(String, String, String)] = [
-            ("lock.shield.fill", "100% On-Device & Private", "Zero telemetry. Your clipboard never leaves your local Mac."),
-            ("doc.on.clipboard.fill", "Smart History & Quick Paste", "Search and paste copied text, images, and links instantly."),
-            ("key.fill", "Hardware-Secured Storage", "AES-256 GCM encrypted storage locked with 0600 permissions."),
-            ("chevron.left.forwardslash.chevron.right", "Free & Open Source", "ClipLocal is completely free. Check out the source on GitHub.")
-        ]
+        var currentY = finalHeight - headerHeight
+        for (i, f) in features.enumerated() {
+            let itemH = featureHeights[i]
+            let itemY = currentY - itemH
 
-        let textWidth = width - 82
-        let rowYPositions: [CGFloat] = [286, 232, 178, 124]
-
-        for (idx, item) in features.enumerated() {
-            let rowY = rowYPositions[idx]
-            let (sym, head, desc) = item
-
-            let symSize: CGFloat = 22
-            let symView = NSImageView(frame: NSRect(x: 28, y: rowY + 11, width: symSize, height: symSize))
-            let symCfg = NSImage.SymbolConfiguration(pointSize: 17, weight: .semibold)
-            symView.image = NSImage(systemSymbolName: sym, accessibilityDescription: nil)?.withSymbolConfiguration(symCfg)
-            symView.contentTintColor = .white
+            let symSize: CGFloat = 24
+            let symView = NSImageView(frame: NSRect(x: 36, y: itemY + (itemH - symSize)/2 + 2, width: symSize, height: symSize))
+            let symCfg = NSImage.SymbolConfiguration(pointSize: 18, weight: .semibold)
+            symView.image = NSImage(systemSymbolName: f.symbol, accessibilityDescription: nil)?
+                .withSymbolConfiguration(symCfg)
+            symView.contentTintColor = f.color
             bg.addSubview(symView)
 
-            let hLabel = NSTextField(labelWithString: head)
-            hLabel.font = NSFont.systemFont(ofSize: 12.5, weight: .semibold)
-            hLabel.frame = NSRect(x: 62, y: rowY + 22, width: textWidth, height: 16)
-            bg.addSubview(hLabel)
+            let titleLabel = NSTextField(labelWithString: f.title)
+            titleLabel.frame = NSRect(x: 74, y: itemY + itemH - 20, width: textWidth, height: 18)
+            titleLabel.font = titleFont
+            titleLabel.textColor = .labelColor
+            titleLabel.isEditable = false
+            titleLabel.drawsBackground = false
+            titleLabel.isBordered = false
+            bg.addSubview(titleLabel)
 
-            let dLabel = NSTextField(labelWithString: desc)
-            dLabel.font = NSFont.systemFont(ofSize: 11, weight: .regular)
-            dLabel.textColor = .secondaryLabelColor
-            dLabel.lineBreakMode = .byTruncatingTail
-            dLabel.frame = NSRect(x: 62, y: rowY + 3, width: textWidth, height: 16)
-            bg.addSubview(dLabel)
+            let attr = NSAttributedString(string: f.desc, attributes: [
+                .font: textFont,
+                .foregroundColor: NSColor.secondaryLabelColor,
+                .paragraphStyle: para
+            ])
+            let descLabel = NSTextField(labelWithAttributedString: attr)
+            descLabel.frame = NSRect(x: 74, y: itemY, width: textWidth, height: itemH - 22)
+            descLabel.lineBreakMode = .byWordWrapping
+            descLabel.maximumNumberOfLines = 0
+            descLabel.isEditable = false
+            descLabel.drawsBackground = false
+            descLabel.isBordered = false
+            bg.addSubview(descLabel)
+
+            currentY = itemY - 16
         }
 
-        // Author Note
+        // Author Note (Spacious gap below features)
         let credit = NSTextField(labelWithString: "Built by Arun Thomas")
         credit.frame = NSRect(x: 0, y: 78, width: width, height: 16)
         credit.alignment = .center
@@ -2157,21 +2203,21 @@ func getAppLogoImage() -> NSImage {
         credit.textColor = .secondaryLabelColor
         bg.addSubview(credit)
 
-        // Action Buttons
+        // Action Buttons (Exact 26px bottom padding)
         let buttonsY: CGFloat = 26
-        let contactW: CGFloat = 100
-        let gitW: CGFloat = 100
-        let closeW: CGFloat = 120
+        let contactW: CGFloat = 105
+        let gitW: CGFloat = 105
+        let closeW: CGFloat = 125
         let spacing: CGFloat = 14
         let totalW = contactW + gitW + closeW + (2 * spacing)
         let startX = (width - totalW) / 2
         
         let contact = NSButton(title: "Contact", target: self, action: #selector(contactDeveloper))
-        contact.frame = NSRect(x: startX, y: buttonsY, width: contactW, height: 32)
+        contact.frame = NSRect(x: startX, y: buttonsY, width: contactW, height: 34)
         contact.isBordered = false
         contact.wantsLayer = true
         contact.layer?.backgroundColor = NSColor.white.cgColor
-        contact.layer?.cornerRadius = 16
+        contact.layer?.cornerRadius = 17
         contact.layer?.masksToBounds = true
         contact.attributedTitle = NSAttributedString(string: "Contact", attributes: [
             .foregroundColor: NSColor.black,
@@ -2180,11 +2226,11 @@ func getAppLogoImage() -> NSImage {
         bg.addSubview(contact)
 
         let github = NSButton(title: "GitHub", target: self, action: #selector(openGitHub))
-        github.frame = NSRect(x: startX + contactW + spacing, y: buttonsY, width: gitW, height: 32)
+        github.frame = NSRect(x: startX + contactW + spacing, y: buttonsY, width: gitW, height: 34)
         github.isBordered = false
         github.wantsLayer = true
         github.layer?.backgroundColor = NSColor.black.cgColor
-        github.layer?.cornerRadius = 16
+        github.layer?.cornerRadius = 17
         github.layer?.masksToBounds = true
         github.attributedTitle = NSAttributedString(string: "GitHub", attributes: [
             .foregroundColor: NSColor.white,
@@ -2193,11 +2239,11 @@ func getAppLogoImage() -> NSImage {
         bg.addSubview(github)
 
         let close = NSButton(title: "Get Started", target: self, action: #selector(closeAbout))
-        close.frame = NSRect(x: startX + contactW + spacing + gitW + spacing, y: buttonsY, width: closeW, height: 32)
+        close.frame = NSRect(x: startX + contactW + spacing + gitW + spacing, y: buttonsY, width: closeW, height: 34)
         close.isBordered = false
         close.wantsLayer = true
         close.layer?.backgroundColor = NSColor.controlAccentColor.cgColor
-        close.layer?.cornerRadius = 16
+        close.layer?.cornerRadius = 17
         close.layer?.masksToBounds = true
         close.keyEquivalent = "\r"
         close.attributedTitle = NSAttributedString(string: "Get Started", attributes: [
