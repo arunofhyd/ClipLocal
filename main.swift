@@ -1676,10 +1676,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         let isTrusted = AXIsProcessTrusted()
         let key = "hasSeenPermissionsGuide_v1"
         let hasSeen = defaults.bool(forKey: key)
-        if !hasSeen || !isTrusted {
-            if !hasSeen {
-                defaults.set(true, forKey: key)
+        if !isTrusted {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+                self?.showPermissionsGuide(isFirstLaunch: !hasSeen)
             }
+        } else if !hasSeen {
+            defaults.set(true, forKey: key)
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
                 self?.showPermissionsGuide(isFirstLaunch: true)
             }
@@ -2088,6 +2090,7 @@ func getAppLogoImage() -> NSImage {
     }
 
     @objc func closePermissionsGuide() {
+        defaults.set(true, forKey: "hasSeenPermissionsGuide_v1")
         permissionsWindow?.close()
         permissionsWindow = nil
         showPopover(statusItem.button)
