@@ -2279,29 +2279,15 @@ func getAppLogoImage() -> NSImage {
 
         let buttonsY = dontShow.frame.minY - 48
         
-        let permW: CGFloat = 100
-        let contactW: CGFloat = 80
-        let gitW: CGFloat = 80
-        let closeW: CGFloat = 100
-        let spacing: CGFloat = 10
-        let totalW = permW + contactW + gitW + closeW + (3 * spacing)
+        let contactW: CGFloat = 100
+        let gitW: CGFloat = 100
+        let closeW: CGFloat = 120
+        let spacing: CGFloat = 16
+        let totalW = contactW + gitW + closeW + (2 * spacing)
         let startX = (width - totalW) / 2
         
-        let permBtn = NSButton(title: "Permissions", target: self, action: #selector(showPermissionsAction))
-        permBtn.frame = NSRect(x: startX, y: buttonsY, width: permW, height: 32)
-        permBtn.isBordered = false
-        permBtn.wantsLayer = true
-        permBtn.layer?.backgroundColor = NSColor.systemPurple.withAlphaComponent(0.18).cgColor
-        permBtn.layer?.cornerRadius = 16
-        permBtn.layer?.masksToBounds = true
-        permBtn.attributedTitle = NSAttributedString(string: "Permissions", attributes: [
-            .foregroundColor: NSColor.systemPurple,
-            .font: NSFont.systemFont(ofSize: 13, weight: .semibold)
-        ])
-        bg.addSubview(permBtn)
-
         let contact = NSButton(title: "Contact", target: self, action: #selector(contactDeveloper))
-        contact.frame = NSRect(x: startX + permW + spacing, y: buttonsY, width: contactW, height: 32)
+        contact.frame = NSRect(x: startX, y: buttonsY, width: contactW, height: 32)
         contact.isBordered = false
         contact.wantsLayer = true
         contact.layer?.backgroundColor = NSColor.white.cgColor
@@ -2314,7 +2300,7 @@ func getAppLogoImage() -> NSImage {
         bg.addSubview(contact)
 
         let github = NSButton(title: "GitHub", target: self, action: #selector(openGitHub))
-        github.frame = NSRect(x: startX + permW + spacing + contactW + spacing, y: buttonsY, width: gitW, height: 32)
+        github.frame = NSRect(x: startX + contactW + spacing, y: buttonsY, width: gitW, height: 32)
         github.isBordered = false
         github.wantsLayer = true
         github.layer?.backgroundColor = NSColor.black.cgColor
@@ -2327,7 +2313,7 @@ func getAppLogoImage() -> NSImage {
         bg.addSubview(github)
 
         let close = NSButton(title: "Get Started", target: self, action: #selector(closeAbout))
-        close.frame = NSRect(x: startX + permW + spacing + contactW + spacing + gitW + spacing, y: buttonsY, width: closeW, height: 32)
+        close.frame = NSRect(x: startX + contactW + spacing + gitW + spacing, y: buttonsY, width: closeW, height: 32)
         close.isBordered = false
         close.wantsLayer = true
         close.layer?.backgroundColor = NSColor.controlAccentColor.cgColor
