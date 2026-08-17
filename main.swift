@@ -34,20 +34,43 @@ struct KeyStore {
         fatalError("Failed to generate encryption key")
     }
 
-    /// Loads or creates the 256-bit AES-GCM encryption key stored securely on-device
-    /// with strict 0600 user-only POSIX permissions in ~/Library/Application Support/ClipLocal/
+    /// Loads the 256-bit AES-GCM encryption key from macOS Keychain, with automatic
+    /// user-isolated 0600 on-disk fallback to prevent repetitive Keychain UI prompts on launch.
     static func loadOrCreateKey() -> Data {
-        // Clean up legacy keychain item to eliminate repetitive macOS security prompts
-        let delQuery: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service
-        ]
-        SecItemDelete(delQuery as CFDictionary)
-
+        // 1. Check secure on-disk fallback first (avoids repeated OS Keychain popups across recompiles)
         if let data = try? Data(contentsOf: keyFile), data.count == 32 {
             return data
         }
+
+        // 2. Try loading from macOS Keychain
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account,
+            kSecReturnData as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne
+        ]
+        var item: CFTypeRef?
+        let status = SecItemCopyMatching(query as CFDictionary, &item)
+        if status == errSecSuccess, let data = item as? Data, data.count == 32 {
+            // Mirror to secure fallback file
+            try? data.write(to: keyFile, options: .atomic)
+            try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: keyFile.path)
+            return data
+        }
+
+        // 3. Generate a new key and save to both Keychain and secure on-disk store
         let newKey = generateKey()
+        
+        let addQuery: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account,
+            kSecValueData as String: newKey,
+            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+        ]
+        SecItemAdd(addQuery as CFDictionary, nil)
+        
         try? newKey.write(to: keyFile, options: .atomic)
         try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: keyFile.path)
         return newKey
@@ -2083,7 +2106,7 @@ func getAppLogoImage() -> NSImage {
             AboutFeature(symbol: "doc.on.clipboard.fill", color: .systemBlue, title: "Double-Click Direct Paste", desc: "Double-click any clip item to instantly paste it directly where your active cursor is."),
             AboutFeature(symbol: "key.fill", color: .systemOrange, title: "Skips Sensitive Passwords", desc: "By default, passwords copied from 1Password, Bitwarden, etc., are completely ignored."),
             AboutFeature(symbol: "eye.slash.fill", color: .systemTeal, title: "Zero Telemetry", desc: "No analytics or data collection. Only connects to GitHub manually when checking updates."),
-            AboutFeature(symbol: "lock.fill", color: .systemGreen, title: "Encrypted On-Disk Storage", desc: "History is encrypted on-disk with AES-256 GCM and user-isolated 0600 permissions."),
+            AboutFeature(symbol: "lock.fill", color: .systemGreen, title: "Keychain & Encrypted Storage", desc: "Hardware-backed AES-256 GCM encryption via Apple Keychain with secure 0600 on-disk fallback."),
             AboutFeature(symbol: "chevron.left.forwardslash.chevron.right", color: .systemPink, title: "Free & Open Source", desc: "ClipLocal is completely free and open source. Check out the code on GitHub.")
         ]
 
