@@ -1,7 +1,16 @@
 {
-  "version": "1.3.7",
+  "version": "1.3.8",
   "downloadURL": "https://cliplocal.vercel.app/#install",
   "changelog": [
+    {
+      "version": "1.3.8",
+      "date": "2026-08-17",
+      "changes": [
+        "Permissions & Accessibility Setup Guide: Added an interactive onboarding and settings window with one-click direct links to enable Accessibility, Menu Bar Icon (macOS Tahoe+), and Launch at Login.",
+        "Settings & About Menu Integration: Added direct 'Permissions & Settings...' item in the settings menu and a 'Permissions' button in the About window.",
+        "Reopen Handling: Added applicationShouldHandleReopen handler so clicking ClipLocal from Spotlight/Finder instantly opens the clipboard popover."
+      ]
+    },
     {
       "version": "1.3.7",
       "date": "2026-08-13",

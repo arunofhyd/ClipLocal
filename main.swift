@@ -10,7 +10,7 @@ import Security
 //  ClipLocal — 100% on-device clipboard history, no third parties
 // ============================================================
 
-let appVersion = "1.3.7"
+let appVersion = "1.3.8"
 let updateCheckURL = "https://raw.githubusercontent.com/arunofhyd/ClipLocal/main/version.json"
 let downloadPageURL = "https://cliplocal.vercel.app/#install"
 
@@ -1625,6 +1625,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     let clipboardManager = ClipboardManager()
     let defaults = UserDefaults.standard
     var aboutWindow: NSWindow?
+    var permissionsWindow: NSWindow?
     var settingsMenu: NSMenu!
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -1666,17 +1667,22 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         checkForUpdates(silentIfCurrent: true)
     }
 
-    func checkAndPromptAccessibilityPermission() {
-        if AXIsProcessTrusted() {
-            defaults.set(true, forKey: "hasPromptedAccessibility")
-            return
-        }
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        showPopover(statusItem.button)
+        return true
+    }
 
-        // Only prompt ONCE on first launch if not yet granted
-        if !defaults.bool(forKey: "hasPromptedAccessibility") {
-            defaults.set(true, forKey: "hasPromptedAccessibility")
-            let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
-            _ = AXIsProcessTrustedWithOptions(options)
+    func checkAndPromptAccessibilityPermission() {
+        let isTrusted = AXIsProcessTrusted()
+        let key = "hasSeenPermissionsGuide_v1"
+        let hasSeen = defaults.bool(forKey: key)
+        if !hasSeen || !isTrusted {
+            if !hasSeen {
+                defaults.set(true, forKey: key)
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+                self?.showPermissionsGuide(isFirstLaunch: true)
+            }
         }
     }
 
@@ -1830,6 +1836,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
         menu.addItem(.separator())
 
+        let permItem = NSMenuItem(title: "Permissions & Settings...", action: #selector(showPermissionsAction), keyEquivalent: "")
+        permItem.image = icon("hand.raised.square")
+        permItem.target = self
+        menu.addItem(permItem)
+
         let about = NSMenuItem(title: "About ClipLocal", action: #selector(showAboutMenu), keyEquivalent: "")
         about.image = icon("info.circle")
         about.target = self
@@ -1937,6 +1948,176 @@ func getAppLogoImage() -> NSImage {
     }
     return NSApp.applicationIconImage ?? (NSImage(systemSymbolName: "paperclip.circle", accessibilityDescription: nil) ?? NSImage())
 }
+
+    @objc func showPermissionsAction() {
+        showPermissionsGuide(isFirstLaunch: false)
+    }
+
+    func showPermissionsGuide(isFirstLaunch: Bool) {
+        if permissionsWindow != nil {
+            permissionsWindow?.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            return
+        }
+
+        let width: CGFloat = 480
+        let height: CGFloat = 460
+        let win = NSWindow(contentRect: NSRect(x: 0, y: 0, width: width, height: height),
+                           styleMask: [.titled, .closable, .fullSizeContentView],
+                           backing: .buffered, defer: false)
+        win.titleVisibility = .hidden
+        win.titlebarAppearsTransparent = true
+        win.isMovableByWindowBackground = true
+        win.center()
+        win.isReleasedWhenClosed = false
+        win.level = .floating
+        win.standardWindowButton(.miniaturizeButton)?.isHidden = true
+        win.standardWindowButton(.zoomButton)?.isHidden = true
+
+        let bg = NSVisualEffectView(frame: NSRect(x: 0, y: 0, width: width, height: height))
+        bg.material = .popover
+        bg.blendingMode = .behindWindow
+        bg.state = .active
+
+        // App Icon
+        let icon = NSImageView(frame: NSRect(x: (width - 56)/2, y: 360, width: 56, height: 56))
+        icon.image = getAppLogoImage()
+        icon.imageScaling = .scaleProportionallyUpOrDown
+        bg.addSubview(icon)
+
+        // Title
+        let title = NSTextField(labelWithString: "Permissions & Setup")
+        title.font = NSFont.systemFont(ofSize: 21, weight: .bold)
+        title.alignment = .center
+        title.frame = NSRect(x: 0, y: 320, width: width, height: 28)
+        bg.addSubview(title)
+
+        // Subtitle
+        let sub = NSTextField(labelWithString: "Enable accessibility and menu bar access for smooth clipboard management on macOS.")
+        sub.font = NSFont.systemFont(ofSize: 12, weight: .regular)
+        sub.textColor = .secondaryLabelColor
+        sub.alignment = .center
+        sub.frame = NSRect(x: 20, y: 294, width: width - 40, height: 18)
+        bg.addSubview(sub)
+
+        struct PermItem {
+            let symbol: String
+            let color: NSColor
+            let title: String
+            let desc: String
+            let action: Selector
+        }
+
+        let items: [PermItem] = [
+            PermItem(
+                symbol: "hand.point.up.left.fill",
+                color: .systemPurple,
+                title: "Accessibility (Recommended)",
+                desc: "Enables instant double-click paste and global keyboard shortcuts.",
+                action: #selector(openAccessibilitySettings)
+            ),
+            PermItem(
+                symbol: "menubar.rectangle",
+                color: .systemBlue,
+                title: "Menu Bar Icon (macOS Tahoe+)",
+                desc: "Keep ClipLocal visible in the top menu bar for fast access.",
+                action: #selector(openMenuBarSettings)
+            ),
+            PermItem(
+                symbol: "arrow.clockwise.circle.fill",
+                color: .systemGreen,
+                title: "Launch at Login (Optional)",
+                desc: "Silently starts ClipLocal in the background on startup.",
+                action: #selector(toggleLaunchAtLogin)
+            )
+        ]
+
+        let rowHeight: CGFloat = 48
+        let rowYPositions: [CGFloat] = [224, 158, 92]
+
+        for (idx, item) in items.enumerated() {
+            let rowY = rowYPositions[idx]
+
+            // Icon
+            let symView = NSImageView(frame: NSRect(x: 32, y: rowY + (rowHeight - 26)/2, width: 26, height: 26))
+            let symCfg = NSImage.SymbolConfiguration(pointSize: 20, weight: .semibold)
+            symView.image = NSImage(systemSymbolName: item.symbol, accessibilityDescription: nil)?.withSymbolConfiguration(symCfg)
+            symView.contentTintColor = item.color
+            bg.addSubview(symView)
+
+            // Text
+            let textWidth = width - 68 - 115
+            let hLabel = NSTextField(labelWithString: item.title)
+            hLabel.font = NSFont.systemFont(ofSize: 13, weight: .semibold)
+            hLabel.frame = NSRect(x: 68, y: rowY + 24, width: textWidth, height: 18)
+            bg.addSubview(hLabel)
+
+            let dLabel = NSTextField(labelWithString: item.desc)
+            dLabel.font = NSFont.systemFont(ofSize: 11.5, weight: .regular)
+            dLabel.textColor = .secondaryLabelColor
+            dLabel.lineBreakMode = .byTruncatingTail
+            dLabel.frame = NSRect(x: 68, y: rowY + 4, width: textWidth, height: 18)
+            bg.addSubview(dLabel)
+
+            // Action Button
+            let btn = NSButton(title: "Open", target: self, action: item.action)
+            btn.frame = NSRect(x: width - 32 - 70, y: rowY + (rowHeight - 28)/2, width: 70, height: 28)
+            btn.bezelStyle = .rounded
+            btn.font = NSFont.systemFont(ofSize: 12, weight: .medium)
+            bg.addSubview(btn)
+        }
+
+        // Done Button (Crisp contrast pill)
+        let doneBtn = NSButton(title: "Done", target: self, action: #selector(closePermissionsGuide))
+        doneBtn.frame = NSRect(x: (width - 150)/2, y: 26, width: 150, height: 36)
+        doneBtn.isBordered = false
+        doneBtn.wantsLayer = true
+        doneBtn.layer?.backgroundColor = NSColor.white.cgColor
+        doneBtn.layer?.cornerRadius = 18
+        doneBtn.layer?.masksToBounds = true
+        doneBtn.attributedTitle = NSAttributedString(string: "Done", attributes: [
+            .foregroundColor: NSColor.black,
+            .font: NSFont.systemFont(ofSize: 13.5, weight: .semibold)
+        ])
+        bg.addSubview(doneBtn)
+
+        win.contentView = bg
+        win.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        self.permissionsWindow = win
+    }
+
+    @objc func closePermissionsGuide() {
+        permissionsWindow?.close()
+        permissionsWindow = nil
+        showPopover(statusItem.button)
+    }
+
+    @objc func openAccessibilitySettings() {
+        let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
+        _ = AXIsProcessTrustedWithOptions(options)
+        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
+            NSWorkspace.shared.open(url)
+        }
+    }
+
+    @objc func openMenuBarSettings() {
+        if let url = URL(string: "x-apple.systempreferences:com.apple.ControlCenter-Settings.extension") {
+            NSWorkspace.shared.open(url)
+        }
+    }
+
+    @objc func toggleLaunchAtLogin() {
+        let service = SMAppService.mainApp
+        if service.status == .enabled {
+            try? service.unregister()
+        } else {
+            try? service.register()
+        }
+        if let url = URL(string: "x-apple.systempreferences:com.apple.LoginItems-Settings.extension") {
+            NSWorkspace.shared.open(url)
+        }
+    }
 
     // MARK: - About window (privacy-first splash)
 
@@ -2098,15 +2279,29 @@ func getAppLogoImage() -> NSImage {
 
         let buttonsY = dontShow.frame.minY - 48
         
-        let contactW: CGFloat = 100
-        let gitW: CGFloat = 100
-        let closeW: CGFloat = 120
-        let spacing: CGFloat = 16
-        let totalW = contactW + gitW + closeW + (2 * spacing)
+        let permW: CGFloat = 100
+        let contactW: CGFloat = 80
+        let gitW: CGFloat = 80
+        let closeW: CGFloat = 100
+        let spacing: CGFloat = 10
+        let totalW = permW + contactW + gitW + closeW + (3 * spacing)
         let startX = (width - totalW) / 2
         
+        let permBtn = NSButton(title: "Permissions", target: self, action: #selector(showPermissionsAction))
+        permBtn.frame = NSRect(x: startX, y: buttonsY, width: permW, height: 32)
+        permBtn.isBordered = false
+        permBtn.wantsLayer = true
+        permBtn.layer?.backgroundColor = NSColor.systemPurple.withAlphaComponent(0.18).cgColor
+        permBtn.layer?.cornerRadius = 16
+        permBtn.layer?.masksToBounds = true
+        permBtn.attributedTitle = NSAttributedString(string: "Permissions", attributes: [
+            .foregroundColor: NSColor.systemPurple,
+            .font: NSFont.systemFont(ofSize: 13, weight: .semibold)
+        ])
+        bg.addSubview(permBtn)
+
         let contact = NSButton(title: "Contact", target: self, action: #selector(contactDeveloper))
-        contact.frame = NSRect(x: startX, y: buttonsY, width: contactW, height: 32)
+        contact.frame = NSRect(x: startX + permW + spacing, y: buttonsY, width: contactW, height: 32)
         contact.isBordered = false
         contact.wantsLayer = true
         contact.layer?.backgroundColor = NSColor.white.cgColor
@@ -2119,7 +2314,7 @@ func getAppLogoImage() -> NSImage {
         bg.addSubview(contact)
 
         let github = NSButton(title: "GitHub", target: self, action: #selector(openGitHub))
-        github.frame = NSRect(x: startX + contactW + spacing, y: buttonsY, width: gitW, height: 32)
+        github.frame = NSRect(x: startX + permW + spacing + contactW + spacing, y: buttonsY, width: gitW, height: 32)
         github.isBordered = false
         github.wantsLayer = true
         github.layer?.backgroundColor = NSColor.black.cgColor
@@ -2132,7 +2327,7 @@ func getAppLogoImage() -> NSImage {
         bg.addSubview(github)
 
         let close = NSButton(title: "Get Started", target: self, action: #selector(closeAbout))
-        close.frame = NSRect(x: startX + contactW + spacing + gitW + spacing, y: buttonsY, width: closeW, height: 32)
+        close.frame = NSRect(x: startX + permW + spacing + contactW + spacing + gitW + spacing, y: buttonsY, width: closeW, height: 32)
         close.isBordered = false
         close.wantsLayer = true
         close.layer?.backgroundColor = NSColor.controlAccentColor.cgColor
