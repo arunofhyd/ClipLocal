@@ -10,7 +10,7 @@ import Security
 //  ClipLocal — 100% on-device clipboard history, no third parties
 // ============================================================
 
-let appVersion = "1.3.10"
+let appVersion = "1.3.11"
 let updateCheckURL = "https://raw.githubusercontent.com/arunofhyd/ClipLocal/main/version.json"
 let downloadPageURL = "https://cliplocal.vercel.app/#install"
 
@@ -346,27 +346,199 @@ class ItemTypeCache {
         cache.removeObject(forKey: id as NSString)
     }
     
+    private static let interpreterRegex: NSRegularExpression? = {
+        try? NSRegularExpression(
+            pattern: "^/(bin|sbin|usr/bin|usr/sbin|usr/local/bin|opt/homebrew/bin)/(bash|sh|zsh|csh|tcsh|dash|python[0-9.]*|node|deno|bun|perl|ruby|env|osascript|pwsh)(\\s+.*|$)",
+            options: [.caseInsensitive]
+        )
+    }()
+
+    private static let cliCommandRegex: NSRegularExpression? = {
+        let commands = [
+            "sudo", "sh", "bash", "zsh", "fish", "curl", "wget", "brew", "npm", "npx", "pnpm", "yarn", "bun", "pip", "pip3", "pipx",
+            "git", "docker", "docker-compose", "podman", "kubectl", "helm", "terraform",
+            "chmod", "chown", "chgrp", "mkdir", "pkill", "kill", "killall", "cat", "tail",
+            "head", "grep", "egrep", "fgrep", "awk", "sed", "find", "ssh", "scp", "rsync",
+            "tar", "zip", "unzip", "touch", "rm", "cp", "mv", "ln", "echo", "printf",
+            "export", "alias", "source", "which", "whereis", "uname", "ps", "top", "htop",
+            "df", "du", "lsof", "netstat", "ping", "traceroute", "dig", "nslookup",
+            "systemctl", "launchctl", "defaults", "xcode-select", "xcrun", "swift", "swiftc",
+            "cargo", "rustc", "go", "python", "python3", "node", "deno", "ruby", "perl",
+            "php", "java", "javac", "mvn", "gradle", "make", "cmake", "gcc", "g\\+\\+",
+            "clang", "clang\\+\\+", "apt", "apt-get", "yum", "dnf", "pacman", "zypper", "apk",
+            "open", "man", "history", "clear", "env", "printenv", "set", "unset", "ssh-keygen"
+        ].joined(separator: "|")
+        return try? NSRegularExpression(
+            pattern: "^(sudo\\s+)?(" + commands + ")(\\s+.*|$)",
+            options: [.caseInsensitive]
+        )
+    }()
+
+    private static let numberRegex: NSRegularExpression? = {
+        try? NSRegularExpression(pattern: "^[0-9 +().,-]{3,}$")
+    }()
+
+    private static let singleLinePathRegex: NSRegularExpression? = {
+        try? NSRegularExpression(pattern: "^(/|~/)[^\\s\"'`$|&><;:*?]+$")
+    }()
+
+    static func isCode(_ txt: String) -> Bool {
+        let trimmed = txt.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty { return false }
+
+        // 1. Shebang
+        if trimmed.hasPrefix("#!") { return true }
+
+        let range = NSRange(location: 0, length: (trimmed as NSString).length)
+
+        // 2. Direct binary / interpreter invocation with args (e.g. /bin/bash -c "...", /usr/bin/env python3)
+        if let regex = interpreterRegex, regex.firstMatch(in: trimmed, options: [], range: range) != nil {
+            return true
+        }
+
+        // 3. Leading prompt symbols (e.g. "$ brew install ...", ">>> print(x)")
+        if trimmed.hasPrefix("$ ") || trimmed.hasPrefix("# ") || trimmed.hasPrefix(">>> ") || trimmed.hasPrefix("➜ ") {
+            return true
+        }
+
+        // 4. CLI commands at start of string (e.g. "brew install ...", "git push ...", "sudo rm ...", "curl ...")
+        if let regex = cliCommandRegex, regex.firstMatch(in: trimmed, options: [], range: range) != nil {
+            return true
+        }
+
+        // 5. Shell syntax constructs (subshells, pipes, redirects, logical chaining)
+        if trimmed.contains("$(") || trimmed.contains("${") || trimmed.contains("`") ||
+           trimmed.contains(" | ") || trimmed.contains(" > ") || trimmed.contains(" >> ") ||
+           trimmed.contains(" < ") || trimmed.contains(" 2>&1") || trimmed.contains(" &> ") ||
+           trimmed.contains(" && ") || trimmed.contains(" || ") {
+            return true
+        }
+
+        // 6. Dot-slash script execution (e.g. ./install.sh, ./scripts/update.mjs)
+        if trimmed.hasPrefix("./") || trimmed.hasPrefix("../") {
+            return true
+        }
+
+        // 7. Common programming keywords
+        let codeKeywords = [
+            "func ", "function ", "def ", "var ", "let ", "const ", "class ", "struct ",
+            "enum ", "interface ", "protocol ", "extension ", "import ", "export ", "package ",
+            "namespace ", "public ", "private ", "protected ", "static ", "final ", "override ",
+            "async ", "await ", "return ", "yield ", "throw ", "throws ", "try ", "catch ",
+            "finally ", "if let ", "guard let ", "console.log", "print(", "println!",
+            "System.out.println", "std::", "#include ", "#define ", "#import "
+        ]
+        if codeKeywords.contains(where: { trimmed.contains($0) }) {
+            return true
+        }
+
+        // 8. Programming operators & syntax markers
+        let codeOperators = ["=>", "->", "===", "!==", "==", "!=", "+=", "-=", "*=", "/=", "++", "--"]
+        if codeOperators.contains(where: { trimmed.contains($0) }) {
+            return true
+        }
+
+        // 9. Markup, config, SQL, JSON structures
+        let markupPrefixes = ["<!DOCTYPE", "<html", "<head", "<body", "<div", "<span", "<p>", "<a href", "<script", "<style", "<?xml"]
+        if markupPrefixes.contains(where: { trimmed.lowercased().hasPrefix($0) }) || trimmed.contains("</") || trimmed.contains("/>") {
+            return true
+        }
+
+        let sqlKeywords = ["SELECT ", "INSERT INTO ", "UPDATE ", "DELETE FROM ", "CREATE TABLE ", "DROP TABLE ", "ALTER TABLE "]
+        if sqlKeywords.contains(where: { trimmed.uppercased().hasPrefix($0) || trimmed.uppercased().contains(" " + $0) }) {
+            return true
+        }
+
+        // JSON object or array structure
+        if (trimmed.hasPrefix("{") && trimmed.hasSuffix("}") && trimmed.contains("\":")) ||
+           (trimmed.hasPrefix("[") && trimmed.hasSuffix("]") && (trimmed.contains("{\"") || trimmed.contains("\",\""))) {
+            return true
+        }
+
+        // Semicolon terminated lines or code blocks with { and }
+        if (trimmed.contains("{") && trimmed.contains("}")) ||
+           (trimmed.contains(";\n") || (trimmed.hasSuffix(";") && trimmed.contains("="))) {
+            return true
+        }
+
+        // Comments
+        if trimmed.hasPrefix("//") || trimmed.hasPrefix("/*") || (trimmed.contains("/*") && trimmed.contains("*/")) {
+            return true
+        }
+
+        return false
+    }
+
+    static func isFile(_ txt: String) -> Bool {
+        let trimmed = txt.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty { return false }
+
+        // 1. Finder / system file URLs
+        if trimmed.hasPrefix("file://") { return true }
+
+        // If it matches code, it is not a file
+        if isCode(trimmed) { return false }
+
+        // 2. Multiline check: if every non-empty line starts with file:// or / or ~/
+        let lines = trimmed.components(separatedBy: .newlines).map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+        if lines.count > 1 {
+            let allLinesArePaths = lines.allSatisfy { line in
+                line.hasPrefix("file://") || line.hasPrefix("/") || line.hasPrefix("~/")
+            }
+            if allLinesArePaths && !isCode(trimmed) {
+                return true
+            }
+        }
+
+        // 3. Single-line POSIX path
+        if trimmed.hasPrefix("/") || trimmed.hasPrefix("~/") {
+            let expanded = (trimmed as NSString).expandingTildeInPath
+            if FileManager.default.fileExists(atPath: expanded) {
+                return true
+            }
+
+            // Clean path regex (no command arguments or shell operators)
+            let range = NSRange(location: 0, length: (trimmed as NSString).length)
+            if let regex = singleLinePathRegex, regex.firstMatch(in: trimmed, options: [], range: range) != nil {
+                return true
+            }
+        }
+
+        return false
+    }
+
     func type(for item: ClipItem) -> String {
         if let cached = cache.object(forKey: item.id as NSString) {
             return cached as String
         }
         
         let t: String
-        if item.imageData != nil { t = "image" }
-        else {
+        if item.imageData != nil {
+            t = "image"
+        } else {
             // Clamp type detection to prefix(2000) directly without computing total string count
             let rawTxt = String(item.text.prefix(2000))
             let txt = rawTxt.trimmingCharacters(in: .whitespacesAndNewlines)
-            if ColorParser.parse(txt) != nil { t = "color" }
-            else if txt.hasPrefix("http://") || txt.hasPrefix("https://") || txt.hasPrefix("www.") { t = "link" }
-            else {
+            
+            if txt.hasPrefix("[Image") && txt.hasSuffix("]") {
+                t = "image"
+            } else if ColorParser.parse(txt) != nil {
+                t = "color"
+            } else if (txt.hasPrefix("http://") || txt.hasPrefix("https://") || txt.hasPrefix("www.")) && !txt.contains(" ") && !txt.contains("\n") {
+                t = "link"
+            } else if ItemTypeCache.isCode(txt) {
+                t = "code"
+            } else if ItemTypeCache.isFile(txt) {
+                t = "file"
+            } else {
                 let parts = txt.split(separator: "@")
-                if parts.count == 2 && parts[1].contains(".") && !txt.contains(" ") { t = "email" }
-                else if txt.range(of: "^[0-9 +().-]{5,}$", options: .regularExpression) != nil { t = "number" }
-                else if txt.hasPrefix("/") || txt.hasPrefix("file://") { t = "file" }
-                else if txt.hasPrefix("[Image") && txt.hasSuffix("]") { t = "image" }
-                else if ["{", "}", "func ", "var ", "let ", "class ", "struct ", "<", ">", ";", "&&", "||", "==", "!=", "=>", "->", "def ", "import ", "const ", "function ", "sudo ", "echo ", "print(", "return ", "#!/bin/", "$ ", "npm ", "brew ", "apt-get", "git ", "docker ", "chmod ", "chown ", "mkdir ", "pkill ", " | ", " > ", " >> "].contains(where: { txt.contains($0) }) || txt.range(of: "^(cat|tail|head|grep|awk|sed|curl|wget|find|ssh|kill)\\s+([-/.~$\"']|\\S+\\.\\S+)", options: [.regularExpression, .caseInsensitive]) != nil { t = "code" }
-                else { t = "text" }
+                if parts.count == 2 && parts[1].contains(".") && !txt.contains(" ") && !txt.contains("\n") && !txt.contains("/") {
+                    t = "email"
+                } else if !txt.contains("\n") && txt.contains(where: { $0.isNumber }) && ItemTypeCache.numberRegex?.firstMatch(in: txt, options: [], range: NSRange(location: 0, length: (txt as NSString).length)) != nil {
+                    t = "number"
+                } else {
+                    t = "text"
+                }
             }
         }
         
@@ -458,8 +630,8 @@ class ImagePreviewCache {
                 return url.path
             }
             return String(firstLine.dropFirst(7))
-        } else if firstLine.hasPrefix("/") {
-            return firstLine
+        } else if firstLine.hasPrefix("/") || firstLine.hasPrefix("~/") {
+            return (firstLine as NSString).expandingTildeInPath
         }
         return nil
     }
@@ -1071,14 +1243,14 @@ struct ClipItemRowView: View {
 
     private var snippet: String {
         let raw = item.text.trimmingCharacters(in: .whitespacesAndNewlines)
-        if itemType == "file" || raw.hasPrefix("file://") || (raw.hasPrefix("/") && !raw.contains("\n")) {
+        if itemType == "file" || raw.hasPrefix("file://") {
             let lines = raw.components(separatedBy: .newlines).filter { !$0.isEmpty }
             let fileNames = lines.compactMap { line -> String? in
                 let clean: String
                 if line.hasPrefix("file://") {
                     clean = URL(string: line)?.path ?? String(line.dropFirst(7))
-                } else if line.hasPrefix("/") {
-                    clean = line
+                } else if line.hasPrefix("/") || line.hasPrefix("~/") {
+                    clean = (line as NSString).expandingTildeInPath
                 } else {
                     return nil
                 }

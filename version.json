@@ -1,7 +1,14 @@
 {
-  "version": "1.3.10",
+  "version": "1.3.11",
   "downloadURL": "https://cliplocal.vercel.app/#install",
   "changelog": [
+    {
+      "version": "1.3.11",
+      "date": "2026-08-19",
+      "changes": [
+        "Intelligent Code vs. File Detection: Fixed classification logic to prioritize shell commands, interpreter invocations, subshells, and CLI scripts into the Code category, ensuring accurate snippet previews and filtering."
+      ]
+    },
     {
       "version": "1.3.10",
       "date": "2026-08-18",
