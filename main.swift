@@ -2063,15 +2063,17 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
 func getAppLogoImage() -> NSImage {
     let candidates = [
+        Bundle.main.path(forResource: "AppLogo", ofType: "png"),
+        Bundle.main.path(forResource: "AppIcon", ofType: "png"),
+        "/Applications/ClipLocal.app/Contents/Resources/AppLogo.png",
         "/Applications/ClipLocal.app/Contents/Resources/AppIcon.png",
+        "AppLogo.png",
         "AppIcon.png",
+        "/Users/arunthomas/ClipLocal/AppLogo.png",
         "/Users/arunthomas/ClipLocal/AppIcon.png"
-    ]
+    ].compactMap { $0 }
     for c in candidates {
         if let img = NSImage(contentsOfFile: c) { return img }
-    }
-    if let path = Bundle.main.path(forResource: "AppIcon", ofType: "png"), let img = NSImage(contentsOfFile: path) {
-        return img
     }
     if let path = Bundle.main.path(forResource: "AppIcon", ofType: "icns"), let img = NSImage(contentsOfFile: path) {
         return img

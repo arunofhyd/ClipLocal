@@ -194,7 +194,7 @@ ctx.clip()
 let shine0 = NSColor(white: 1.0, alpha: 0.6)
 let shine1 = NSColor(white: 1.0, alpha: 0.0)
 if let shineGrad = NSGradient(colors: [shine0, shine1, shine1, shine0], atLocations: [0.0, 0.3, 0.7, 1.0], colorSpace: .deviceRGB) {
-    shineGrad.draw(in: NSRect(x: 0, y: 0, width: 120, height: 120), angle: -45)
+    shineGrad.draw(in: NSRect(x: 0, y: 0, width: 120, height: 120), angle: 45)
 }
 ctx.restoreGState()
 
@@ -247,11 +247,17 @@ SWIFT_CACHE="$BUILD_DIR/.swiftcache"
 xcrun swiftc ${SWIFT_SDK:+-sdk "$SWIFT_SDK"} -module-cache-path "$SWIFT_CACHE" MakeIcon.swift -o MakeIcon > /dev/null 2>&1 && ./MakeIcon
 if [ -f AppIcon.png ]; then
     mkdir -p AppIcon.iconset
-    for pair in "16 16" "32 16@2x" "32 32" "64 32@2x" "128 128" "256 128@2x" "256 256" "512 256@2x" "512 512" "1024 512@2x"; do
-        set -- $pair
-        sips -z "$1" "$1" AppIcon.png --out "AppIcon.iconset/icon_${2}.png" >/dev/null 2>&1
-    done
-    iconutil -c icns AppIcon.iconset >/dev/null 2>&1
+    sips -z 16 16     AppIcon.png --out AppIcon.iconset/icon_16x16.png >/dev/null 2>&1
+    sips -z 32 32     AppIcon.png --out AppIcon.iconset/icon_16x16@2x.png >/dev/null 2>&1
+    sips -z 32 32     AppIcon.png --out AppIcon.iconset/icon_32x32.png >/dev/null 2>&1
+    sips -z 64 64     AppIcon.png --out AppIcon.iconset/icon_32x32@2x.png >/dev/null 2>&1
+    sips -z 128 128   AppIcon.png --out AppIcon.iconset/icon_128x128.png >/dev/null 2>&1
+    sips -z 256 256   AppIcon.png --out AppIcon.iconset/icon_128x128@2x.png >/dev/null 2>&1
+    sips -z 256 256   AppIcon.png --out AppIcon.iconset/icon_256x256.png >/dev/null 2>&1
+    sips -z 512 512   AppIcon.png --out AppIcon.iconset/icon_256x256@2x.png >/dev/null 2>&1
+    sips -z 512 512   AppIcon.png --out AppIcon.iconset/icon_512x512.png >/dev/null 2>&1
+    sips -z 1024 1024 AppIcon.png --out AppIcon.iconset/icon_512x512@2x.png >/dev/null 2>&1
+    iconutil -c icns AppIcon.iconset -o AppIcon.icns >/dev/null 2>&1
     ok "Icon created."
 else
     warn "Icon generation skipped (app will still work)."
@@ -264,6 +270,9 @@ APP="$APP_NAME.app"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 [ -f AppIcon.icns ] && cp AppIcon.icns "$APP/Contents/Resources/"
+[ -f AppLogo.png ]  && cp AppLogo.png  "$APP/Contents/Resources/"
+[ -f AppIcon.png ]  && cp AppIcon.png  "$APP/Contents/Resources/"
+[ -f logo.svg ]     && cp logo.svg     "$APP/Contents/Resources/"
 
 APP_VERSION=$(grep -m1 'let appVersion =' main.swift | cut -d'"' -f2)
 if [ -z "$APP_VERSION" ]; then APP_VERSION="1.2.4"; fi

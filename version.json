@@ -1,7 +1,14 @@
 {
-  "version": "1.3.11",
+  "version": "1.3.12",
   "downloadURL": "https://cliplocal.vercel.app/#install",
   "changelog": [
+    {
+      "version": "1.3.12",
+      "date": "2026-08-19",
+      "changes": [
+        "Diagonal Corner Shine Icon Alignment: Corrected inner shine gradient to top-left and bottom-right corners, added AppLogo asset bundling, and fixed iconset resolution generation."
+      ]
+    },
     {
       "version": "1.3.11",
       "date": "2026-08-19",
