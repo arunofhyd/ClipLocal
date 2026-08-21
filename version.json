@@ -1,7 +1,15 @@
 {
-  "version": "1.3.12",
+  "version": "1.3.13",
   "downloadURL": "https://cliplocal.vercel.app/#install",
   "changelog": [
+    {
+      "version": "1.3.13",
+      "date": "2026-08-21",
+      "changes": [
+        "Dynamic Version Resolution: Standardized appVersion to single-source-of-truth loading directly from bundle CFBundleShortVersionString with robust fallback.",
+        "Installer & GitHub Release Sync: Fixed one-liner terminal installer to fetch and parse version.json ensuring correct version builds across local and CI releases."
+      ]
+    },
     {
       "version": "1.3.12",
       "date": "2026-08-19",
