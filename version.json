@@ -1,7 +1,14 @@
 {
-  "version": "1.3.13",
+  "version": "1.3.14",
   "downloadURL": "https://cliplocal.vercel.app/#install",
   "changelog": [
+    {
+      "version": "1.3.14",
+      "date": "2026-08-21",
+      "changes": [
+        "Live Permission & Menu Bar Check Indicators: Upgraded Permissions & Setup guide with real-time status polling checkmarks for Accessibility, Menu Bar, and Launch at Login."
+      ]
+    },
     {
       "version": "1.3.13",
       "date": "2026-08-21",

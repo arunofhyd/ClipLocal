@@ -12,7 +12,7 @@ import Security
 
 let appVersion: String = {
     if let v = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String, !v.isEmpty { return v }
-    return "1.3.13"
+    return "1.3.14"
 }()
 let updateCheckURL = "https://raw.githubusercontent.com/arunofhyd/ClipLocal/main/version.json"
 let downloadPageURL = "https://cliplocal.vercel.app/#install"
@@ -1766,6 +1766,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     let defaults = UserDefaults.standard
     var aboutWindow: NSWindow?
     var permissionsWindow: NSWindow?
+    var permissionButtons: [NSButton] = []
+    var permissionsTimer: Timer?
     var settingsMenu: NSMenu!
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -2173,6 +2175,8 @@ func getAppLogoImage() -> NSImage {
         let rowHeight: CGFloat = 48
         let rowYPositions: [CGFloat] = [224, 158, 92]
 
+        self.permissionButtons = []
+
         for (idx, item) in items.enumerated() {
             let rowY = rowYPositions[idx]
 
@@ -2203,6 +2207,7 @@ func getAppLogoImage() -> NSImage {
             btn.bezelStyle = .rounded
             btn.font = NSFont.systemFont(ofSize: 12, weight: .medium)
             bg.addSubview(btn)
+            permissionButtons.append(btn)
         }
 
         // Done Button (Crisp contrast pill)
@@ -2223,9 +2228,53 @@ func getAppLogoImage() -> NSImage {
         win.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
         self.permissionsWindow = win
+
+        // Initial check and auto-polling timer for live updates
+        checkPermissionsStatus()
+        permissionsTimer?.invalidate()
+        let t = Timer(timeInterval: 0.8, target: self, selector: #selector(checkPermissionsStatus), userInfo: nil, repeats: true)
+        RunLoop.current.add(t, forMode: .common)
+        self.permissionsTimer = t
+    }
+
+    @objc func checkPermissionsStatus() {
+        guard permissionsWindow != nil, permissionButtons.count >= 3 else { return }
+
+        // Row 0: Accessibility
+        let axOk = AXIsProcessTrusted()
+        updatePermissionButton(permissionButtons[0], isGranted: axOk)
+
+        // Row 1: Menu Bar Icon
+        let menuBarOk = (statusItem != nil)
+        updatePermissionButton(permissionButtons[1], isGranted: menuBarOk)
+
+        // Row 2: Launch at Login
+        let loginOk = (SMAppService.mainApp.status == .enabled)
+        updatePermissionButton(permissionButtons[2], isGranted: loginOk)
+    }
+
+    func updatePermissionButton(_ btn: NSButton, isGranted: Bool) {
+        if isGranted {
+            if btn.title != "✓" {
+                btn.title = "✓"
+                btn.font = NSFont.systemFont(ofSize: 13, weight: .bold)
+                btn.contentTintColor = .systemGreen
+                btn.toolTip = "Granted (Click to open settings)"
+            }
+        } else {
+            if btn.title != "Open" {
+                btn.title = "Open"
+                btn.font = NSFont.systemFont(ofSize: 12, weight: .medium)
+                btn.contentTintColor = nil
+                btn.toolTip = "Click to open settings"
+            }
+        }
     }
 
     @objc func closePermissionsGuide() {
+        permissionsTimer?.invalidate()
+        permissionsTimer = nil
+        permissionButtons = []
         defaults.set(true, forKey: "hasSeenPermissionsGuide_v1")
         permissionsWindow?.close()
         permissionsWindow = nil
@@ -2237,6 +2286,9 @@ func getAppLogoImage() -> NSImage {
         _ = AXIsProcessTrustedWithOptions(options)
         if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
             NSWorkspace.shared.open(url)
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+            self?.checkPermissionsStatus()
         }
     }
 
@@ -2255,6 +2307,9 @@ func getAppLogoImage() -> NSImage {
         }
         if let url = URL(string: "x-apple.systempreferences:com.apple.LoginItems-Settings.extension") {
             NSWorkspace.shared.open(url)
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+            self?.checkPermissionsStatus()
         }
     }
 

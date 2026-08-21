@@ -282,7 +282,7 @@ fi
 if [ -z "$APP_VERSION" ]; then
     APP_VERSION=$(grep -m1 'appVersion' main.swift 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n1 || true)
 fi
-if [ -z "$APP_VERSION" ]; then APP_VERSION="1.3.13"; fi
+if [ -z "$APP_VERSION" ]; then APP_VERSION="1.3.14"; fi
 
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
