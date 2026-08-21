@@ -148,6 +148,7 @@ if ! curl -fsSL "$REPO_RAW/main.swift?v=$(date +%s)" -o main.swift; then
     printf "  ${GREY}Check your internet connection and try again.${NC}\n\n"
     exit 1
 fi
+curl -fsSL "$REPO_RAW/version.json?v=$(date +%s)" -o version.json 2>/dev/null || true
 ok "Source downloaded."
 printf "\n"
 
@@ -274,8 +275,14 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 [ -f AppIcon.png ]  && cp AppIcon.png  "$APP/Contents/Resources/"
 [ -f logo.svg ]     && cp logo.svg     "$APP/Contents/Resources/"
 
-APP_VERSION=$(grep -m1 'let appVersion =' main.swift | cut -d'"' -f2)
-if [ -z "$APP_VERSION" ]; then APP_VERSION="1.2.4"; fi
+APP_VERSION=""
+if [ -f version.json ]; then
+    APP_VERSION=$(python3 -c "import json; print(json.load(open('version.json'))['version'])" 2>/dev/null || true)
+fi
+if [ -z "$APP_VERSION" ]; then
+    APP_VERSION=$(grep -m1 'appVersion' main.swift 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n1 || true)
+fi
+if [ -z "$APP_VERSION" ]; then APP_VERSION="1.3.12"; fi
 
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
