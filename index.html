@@ -149,9 +149,11 @@
 
     <!-- Hero -->
     <section class="pt-28 pb-16 px-6 max-w-7xl mx-auto text-center">
-        <div id="version-pill" class="pill inline-block px-3 py-1 mb-6 rounded-full bg-brand-blue/10 border border-brand-blue/30 text-brand-blue text-xs font-mono">
-            Latest Version
-        </div>
+        <a id="version-pill" href="https://github.com/arunofhyd/ClipLocal/releases/latest" target="_blank" rel="noopener noreferrer"
+           class="pill inline-flex items-center gap-1.5 px-3.5 py-1 mb-6 rounded-full bg-brand-blue/10 border border-brand-blue/30 text-brand-blue text-xs font-mono hover:bg-brand-blue/20 transition-all cursor-pointer">
+            <span>Latest Version</span>
+            <span class="opacity-60 text-[10px]">↗</span>
+        </a>
 
         <h1 class="text-5xl md:text-7xl font-bold mb-6 tracking-tight">
             Your clipboard.<br>
@@ -397,7 +399,10 @@
         fetch('version.json').then(r => r.json()).then(data => {
             if (data.version) {
                 const pill = document.getElementById('version-pill');
-                if (pill) pill.textContent = `v${data.version} Now Available`;
+                if (pill) {
+                    pill.innerHTML = `<span>v${data.version} Now Available</span> <span class="opacity-60 text-[10px]">↗</span>`;
+                    pill.href = `https://github.com/arunofhyd/ClipLocal/releases/tag/v${data.version}`;
+                }
                 
                 document.querySelectorAll('.version-label').forEach(el => el.textContent = 'v' + data.version);
                 document.querySelectorAll('.version-badge').forEach(el => el.textContent = '🎉 Now on v' + data.version);
@@ -429,7 +434,10 @@
                     
                     const header = `<div class="flex items-center justify-between mb-4">
                         <div class="flex items-center gap-2.5">
-                            <span class="text-brand-blue font-mono font-bold text-lg">v${release.version}</span>
+                            <a href="https://github.com/arunofhyd/ClipLocal/releases/tag/v${release.version}" target="_blank" rel="noopener noreferrer" class="text-brand-blue font-mono font-bold text-lg hover:underline flex items-center gap-1">
+                                <span>v${release.version}</span>
+                                <span class="text-xs opacity-60">↗</span>
+                            </a>
                             ${isLatest ? `<span class="bg-brand-blue/20 text-brand-blue text-[10px] font-bold px-2 py-0.5 rounded-full border border-brand-blue/30 tracking-wider">LATEST</span>` : ''}
                         </div>
                         ${release.date ? `<span class="text-gray-400 text-xs font-mono px-2 py-0.5 rounded bg-white/5 border border-white/5">${release.date}</span>` : ''}
