@@ -679,6 +679,16 @@ class ImagePreviewCache {
     }
 }
 
+enum TutorialStep: Int, CaseIterable {
+    case step1_pin = 1
+    case step2_goToPinned = 2
+    case step3_rightClickPill = 3
+    case step4_editClip = 4
+    case step5_doubleClickPaste = 5
+    case step6_delete = 6
+    case completed = 7
+}
+
 struct TypeCount {
     var total: Int = 0
     var pinned: Int = 0
@@ -696,6 +706,11 @@ class ClipboardManager: ObservableObject {
     @Published var resizableMenu: Bool
     @Published var menuHeight: Double
     @Published var pinFlash: Bool = false
+
+    // MARK: - Interactive First-Time Tutorial State
+    @Published var isTutorialActive: Bool
+    @Published var tutorialStep: TutorialStep
+    @Published var tutorialItem: ClipItem
 
     let key = KeyStore.loadOrCreateKey()
     let defaults = UserDefaults.standard
@@ -721,12 +736,100 @@ class ClipboardManager: ObservableObject {
     init() {
         self.resizableMenu = UserDefaults.standard.object(forKey: "resizableMenu") as? Bool ?? false
         self.menuHeight = UserDefaults.standard.object(forKey: "menuHeight") as? Double ?? 500.0
+
+        let tutorialCompleted = UserDefaults.standard.bool(forKey: "hasCompletedInteractiveTutorial_v1")
+        self.isTutorialActive = !tutorialCompleted
+        self.tutorialStep = .step1_pin
+        self.tutorialItem = ClipItem(
+            id: "__cliplocal_tutorial_item__",
+            text: "Tutorial Placeholder: Swipe Right to Pin 📌, Double-click to Paste 📋, Swipe Left to Delete 🗑️",
+            date: Date(),
+            isEdited: false,
+            pinned: false,
+            imageData: nil,
+            sourceAppBundleIdentifier: "com.apple.finder"
+        )
+
         if mode == .persistent { loadHistory() }
+        
+        if isTutorialActive && !history.contains(where: { $0.id == "__cliplocal_tutorial_item__" }) {
+            history.insert(tutorialItem, at: 0)
+        }
+
         // Debounced deep-search: after 300ms of no typing, search inside large payload files
         deepSearchCancellable = $currentSearchText
             .debounce(for: .milliseconds(300), scheduler: RunLoop.main)
             .removeDuplicates()
             .sink { [weak self] _ in self?.deepSearchPayloads() }
+    }
+
+    // MARK: - Tutorial Action Handlers
+    func pinTutorialItem() {
+        NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .default)
+        if let idx = history.firstIndex(where: { $0.id == "__cliplocal_tutorial_item__" }) {
+            history[idx].pinned = true
+            history.sort {
+                if $0.pinned == $1.pinned { return $0.date > $1.date }
+                return $0.pinned && !$1.pinned
+            }
+        }
+        tutorialItem.pinned = true
+        pinFlash = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in
+            self?.pinFlash = false
+        }
+        withAnimation(.spring(response: 0.35, dampingFraction: 0.7)) {
+            tutorialStep = .step2_goToPinned
+        }
+    }
+
+    func onFilterTabSelected(filter: String) {
+        if isTutorialActive && tutorialStep == .step2_goToPinned && filter == "pinned" {
+            withAnimation(.spring(response: 0.35, dampingFraction: 0.7)) {
+                tutorialStep = .step3_rightClickPill
+            }
+        }
+    }
+
+    func deleteTutorialItem() {
+        NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .default)
+        history.removeAll { $0.id == "__cliplocal_tutorial_item__" }
+        withAnimation(.spring(response: 0.35, dampingFraction: 0.7)) {
+            tutorialStep = .completed
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in
+            self?.finishTutorialNow()
+        }
+    }
+
+    func finishTutorialNow() {
+        withAnimation(.easeInOut(duration: 0.25)) {
+            self.isTutorialActive = false
+            self.history.removeAll { $0.id == "__cliplocal_tutorial_item__" }
+            UserDefaults.standard.set(true, forKey: "hasCompletedInteractiveTutorial_v1")
+        }
+    }
+
+    func skipTutorial() {
+        finishTutorialNow()
+    }
+
+    func resetTutorial() {
+        history.removeAll { $0.id == "__cliplocal_tutorial_item__" }
+        tutorialItem = ClipItem(
+            id: "__cliplocal_tutorial_item__",
+            text: "Tutorial Placeholder: Swipe Right to Pin 📌 or Swipe Left to Delete 🗑️",
+            date: Date(),
+            isEdited: false,
+            pinned: false,
+            imageData: nil,
+            sourceAppBundleIdentifier: "com.apple.finder"
+        )
+        tutorialStep = .step1_pin
+        isTutorialActive = true
+        UserDefaults.standard.set(false, forKey: "hasCompletedInteractiveTutorial_v1")
+        activeFilters.remove("pinned")
+        history.insert(tutorialItem, at: 0)
     }
 
     var historyFile: URL {
@@ -753,12 +856,15 @@ class ClipboardManager: ObservableObject {
                 saveHistory()
             }
         }
+        if isTutorialActive && !self.history.contains(where: { $0.id == "__cliplocal_tutorial_item__" }) {
+            self.history.insert(tutorialItem, at: 0)
+        }
         updateFilteredHistory()
     }
 
     func saveHistory() {
         // Capture values on the main thread, then encrypt + write in the background.
-        let snapshot = history
+        let snapshot = history.filter { $0.id != "__cliplocal_tutorial_item__" }
         let encKey   = key
         let url      = historyFile
         saveQueue.async {
@@ -900,6 +1006,39 @@ class ClipboardManager: ObservableObject {
 }
 
 // MARK: - SwiftUI Views
+struct TableViewConfigurator: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView {
+        let v = NSView()
+        DispatchQueue.main.async {
+            if let tv = findTableView(in: v.window?.contentView) {
+                tv.style = .plain
+                tv.intercellSpacing = NSSize(width: 0, height: 0)
+                tv.selectionHighlightStyle = .none
+            }
+        }
+        return v
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        DispatchQueue.main.async {
+            if let tv = findTableView(in: nsView.window?.contentView) {
+                tv.style = .plain
+                tv.intercellSpacing = NSSize(width: 0, height: 0)
+                tv.selectionHighlightStyle = .none
+            }
+        }
+    }
+
+    private func findTableView(in view: NSView?) -> NSTableView? {
+        guard let view = view else { return nil }
+        if let tv = view as? NSTableView { return tv }
+        for sub in view.subviews {
+            if let tv = findTableView(in: sub) { return tv }
+        }
+        return nil
+    }
+}
+
 struct ContentView: View {
     @ObservedObject var manager: ClipboardManager
     @State private var copiedItemId: String? = nil
@@ -1006,6 +1145,14 @@ struct ContentView: View {
 
             Divider()
 
+            // Interactive First-Time Tutorial Guidance Banner
+            if manager.isTutorialActive {
+                TutorialGuidanceBanner(manager: manager)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                Divider()
+            }
+
             // List
             ScrollViewReader { proxy in
                 List {
@@ -1037,7 +1184,7 @@ struct ContentView: View {
                     }
                 }
                 .listStyle(.plain)
-                .background(Color.clear)
+                .background(TableViewConfigurator())
                 .scrollContentBackground(.hidden)
                 .onAppear {
                     if let firstId = manager.filteredHistory.first?.id {
@@ -1108,6 +1255,101 @@ struct ContentView: View {
             // Clear stale copy-button animation so it never shows on next open.
             copiedItemId = nil
         }
+    }
+}
+
+// MARK: - Interactive First-Time Tutorial Guidance Banner
+struct TutorialGuidanceBanner: View {
+    @ObservedObject var manager: ClipboardManager
+
+    private var bannerTitle: String {
+        switch manager.tutorialStep {
+        case .step1_pin:
+            return "Step 1/6: Swipe right to Pin 📌"
+        case .step2_goToPinned:
+            return "Step 2/6: Click 📌 Pinned tab above"
+        case .step3_rightClickPill:
+            return "Step 3/6: Right-click pills for batch actions"
+        case .step4_editClip:
+            return "Step 4/6: Right-click row to Edit ✏️"
+        case .step5_doubleClickPaste:
+            return "Step 5/6: Double-click row to Paste 📋"
+        case .step6_delete:
+            return "Step 6/6: Swipe left to Delete 🗑️"
+        case .completed:
+            return "All set! ClipLocal is ready 🎉"
+        }
+    }
+
+    private var bannerColor: Color {
+        switch manager.tutorialStep {
+        case .step1_pin: return .orange
+        case .step2_goToPinned: return .blue
+        case .step3_rightClickPill: return .teal
+        case .step4_editClip: return .indigo
+        case .step5_doubleClickPaste: return .purple
+        case .step6_delete: return .red
+        case .completed: return .green
+        }
+    }
+
+    private var bannerIcon: String {
+        switch manager.tutorialStep {
+        case .step1_pin: return "pin.fill"
+        case .step2_goToPinned: return "arrow.up.circle.fill"
+        case .step3_rightClickPill: return "ellipsis.circle.fill"
+        case .step4_editClip: return "square.and.pencil"
+        case .step5_doubleClickPaste: return "cursorarrow.rays"
+        case .step6_delete: return "trash.fill"
+        case .completed: return "checkmark.circle.fill"
+        }
+    }
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: bannerIcon)
+                .font(.system(size: 12, weight: .bold))
+                .foregroundColor(bannerColor)
+
+            Text(bannerTitle)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundColor(.primary)
+                .lineLimit(1)
+
+            Spacer()
+
+            if manager.tutorialStep == .step3_rightClickPill || manager.tutorialStep == .step4_editClip {
+                Button(action: {
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.7)) {
+                        if manager.tutorialStep == .step3_rightClickPill {
+                            manager.tutorialStep = .step4_editClip
+                        } else if manager.tutorialStep == .step4_editClip {
+                            manager.tutorialStep = .step5_doubleClickPaste
+                        }
+                    }
+                }) {
+                    Text("Next ➔")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundColor(bannerColor)
+                }
+                .buttonStyle(PlainButtonStyle())
+            }
+
+            if manager.tutorialStep != .completed {
+                Button(action: {
+                    manager.skipTutorial()
+                }) {
+                    Text("Skip")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundColor(.secondary)
+                }
+                .buttonStyle(PlainButtonStyle())
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(bannerColor.opacity(0.12))
+        .cornerRadius(6)
     }
 }
 
@@ -1197,6 +1439,14 @@ struct ClipItemRowView: View {
     @State private var editedText = ""
     @State private var isLoadingEdit = false
 
+    // Tutorial demo state
+    @State private var demoSwipeOffset: CGFloat = 0
+    @State private var demoTimer: Timer? = nil
+
+    private var isTutorialItem: Bool {
+        item.id == "__cliplocal_tutorial_item__" && manager.isTutorialActive
+    }
+
     // MARK: Memoised helpers (computed once per render, not on every sub-view)
     private var itemType: String { clipItemType(for: item) }
 
@@ -1245,6 +1495,10 @@ struct ClipItemRowView: View {
     }
 
     private var snippet: String {
+        if isTutorialItem {
+            return "Sample Clipboard Item"
+        }
+
         let raw = item.text.trimmingCharacters(in: .whitespacesAndNewlines)
         if itemType == "file" || raw.hasPrefix("file://") {
             let lines = raw.components(separatedBy: .newlines).filter { !$0.isEmpty }
@@ -1279,130 +1533,211 @@ struct ClipItemRowView: View {
     }
 
     var body: some View {
-        HStack(alignment: .center, spacing: 16) {
-            if let nsImage = ImagePreviewCache.shared.image(for: item) {
-                Image(nsImage: nsImage)
-                    .resizable()
-                    .scaledToFill()
-                    .frame(width: 32, height: 32)
+        ZStack(alignment: .leading) {
+            if isTutorialItem {
+                if demoSwipeOffset > 5 {
+                    // Leading Action Indicator (Pin)
+                    HStack(spacing: 5) {
+                        Image(systemName: "pin.fill")
+                            .font(.system(size: 13, weight: .bold))
+                        Text("Pin")
+                            .font(.system(size: 12, weight: .bold))
+                    }
+                    .foregroundColor(.white)
+                    .frame(width: demoSwipeOffset)
+                    .frame(maxHeight: .infinity)
+                    .background(Color.orange)
                     .clipShape(RoundedRectangle(cornerRadius: 6))
-            } else if let parsedColor = ColorParser.parse(item.text) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 6)
-                        .fill(Color.secondary.opacity(0.15))
-                    RoundedRectangle(cornerRadius: 6)
-                        .strokeBorder(Color.white.opacity(0.3), lineWidth: 1)
-                    RoundedRectangle(cornerRadius: 6)
-                        .fill(Color(nsColor: parsedColor))
+                } else if demoSwipeOffset < -5 {
+                    // Trailing Action Indicator (Delete)
+                    HStack {
+                        Spacer()
+                        HStack(spacing: 5) {
+                            Image(systemName: "trash.fill")
+                                .font(.system(size: 13, weight: .bold))
+                            Text("Delete")
+                                .font(.system(size: 12, weight: .bold))
+                        }
+                        .foregroundColor(.white)
+                        .frame(width: abs(demoSwipeOffset))
+                        .frame(maxHeight: .infinity)
+                        .background(Color.red)
+                        .clipShape(RoundedRectangle(cornerRadius: 6))
+                    }
+                    .frame(maxWidth: .infinity, alignment: .trailing)
                 }
-                .frame(width: 32, height: 32)
-                .shadow(color: Color(nsColor: parsedColor).opacity(0.4), radius: 3, x: 0, y: 1.5)
-            } else {
-                Image(systemName: iconSystemName)
-                    .font(.system(size: 16, weight: .light))
-                    .foregroundColor(.secondary)
-                    .frame(width: 32)
             }
 
-            VStack(alignment: .leading, spacing: 6) {
-                if snippet != "[Image]" {
-                    Text(snippet)
-                        .lineLimit(manager.expandedIdx.contains(item.id) ? 5 : 1)
-                        .truncationMode(.tail)
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundColor(.primary)
-                }
-
-                if manager.expandedIdx.contains(item.id), let nsImage = ImagePreviewCache.shared.image(for: item) {
+            // Foreground Row (Opaque background so peek action remains neatly behind without text bleed)
+            HStack(alignment: .center, spacing: 16) {
+                if let nsImage = ImagePreviewCache.shared.image(for: item) {
                     Image(nsImage: nsImage)
                         .resizable()
-                        .scaledToFit()
-                        .frame(maxWidth: .infinity, maxHeight: 200, alignment: .leading)
+                        .scaledToFill()
+                        .frame(width: 32, height: 32)
                         .clipShape(RoundedRectangle(cornerRadius: 6))
-                        .padding(.vertical, 4)
+                } else if let parsedColor = ColorParser.parse(item.text) {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 6)
+                            .fill(Color.secondary.opacity(0.15))
+                        RoundedRectangle(cornerRadius: 6)
+                            .strokeBorder(Color.white.opacity(0.3), lineWidth: 1)
+                        RoundedRectangle(cornerRadius: 6)
+                            .fill(Color(nsColor: parsedColor))
+                    }
+                    .frame(width: 32, height: 32)
+                    .shadow(color: Color(nsColor: parsedColor).opacity(0.4), radius: 3, x: 0, y: 1.5)
+                } else {
+                    Image(systemName: iconSystemName)
+                        .font(.system(size: 16, weight: .light))
+                        .foregroundColor(isTutorialItem ? (manager.tutorialStep == .step5_doubleClickPaste ? .purple : (manager.tutorialStep == .step4_editClip ? .indigo : .orange)) : .secondary)
+                        .frame(width: 32)
                 }
 
-                HStack(spacing: 4) {
-                    // Icon is served from cache — no disk I/O on hot path
-                    let appIcon = AppIconCache.shared.icon(forBundleID: item.sourceAppBundleIdentifier)
-                    Image(nsImage: appIcon)
-                        .resizable()
-                        .frame(width: 12, height: 12)
+                VStack(alignment: .leading, spacing: 6) {
+                    if snippet != "[Image]" {
+                        Text(snippet)
+                            .lineLimit(manager.expandedIdx.contains(item.id) ? 5 : 1)
+                            .truncationMode(.tail)
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundColor(.primary)
+                    }
+
+                    if manager.expandedIdx.contains(item.id), let nsImage = ImagePreviewCache.shared.image(for: item) {
+                        Image(nsImage: nsImage)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(maxWidth: .infinity, maxHeight: 200, alignment: .leading)
+                            .clipShape(RoundedRectangle(cornerRadius: 6))
+                            .padding(.vertical, 4)
+                    }
+
+                    HStack(spacing: 4) {
+                        // Icon is served from cache — no disk I/O on hot path
+                        let appIcon = AppIconCache.shared.icon(forBundleID: item.sourceAppBundleIdentifier)
+                        Image(nsImage: appIcon)
+                            .resizable()
+                            .frame(width: 12, height: 12)
+                            .clipShape(Circle())
+
+                        if isTutorialItem {
+                            if manager.tutorialStep == .step1_pin {
+                                Text("Swipe right on trackpad to Pin 📌")
+                                    .font(.system(size: 11.5, weight: .medium))
+                                    .foregroundColor(.orange)
+                            } else if manager.tutorialStep == .step2_goToPinned {
+                                Text("Click the 📌 Pinned tab in top bar")
+                                    .font(.system(size: 11.5, weight: .medium))
+                                    .foregroundColor(.blue)
+                            } else if manager.tutorialStep == .step3_rightClickPill {
+                                Text("Right-click any filter pill above for batch options")
+                                    .font(.system(size: 11.5, weight: .medium))
+                                    .foregroundColor(.teal)
+                            } else if manager.tutorialStep == .step4_editClip {
+                                Text("Right-click this row & choose Edit ✏️")
+                                    .font(.system(size: 11.5, weight: .medium))
+                                    .foregroundColor(.indigo)
+                            } else if manager.tutorialStep == .step5_doubleClickPaste {
+                                Text("Double-click anywhere on row to Paste 📋")
+                                    .font(.system(size: 11.5, weight: .medium))
+                                    .foregroundColor(.purple)
+                            } else if manager.tutorialStep == .step6_delete {
+                                Text("Swipe left on trackpad to Delete 🗑️")
+                                    .font(.system(size: 11.5, weight: .medium))
+                                    .foregroundColor(.red)
+                            } else {
+                                Text("Tutorial Complete")
+                                    .font(.system(size: 11.5, weight: .medium))
+                                    .foregroundColor(.green)
+                            }
+                        } else {
+                            if let nsImage = ImagePreviewCache.shared.image(for: item) {
+                                Text("\(typeLabel) · \(Int(nsImage.size.width)) × \(Int(nsImage.size.height))")
+                                    .font(.system(size: 11))
+                                    .foregroundColor(.secondary)
+                            } else {
+                                Text(typeLabel)
+                                    .font(.system(size: 11))
+                                    .foregroundColor(.secondary)
+                            }
+                            Text("·")
+                                .font(.system(size: 11))
+                                .foregroundColor(.secondary)
+                            Text(formattedDate)
+                                .font(.system(size: 11))
+                                .foregroundColor(.secondary)
+
+                            if item.isRemote == true {
+                                Image(systemName: "macbook.and.iphone")
+                                    .font(.system(size: 10))
+                                    .foregroundColor(.secondary)
+                            }
+                            if item.isEdited {
+                                Image(systemName: "square.and.pencil")
+                                    .font(.system(size: 10))
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                    }
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                }
+
+                Spacer(minLength: 8)
+
+                if item.pinned {
+                    Image(systemName: "pin.fill")
+                        .font(.system(size: 12))
+                        .foregroundColor(.orange)
+                        .rotationEffect(Angle(degrees: 45))
+                        .padding(.trailing, 4)
+                } else if let sIdx = shortcutIndex {
+                    Text("⌘\(sIdx + 1)")
+                        .foregroundColor(.secondary)
+                        .font(.system(size: 11))
+                        .padding(.trailing, 2)
+                }
+
+                Button(action: { copyItem() }) {
+                    Image(systemName: copiedItemId == item.id ? "checkmark.circle.fill" : "doc.on.doc")
+                        .font(.system(size: 16))
+                        .foregroundColor(copiedItemId == item.id ? .white : Color.primary.opacity(0.6))
+                        .frame(width: 36, height: 36)
+                        .background(copiedItemId == item.id ? Color.green : Color.secondary.opacity(0.1))
                         .clipShape(Circle())
-
-                    if let nsImage = ImagePreviewCache.shared.image(for: item) {
-                        Text("\(typeLabel) · \(Int(nsImage.size.width)) × \(Int(nsImage.size.height))")
-                            .font(.system(size: 11))
-                            .foregroundColor(.secondary)
-                    } else {
-                        Text(typeLabel)
-                            .font(.system(size: 11))
-                            .foregroundColor(.secondary)
-                    }
-                    Text("·")
-                        .font(.system(size: 11))
-                        .foregroundColor(.secondary)
-                    Text(formattedDate)
-                        .font(.system(size: 11))
-                        .foregroundColor(.secondary)
-
-                    if item.isRemote == true {
-                        Image(systemName: "macbook.and.iphone")
-                            .font(.system(size: 10))
-                            .foregroundColor(.secondary)
-                    }
-                    if item.isEdited {
-                        Image(systemName: "square.and.pencil")
-                            .font(.system(size: 10))
-                            .foregroundColor(.secondary)
-                    }
+                        .scaleEffect(copiedItemId == item.id ? 0.85 : 1.0)
+                        .shadow(color: copiedItemId == item.id ? Color.green.opacity(0.5) : Color.clear,
+                                radius: copiedItemId == item.id ? 4 : 0)
+                        .animation(.spring(response: 0.3, dampingFraction: 0.5), value: copiedItemId)
                 }
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
-            }
-
-            Spacer(minLength: 8)
-
-            if item.pinned {
-                Image(systemName: "pin.fill")
-                    .font(.system(size: 12))
-                    .foregroundColor(.orange)
-                    .rotationEffect(Angle(degrees: 45))
-                    .padding(.trailing, 4)
-            } else if let sIdx = shortcutIndex {
-                Text("⌘\(sIdx + 1)")
-                    .foregroundColor(.secondary)
-                    .font(.system(size: 11))
-                    .padding(.trailing, 2)
-            }
-
-            Button(action: { copyItem() }) {
-                Image(systemName: copiedItemId == item.id ? "checkmark.circle.fill" : "doc.on.doc")
-                    .font(.system(size: 16))
-                    .foregroundColor(copiedItemId == item.id ? .white : Color.primary.opacity(0.6))
-                    .frame(width: 36, height: 36)
-                    .background(copiedItemId == item.id ? Color.green : Color.secondary.opacity(0.1))
-                    .clipShape(Circle())
-                    .scaleEffect(copiedItemId == item.id ? 0.85 : 1.0)
-                    .shadow(color: copiedItemId == item.id ? Color.green.opacity(0.5) : Color.clear,
-                            radius: copiedItemId == item.id ? 4 : 0)
-                    .animation(.spring(response: 0.3, dampingFraction: 0.5), value: copiedItemId)
-            }
-            .buttonStyle(PlainButtonStyle())
-            .background(
-                Group {
-                    if let sIdx = shortcutIndex {
-                        let keyEq = KeyEquivalent(Character(String(sIdx + 1)))
-                        Button("") { copyItem() }
-                            .keyboardShortcut(keyEq, modifiers: .command)
-                            .opacity(0)
+                .buttonStyle(PlainButtonStyle())
+                .background(
+                    Group {
+                        if let sIdx = shortcutIndex {
+                            let keyEq = KeyEquivalent(Character(String(sIdx + 1)))
+                            Button("") { copyItem() }
+                                .keyboardShortcut(keyEq, modifiers: .command)
+                                .opacity(0)
+                        }
                     }
-                }
-            )
+                )
+            }
+            .padding(.vertical, 8)
+            .padding(.horizontal, 12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(isTutorialItem ? Color(nsColor: .windowBackgroundColor) : Color.clear)
+            .contentShape(Rectangle())
+            .offset(x: isTutorialItem ? demoSwipeOffset : 0)
         }
-        .padding(.vertical, 8)
-        .padding(.horizontal, 12)
-        .contentShape(Rectangle())
+        .onAppear {
+            if isTutorialItem {
+                startDemoAnimation()
+            }
+        }
+        .onDisappear {
+            demoTimer?.invalidate()
+            demoTimer = nil
+        }
         .onTapGesture {
             let now = Date()
             if now.timeIntervalSince(lastClickTime) < 0.28 {
@@ -1430,13 +1765,18 @@ struct ClipItemRowView: View {
             // Only this row re-renders — ContentView is untouched
             isHovered = hovering
         }
-        .listRowBackground(isHovered ? Color.accentColor.opacity(0.1) : Color.clear)
+        .listRowBackground(isHovered ? Color.accentColor.opacity(0.12) : Color.clear)
         .contextMenu {
             Button(action: {
                 let currentKey = manager.key
                 let currentItem = item
                 isEditing = true
                 isLoadingEdit = true
+                if manager.isTutorialActive && manager.tutorialStep == .step4_editClip {
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.7)) {
+                        manager.tutorialStep = .step5_doubleClickPaste
+                    }
+                }
                 DispatchQueue.global(qos: .userInitiated).async {
                     let full = currentItem.fullText(key: currentKey)
                     DispatchQueue.main.async {
@@ -1519,22 +1859,59 @@ struct ClipItemRowView: View {
             .frame(width: 520, height: 320)
         }
         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-            Button(role: .destructive) { deleteItem() } label: {
-                Label("Delete", systemImage: "trash")
+            if !isTutorialItem || manager.tutorialStep == .step6_delete {
+                Button(role: .destructive) { deleteItem() } label: {
+                    Label("Delete", systemImage: "trash")
+                }
             }
         }
         .swipeActions(edge: .leading, allowsFullSwipe: true) {
-            Button { togglePin() } label: {
-                Label(item.pinned ? "Unpin" : "Pin",
-                      systemImage: item.pinned ? "pin.slash" : "pin")
+            if !isTutorialItem || manager.tutorialStep == .step1_pin {
+                Button { togglePin() } label: {
+                    Label(item.pinned ? "Unpin" : "Pin",
+                          systemImage: item.pinned ? "pin.slash" : "pin")
+                }
+                .tint(.orange)
             }
-            .tint(.orange)
         }
         .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
         .listRowSeparator(.hidden)
     }
 
     // MARK: - Row actions
+    private func startDemoAnimation() {
+        demoTimer?.invalidate()
+        demoTimer = Timer.scheduledTimer(withTimeInterval: 3.5, repeats: true) { _ in
+            guard isTutorialItem else { return }
+            if manager.tutorialStep == .step1_pin {
+                withAnimation(.easeInOut(duration: 0.55)) { demoSwipeOffset = 70 }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+                    withAnimation(.easeInOut(duration: 0.4)) { demoSwipeOffset = 0 }
+                }
+            } else if manager.tutorialStep == .step6_delete {
+                withAnimation(.easeInOut(duration: 0.55)) { demoSwipeOffset = -70 }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+                    withAnimation(.easeInOut(duration: 0.4)) { demoSwipeOffset = 0 }
+                }
+            }
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+            guard isTutorialItem else { return }
+            if manager.tutorialStep == .step1_pin {
+                withAnimation(.easeInOut(duration: 0.55)) { demoSwipeOffset = 70 }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+                    withAnimation(.easeInOut(duration: 0.4)) { demoSwipeOffset = 0 }
+                }
+            } else if manager.tutorialStep == .step6_delete {
+                withAnimation(.easeInOut(duration: 0.55)) { demoSwipeOffset = -70 }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+                    withAnimation(.easeInOut(duration: 0.4)) { demoSwipeOffset = 0 }
+                }
+            }
+        }
+    }
+
     private func pasteItem() {
         let pb = NSPasteboard.general
         pb.clearContents()
@@ -1555,6 +1932,15 @@ struct ClipItemRowView: View {
 
         (NSApp.delegate as? AppDelegate)?.closePopover()
         NSApp.hide(nil)
+
+        if item.id == "__cliplocal_tutorial_item__" && manager.isTutorialActive {
+            if manager.tutorialStep == .step5_doubleClickPaste {
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.7)) {
+                    manager.tutorialStep = .step6_delete
+                }
+            }
+            return
+        }
 
         if let idx = manager.history.firstIndex(where: { $0.id == item.id }) {
             var updated = item
@@ -1652,6 +2038,14 @@ struct ClipItemRowView: View {
                     manager.pinFlash = false
                 }
             }
+
+            if item.id == "__cliplocal_tutorial_item__" && manager.isTutorialActive {
+                if wasPinned && manager.tutorialStep == .step1_pin {
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.7)) {
+                        manager.tutorialStep = .step2_goToPinned
+                    }
+                }
+            }
         }
     }
 
@@ -1661,6 +2055,17 @@ struct ClipItemRowView: View {
             let deleted = manager.history.remove(at: idx)
             LargePayloadStore.deletePayload(fileName: deleted.payloadFileName)
             manager.persistIfNeeded()
+
+            if item.id == "__cliplocal_tutorial_item__" && manager.isTutorialActive {
+                if manager.tutorialStep == .step6_delete {
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.7)) {
+                        manager.tutorialStep = .completed
+                    }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                        manager.finishTutorialNow()
+                    }
+                }
+            }
         }
     }
 }
@@ -1679,12 +2084,21 @@ struct FilterButton: View {
         filterType == "pinned" && manager.pinFlash
     }
 
+    var isTutorialTarget: Bool {
+        filterType == "pinned" && manager.isTutorialActive && manager.tutorialStep == .step2_goToPinned
+    }
+
     var body: some View {
         Button(action: {
             if isSelected {
                 manager.activeFilters.remove(filterType)
             } else {
                 manager.activeFilters.insert(filterType)
+            }
+            if manager.isTutorialActive && manager.tutorialStep == .step2_goToPinned && filterType == "pinned" {
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.7)) {
+                    manager.tutorialStep = .step3_rightClickPill
+                }
             }
         }) {
             HStack(spacing: 4) {
@@ -1697,15 +2111,15 @@ struct FilterButton: View {
             .font(.system(size: 12, weight: .semibold))
             .padding(.horizontal, 10)
             .padding(.vertical, 4)
-            .background(isSelected ? Color.blue : (isFlashing ? Color.orange.opacity(0.9) : Color.secondary.opacity(0.1)))
-            .foregroundColor(isSelected || isFlashing ? .white : .primary)
+            .background(isSelected ? Color.blue : (isFlashing ? Color.orange.opacity(0.9) : (isTutorialTarget ? Color.orange.opacity(0.35) : Color.secondary.opacity(0.1))))
+            .foregroundColor(isSelected || isFlashing ? .white : (isTutorialTarget ? .orange : .primary))
             .clipShape(Capsule())
             .overlay(
                 Capsule()
-                    .stroke(isFlashing ? Color.orange : Color.secondary.opacity(0.2), lineWidth: (isSelected || isFlashing) ? 0 : 1)
+                    .stroke(isFlashing ? Color.orange : (isTutorialTarget ? Color.orange : Color.secondary.opacity(0.2)), lineWidth: (isSelected || isFlashing || isTutorialTarget) ? (isTutorialTarget ? 1.5 : 0) : 1)
             )
-            .scaleEffect(isFlashing ? 1.15 : 1.0)
-            .shadow(color: isFlashing ? Color.orange.opacity(0.6) : Color.clear, radius: isFlashing ? 4 : 0)
+            .scaleEffect(isFlashing || isTutorialTarget ? 1.12 : 1.0)
+            .shadow(color: isFlashing || isTutorialTarget ? Color.orange.opacity(0.6) : Color.clear, radius: isFlashing || isTutorialTarget ? 4 : 0)
             .animation(.spring(response: 0.3, dampingFraction: 0.5), value: isFlashing)
         }
         .buttonStyle(PlainButtonStyle())
@@ -1716,6 +2130,11 @@ struct FilterButton: View {
             
             if filterType != "pinned" {
                 Button(action: {
+                    if manager.isTutorialActive && manager.tutorialStep == .step3_rightClickPill {
+                        withAnimation(.spring(response: 0.35, dampingFraction: 0.7)) {
+                            manager.tutorialStep = .step4_editClip
+                        }
+                    }
                     for i in 0..<manager.history.count {
                         if clipItemType(for: manager.history[i]) == filterType {
                             manager.history[i].pinned = true
@@ -1724,10 +2143,22 @@ struct FilterButton: View {
                     manager.saveHistory()
                 }) {
                     Label("Pin All \(label) (\(c.unpinned))", systemImage: "pin")
+                        .onAppear {
+                            if manager.isTutorialActive && manager.tutorialStep == .step3_rightClickPill {
+                                withAnimation(.spring(response: 0.35, dampingFraction: 0.7)) {
+                                    manager.tutorialStep = .step4_editClip
+                                }
+                            }
+                        }
                 }
             }
             
             Button(action: {
+                if manager.isTutorialActive && manager.tutorialStep == .step3_rightClickPill {
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.7)) {
+                        manager.tutorialStep = .step4_editClip
+                    }
+                }
                 for i in 0..<manager.history.count {
                     if filterType == "pinned" {
                         manager.history[i].pinned = false
@@ -1737,17 +2168,30 @@ struct FilterButton: View {
                 }
                 manager.saveHistory()
             }) {
-                Label("Unpin All \(label) (\(c.pinned))", systemImage: "pin.slash")
+                Label(filterType == "pinned" ? "Unpin All" : "Unpin All \(label) (\(c.pinned))", systemImage: "pin.slash")
+                    .onAppear {
+                        if manager.isTutorialActive && manager.tutorialStep == .step3_rightClickPill {
+                            withAnimation(.spring(response: 0.35, dampingFraction: 0.7)) {
+                                manager.tutorialStep = .step4_editClip
+                            }
+                        }
+                    }
             }
             
             Divider()
             
             Button(role: .destructive, action: {
-                if filterType == "pinned" {
-                    manager.history.removeAll { $0.pinned }
-                } else {
-                    manager.history.removeAll { clipItemType(for: $0) == filterType }
+                var kept: [ClipItem] = []
+                for item in manager.history {
+                    if filterType == "pinned" {
+                        if !item.pinned { kept.append(item) }
+                        else { LargePayloadStore.deletePayload(fileName: item.payloadFileName) }
+                    } else {
+                        if clipItemType(for: item) != filterType { kept.append(item) }
+                        else { LargePayloadStore.deletePayload(fileName: item.payloadFileName) }
+                    }
                 }
+                manager.history = kept
                 manager.saveHistory()
             }) {
                 Label("Delete All \(label) (\(c.total))", systemImage: "trash")
@@ -1760,6 +2204,7 @@ struct FilterButton: View {
 class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     var statusItem: NSStatusItem!
     var popover: NSPopover!
+    var eventMonitor: Any?
     var timer: Timer?
     var previewWindow: NSWindow?
     let clipboardManager = ClipboardManager()
@@ -1781,7 +2226,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         let contentView = ContentView(manager: clipboardManager)
         popover = NSPopover()
         popover.contentSize = NSSize(width: 450, height: clipboardManager.menuHeight)
-        popover.behavior = .transient
+        popover.behavior = .applicationDefined
         popover.delegate = self
         popover.contentViewController = NSHostingController(rootView: contentView)
 
@@ -1856,6 +2301,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
                         sv.contentView.scroll(to: NSPoint(x: 0, y: 0))
                         sv.reflectScrolledClipView(sv.contentView)
                     }
+                    if let tv = view as? NSTableView {
+                        tv.style = .plain
+                        tv.intercellSpacing = NSSize(width: 0, height: 0)
+                    }
                     for sub in view.subviews {
                         forceActiveStateAndResetScroll(in: sub)
                     }
@@ -1864,11 +2313,22 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
                     forceActiveStateAndResetScroll(in: root)
                 }
             }
+
+            if eventMonitor == nil {
+                eventMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
+                    guard let self = self, self.popover.isShown else { return }
+                    self.closePopover()
+                }
+            }
         }
     }
 
     func closePopover() {
         popover.performClose(nil)
+        if let monitor = eventMonitor {
+            NSEvent.removeMonitor(monitor)
+            eventMonitor = nil
+        }
     }
 
     func showSettingsMenu() {
@@ -1972,6 +2432,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
         menu.addItem(.separator())
 
+        let tutorialItem = NSMenuItem(title: "Replay Interactive Tutorial...", action: #selector(replayTutorialAction), keyEquivalent: "")
+        tutorialItem.image = icon("sparkles")
+        tutorialItem.target = self
+        menu.addItem(tutorialItem)
+
         let permItem = NSMenuItem(title: "Permissions & Settings...", action: #selector(showPermissionsAction), keyEquivalent: "")
         permItem.image = icon("hand.raised.square")
         permItem.target = self
@@ -1993,6 +2458,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         menu.addItem(quit)
 
         settingsMenu = menu
+    }
+
+    @objc func replayTutorialAction() {
+        clipboardManager.resetTutorial()
+        showPopover(statusItem.button)
     }
 
     @objc func clearHistory() {
@@ -2869,6 +3339,10 @@ func createChangelogView(changelog: String) -> NSView {
     }
     
     func popoverDidClose(_ notification: Notification) {
+        if let monitor = eventMonitor {
+            NSEvent.removeMonitor(monitor)
+            eventMonitor = nil
+        }
         clipboardManager.expandedIdx.removeAll()
     }
 }
