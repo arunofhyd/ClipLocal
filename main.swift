@@ -1388,32 +1388,26 @@ struct TutorialGuidanceBanner: View {
 
             Spacer()
 
-            if manager.tutorialStep == .step3_rightClickPill || manager.tutorialStep == .step4_editClip {
-                Button(action: {
-                    withAnimation(.spring(response: 0.35, dampingFraction: 0.7)) {
-                        if manager.tutorialStep == .step3_rightClickPill {
-                            manager.tutorialStep = .step4_editClip
-                        } else if manager.tutorialStep == .step4_editClip {
-                            manager.tutorialStep = .step5_doubleClickPaste
-                        }
-                    }
-                }) {
-                    Text("Next ➔")
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundColor(bannerColor)
-                }
-                .buttonStyle(PlainButtonStyle())
-            }
-
             if manager.tutorialStep != .completed {
-                Button(action: {
-                    manager.skipTutorial()
-                }) {
-                    Text("Skip")
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundColor(.secondary)
+                HStack(spacing: 8) {
+                    Button(action: {
+                        manager.nextTutorialStep()
+                    }) {
+                        Text("Next ➔")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundColor(bannerColor)
+                    }
+                    .buttonStyle(PlainButtonStyle())
+
+                    Button(action: {
+                        manager.skipTutorial()
+                    }) {
+                        Text("Skip")
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundColor(.secondary)
+                    }
+                    .buttonStyle(PlainButtonStyle())
                 }
-                .buttonStyle(PlainButtonStyle())
             }
         }
         .padding(.horizontal, 10)
