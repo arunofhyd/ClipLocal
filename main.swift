@@ -1489,6 +1489,150 @@ struct LargeTextEditor: NSViewRepresentable {
     }
 }
 
+// MARK: - Interactive Active App Paste Simulator
+struct InteractivePasteSimulatorView: View {
+    @ObservedObject var manager: ClipboardManager
+    @State private var phase: Int = 0
+    @State private var typedLength: Int = 0
+    @State private var cursorVisible: Bool = true
+    
+    let sampleText = "Tutorial Placeholder Item"
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            // macOS Window Titlebar
+            HStack(spacing: 8) {
+                HStack(spacing: 5) {
+                    Circle().fill(Color(nsColor: .systemRed)).frame(width: 8, height: 8)
+                    Circle().fill(Color(nsColor: .systemYellow)).frame(width: 8, height: 8)
+                    Circle().fill(Color(nsColor: .systemGreen)).frame(width: 8, height: 8)
+                }
+                
+                Spacer()
+                
+                HStack(spacing: 4) {
+                    Image(systemName: "note.text")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundColor(.orange)
+                    Text("Notes — Active Window Simulator")
+                        .font(.system(size: 10.5, weight: .semibold))
+                        .foregroundColor(.secondary)
+                }
+                
+                Spacer()
+                
+                if phase >= 2 {
+                    HStack(spacing: 4) {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundColor(.green)
+                            .font(.system(size: 10))
+                        Text("Pasted!")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundColor(.green)
+                    }
+                    .transition(.scale.combined(with: .opacity))
+                } else {
+                    HStack(spacing: 3) {
+                        Text("⌘V")
+                            .font(.system(size: 9, weight: .bold, design: .monospaced))
+                            .padding(.horizontal, 3.5)
+                            .padding(.vertical, 1)
+                            .background(Color.secondary.opacity(0.2))
+                            .cornerRadius(3)
+                        Text("Auto-Paste")
+                            .font(.system(size: 9.5, weight: .medium))
+                            .foregroundColor(.secondary)
+                    }
+                }
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(Color.secondary.opacity(0.12))
+            
+            Divider()
+            
+            // Document Content Area
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 6) {
+                    Text("1")
+                        .font(.system(size: 9.5, weight: .regular, design: .monospaced))
+                        .foregroundColor(.secondary.opacity(0.5))
+                        .frame(width: 12, alignment: .trailing)
+                    Text("Meeting Notes — Project Summary:")
+                        .font(.system(size: 11, weight: .regular))
+                        .foregroundColor(.secondary)
+                }
+                
+                HStack(alignment: .center, spacing: 6) {
+                    Text("2")
+                        .font(.system(size: 9.5, weight: .regular, design: .monospaced))
+                        .foregroundColor(.secondary.opacity(0.5))
+                        .frame(width: 12, alignment: .trailing)
+                    
+                    HStack(spacing: 0) {
+                        Text(String(sampleText.prefix(typedLength)))
+                            .font(.system(size: 11.5, weight: .semibold, design: .monospaced))
+                            .foregroundColor(phase >= 2 ? .primary : Color.accentColor)
+                        
+                        Rectangle()
+                            .fill(Color.accentColor)
+                            .frame(width: 2, height: 13)
+                            .opacity(cursorVisible ? 1.0 : 0.0)
+                    }
+                    .padding(.horizontal, 4)
+                    .padding(.vertical, 2)
+                    .background(phase == 1 ? Color.accentColor.opacity(0.12) : Color.clear)
+                    .cornerRadius(3)
+                }
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+            .background(Color(nsColor: .textBackgroundColor).opacity(0.5))
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(phase >= 2 ? Color.green.opacity(0.6) : Color.accentColor.opacity(0.4), lineWidth: 1.5)
+        )
+        .shadow(color: Color.black.opacity(0.1), radius: 4, y: 2)
+        .onAppear {
+            runAnimationSequence()
+        }
+    }
+    
+    private func runAnimationSequence() {
+        cursorVisible = true
+        phase = 0
+        typedLength = 0
+        
+        Timer.scheduledTimer(withTimeInterval: 0.35, repeats: true) { timer in
+            if !manager.isSimulatingPaste {
+                timer.invalidate()
+                return
+            }
+            cursorVisible.toggle()
+        }
+        
+        // Phase 1: ⌘V triggers typing (after 150ms)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+            withAnimation { phase = 1 }
+            let totalChars = sampleText.count
+            for i in 1...totalChars {
+                DispatchQueue.main.asyncAfter(deadline: .now() + Double(i) * 0.035) {
+                    typedLength = i
+                    if i == totalChars {
+                        // Phase 2: Completed paste confirmation
+                        withAnimation(.spring(response: 0.35, dampingFraction: 0.7)) {
+                            phase = 2
+                        }
+                        NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .default)
+                    }
+                }
+            }
+        }
+    }
+}
+
 // MARK: - ClipItemRowView
 /// A self-contained row view for each clipboard item.
 /// Keeping hover state and copy-button animation local here means SwiftUI
@@ -1639,45 +1783,15 @@ struct ClipItemRowView: View {
             }
 
             if isTutorialItem && manager.isSimulatingPaste {
-                VStack(alignment: .leading, spacing: 6) {
-                    HStack(spacing: 6) {
-                        Circle().fill(Color.red.opacity(0.85)).frame(width: 7, height: 7)
-                        Circle().fill(Color.yellow.opacity(0.85)).frame(width: 7, height: 7)
-                        Circle().fill(Color.green.opacity(0.85)).frame(width: 7, height: 7)
-                        Text("Active App Simulator")
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundColor(.secondary)
-                        Spacer()
-                        HStack(spacing: 4) {
-                            Image(systemName: "checkmark.circle.fill")
-                                .foregroundColor(.green)
-                                .font(.system(size: 11))
-                            Text("Pasted at cursor!")
-                                .font(.system(size: 11, weight: .bold))
-                                .foregroundColor(.green)
-                        }
-                    }
-                    HStack(spacing: 4) {
-                        Text("Sample Clipboard Item")
-                            .font(.system(size: 12.5, weight: .medium, design: .monospaced))
-                            .foregroundColor(.primary)
-                        Rectangle()
-                            .fill(Color.blue)
-                            .frame(width: 2, height: 14)
-                    }
+                InteractivePasteSimulatorView(manager: manager)
                     .padding(.vertical, 4)
                     .padding(.horizontal, 8)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color.secondary.opacity(0.1))
-                    .cornerRadius(4)
-                }
-                .padding(8)
-                .background(Color.purple.opacity(0.12))
-                .cornerRadius(8)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 8)
-                        .stroke(Color.purple.opacity(0.4), lineWidth: 1.5)
-                )
+                    .background(Color(nsColor: .windowBackgroundColor))
+                    .transition(.asymmetric(
+                        insertion: .scale(scale: 0.96).combined(with: .opacity),
+                        removal: .opacity
+                    ))
             } else {
                 // Foreground Row (Opaque background so peek action remains neatly behind without text bleed)
                 HStack(alignment: .center, spacing: 16) {
@@ -2047,7 +2161,7 @@ struct ClipItemRowView: View {
                 withAnimation(.spring(response: 0.35, dampingFraction: 0.7)) {
                     manager.isSimulatingPaste = true
                 }
-                DispatchQueue.main.asyncAfter(deadline: .now() + 1.8) {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2.2) {
                     withAnimation(.spring(response: 0.35, dampingFraction: 0.7)) {
                         manager.isSimulatingPaste = false
                         manager.tutorialStep = .step6_delete
