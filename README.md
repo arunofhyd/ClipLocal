@@ -27,7 +27,7 @@ Built specifically for people who handle **sensitive text** and don't want their
 | Feature | ClipLocal | Typical Clipboard Apps |
 | :--- | :--- | :--- |
 | **Privacy** | 🔒 **100% On-Device** (nothing leaves your Mac) | ☁️ Often cloud-synced |
-| **Secrets** | 🛡️ **Skips password managers** by default | 😬 Logs everything |
+| **Secrets** | 🛡️ **Skips sensitive copies** by default | 😬 Logs everything |
 | **Storage** | 💾 **Session-only OR encrypted** (your choice) | 📂 Plain-text on disk |
 | **Panic Wipe** | 🧹 **One-click clear** | ⚠️ Buried in menus |
 | **Cost** | 🆓 **Free & open** | 💰 Often paid/subscription |
@@ -36,7 +36,7 @@ Built specifically for people who handle **sensitive text** and don't want their
 
 *   **On-Device Only**: 🔒 Your clipboard data **never** leaves your Mac — no cloud, no servers, no accounts, no analytics, no third parties. Ever.
 *   **Two Privacy Modes**: Choose **Session-only** (wiped the moment you quit) or **Persistent** (survives restarts, stored **encrypted** in a protected file only your macOS account can read).
-*   **Skips Secrets**: 🛡️ Copies from password managers (marked "concealed") are ignored by default, so passwords never land in your history.
+*   **Skips Sensitive Copies**: 🛡️ Sensitive copies (marked "concealed" by password managers) are ignored by default, so passwords never land in your history.
 *   **Copy Preview**: 🔔 A subtle "✓ Copied" panel slides into the bottom-right and fades away.
 *   **Full Control**: 📌 Pin, delete, and re-copy any item straight from the menu bar.
 *   **Quick Shortcuts**: ⌨️ Open the menu and press **⌘1–⌘9** to instantly copy any of your recent items.

@@ -2696,7 +2696,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         maxItems.submenu = msub
         menu.addItem(maxItems)
 
-        let concealItem = NSMenuItem(title: "Skip password-manager copies", action: #selector(toggleConcealed), keyEquivalent: "")
+        let concealItem = NSMenuItem(title: "Skip sensitive copies", action: #selector(toggleConcealed), keyEquivalent: "")
         concealItem.state = clipboardManager.skipConcealed ? .on : .off
         concealItem.image = icon("eye.slash")
         concealItem.target = self
@@ -3090,7 +3090,7 @@ func getAppLogoImage() -> NSImage {
         let features: [AboutFeature] = [
             AboutFeature(symbol: "lock.shield.fill", color: .systemPurple, title: "100% On-Device & Private", desc: "Your clipboard data never leaves your Mac. No cloud, no tracking, no accounts."),
             AboutFeature(symbol: "doc.on.clipboard.fill", color: .systemBlue, title: "Double-Click Direct Paste", desc: "Double-click any clip item to instantly paste it directly where your active cursor is."),
-            AboutFeature(symbol: "key.fill", color: .systemOrange, title: "Skips Sensitive Passwords", desc: "By default, passwords copied from 1Password, Bitwarden, etc., are completely ignored."),
+            AboutFeature(symbol: "key.fill", color: .systemOrange, title: "Skips Sensitive Copies", desc: "By default, sensitive and concealed copies from password managers are completely ignored."),
             AboutFeature(symbol: "eye.slash.fill", color: .systemTeal, title: "Zero Telemetry", desc: "No analytics or data collection. Only connects to GitHub manually when checking updates."),
             AboutFeature(symbol: "lock.fill", color: .systemGreen, title: "Keychain & Encrypted Storage", desc: "Hardware-backed AES-256 GCM encryption via Apple Keychain with secure 0600 on-disk fallback."),
             AboutFeature(symbol: "chevron.left.forwardslash.chevron.right", color: .systemPink, title: "Free & Open Source", desc: "ClipLocal is completely free and open source. Check out the code on GitHub.")
