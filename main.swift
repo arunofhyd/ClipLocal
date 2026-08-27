@@ -1370,11 +1370,26 @@ struct TutorialGuidanceBanner: View {
         }
     }
 
+    private var stepIndex: Int {
+        manager.tutorialStep.rawValue
+    }
+
     var body: some View {
         HStack(spacing: 8) {
             Image(systemName: bannerIcon)
                 .font(.system(size: 12, weight: .bold))
                 .foregroundColor(bannerColor)
+
+            if manager.tutorialStep != .completed {
+                HStack(spacing: 3) {
+                    ForEach(1...6, id: \.self) { idx in
+                        Capsule()
+                            .fill(idx <= stepIndex ? bannerColor : Color.secondary.opacity(0.25))
+                            .frame(width: idx == stepIndex ? 10 : 4, height: 4)
+                            .animation(.spring(response: 0.3, dampingFraction: 0.7), value: stepIndex)
+                    }
+                }
+            }
 
             Text(bannerTitle)
                 .font(.system(size: 12, weight: .semibold))
@@ -2009,6 +2024,18 @@ struct ClipItemRowView: View {
         .listRowBackground(isHovered ? Color.accentColor.opacity(0.12) : Color.clear)
         .contextMenu {
             Button(action: {
+                copyItem()
+            }) {
+                Label("Copy", systemImage: "doc.on.doc")
+            }
+
+            Button(action: {
+                togglePin()
+            }) {
+                Label(item.pinned ? "Unpin" : "Pin", systemImage: item.pinned ? "pin.slash" : "pin")
+            }
+
+            Button(action: {
                 let currentKey = manager.key
                 let currentItem = item
                 isEditing = true
@@ -2027,6 +2054,14 @@ struct ClipItemRowView: View {
                 }
             }) {
                 Label("Edit", systemImage: "square.and.pencil")
+            }
+
+            Divider()
+
+            Button(role: .destructive, action: {
+                deleteItem()
+            }) {
+                Label("Delete", systemImage: "trash")
             }
         }
         .sheet(isPresented: $isEditing) {
