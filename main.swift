@@ -2695,7 +2695,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         let maxItems = NSMenuItem(title: "Keep up to...", action: nil, keyEquivalent: "")
         maxItems.image = icon("list.number")
         let msub = NSMenu()
-        let limits = [100, 200, 500, 1000, 2000, 5000, 10000]
+        let limits = [100, 500, 1000, 5000, 10000]
         for limit in limits {
             let item = NSMenuItem(title: "\(limit) Items", action: #selector(setMaxItems(_:)), keyEquivalent: "")
             item.state = clipboardManager.maxHistorySize == limit ? .on : .off
