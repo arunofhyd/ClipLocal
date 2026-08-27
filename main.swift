@@ -1867,7 +1867,7 @@ struct ClipItemRowView: View {
 
                             if isTutorialItem {
                                 if manager.tutorialStep == .step1_pin {
-                                    Text("Swipe right (2 fingers) across row to Pin 📌 (or click Next ➔)")
+                                    Text("Swipe right (2 fingers) across row to Pin 📌")
                                         .font(.system(size: 11.5, weight: .medium))
                                         .foregroundColor(.orange)
                                 } else if manager.tutorialStep == .step2_goToPinned {
@@ -1887,7 +1887,7 @@ struct ClipItemRowView: View {
                                         .font(.system(size: 11.5, weight: .medium))
                                         .foregroundColor(.purple)
                                 } else if manager.tutorialStep == .step6_delete {
-                                    Text("Swipe left (2 fingers) across row to Delete 🗑️ (or click Next ➔)")
+                                    Text("Swipe left (2 fingers) across row to Delete 🗑️")
                                         .font(.system(size: 11.5, weight: .medium))
                                         .foregroundColor(.red)
                                 } else {
