@@ -729,7 +729,7 @@ class ClipboardManager: ObservableObject {
     }
 
     var maxHistorySize: Int {
-        get { defaults.object(forKey: "maxItems") as? Int ?? 200 }
+        get { defaults.object(forKey: "maxItems") as? Int ?? 1000 }
         set { defaults.set(newValue, forKey: "maxItems"); trimHistory() }
     }
 
@@ -1154,20 +1154,6 @@ struct ContentView: View {
                                 manager.saveHistory()
                             }) {
                                 Label("Pin All Items (\(c.unpinned))", systemImage: "pin")
-                            }
-                            
-                            Button(action: {
-                                if isAllTutorialTarget {
-                                    withAnimation(.spring(response: 0.35, dampingFraction: 0.7)) {
-                                        manager.tutorialStep = .step4_editClip
-                                    }
-                                }
-                                for i in 0..<manager.history.count {
-                                    manager.history[i].pinned = false
-                                }
-                                manager.saveHistory()
-                            }) {
-                                Label("Unpin All Items (\(c.pinned))", systemImage: "pin.slash")
                             }
                             
                             Divider()
@@ -2428,22 +2414,9 @@ struct FilterButton: View {
                     }) {
                         Label("Pin All \(label) (\(c.unpinned))", systemImage: "pin")
                     }
+                    
+                    Divider()
                 }
-                
-                Button(action: {
-                    for i in 0..<manager.history.count {
-                        if filterType == "pinned" {
-                            manager.history[i].pinned = false
-                        } else if clipItemType(for: manager.history[i]) == filterType {
-                            manager.history[i].pinned = false
-                        }
-                    }
-                    manager.saveHistory()
-                }) {
-                    Label(filterType == "pinned" ? "Unpin All" : "Unpin All \(label) (\(c.pinned))", systemImage: "pin.slash")
-                }
-                
-                Divider()
                 
                 Button(role: .destructive, action: {
                     var kept: [ClipItem] = []
@@ -2701,7 +2674,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         let maxItems = NSMenuItem(title: "Keep up to...", action: nil, keyEquivalent: "")
         maxItems.image = icon("list.number")
         let msub = NSMenu()
-        let limits = [50, 100, 200, 500, 1000]
+        let limits = [100, 200, 500, 1000, 2000, 5000, 10000]
         for limit in limits {
             let item = NSMenuItem(title: "\(limit) Items", action: #selector(setMaxItems(_:)), keyEquivalent: "")
             item.state = clipboardManager.maxHistorySize == limit ? .on : .off
