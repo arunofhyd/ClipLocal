@@ -2487,6 +2487,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     var permissionButtons: [NSButton] = []
     var permissionsTimer: Timer?
     var settingsMenu: NSMenu!
+    var isMenuTracking = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         if defaults.object(forKey: "hasLaunchedBefore") == nil {
@@ -2524,7 +2525,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         checkForUpdates(silentIfCurrent: true)
 
         NotificationCenter.default.addObserver(forName: NSApplication.didResignActiveNotification, object: nil, queue: .main) { [weak self] _ in
-            self?.closePopover()
+            guard let self = self, !self.isMenuTracking else { return }
+            self.closePopover()
+        }
+        NotificationCenter.default.addObserver(forName: NSMenu.didBeginTrackingNotification, object: nil, queue: .main) { [weak self] _ in
+            self?.isMenuTracking = true
+        }
+        NotificationCenter.default.addObserver(forName: NSMenu.didEndTrackingNotification, object: nil, queue: .main) { [weak self] _ in
+            self?.isMenuTracking = false
         }
     }
 
@@ -2593,7 +2601,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
                 NotificationCenter.default.removeObserver(self, name: NSWindow.didResignKeyNotification, object: window)
                 NotificationCenter.default.addObserver(forName: NSWindow.didResignKeyNotification, object: window, queue: .main) { [weak self] _ in
                     guard let self = self, self.popover.isShown else { return }
-                    if window.attachedSheet == nil {
+                    if window.attachedSheet == nil && !self.isMenuTracking {
                         self.closePopover()
                     }
                 }
@@ -2601,7 +2609,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
             if eventMonitor == nil {
                 eventMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
-                    guard let self = self, self.popover.isShown else { return }
+                    guard let self = self, self.popover.isShown, !self.isMenuTracking else { return }
                     let mouseLoc = NSEvent.mouseLocation
                     if let popoverWindow = self.popover.contentViewController?.view.window {
                         if popoverWindow.frame.contains(mouseLoc) {
@@ -2631,7 +2639,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     }
 
     func showSettingsMenu() {
-        closePopover()
         buildSettingsMenu() // Refresh states
         settingsMenu.popUp(positioning: nil, at: NSEvent.mouseLocation, in: nil)
     }
