@@ -1493,7 +1493,8 @@ struct LargeTextEditor: NSViewRepresentable {
 struct InteractivePasteSimulatorView: View {
     @ObservedObject var manager: ClipboardManager
     @State private var phase: Int = 0
-    @State private var typedLength: Int = 0
+    @State private var isPasted: Bool = false
+    @State private var showPasteGlow: Bool = false
     @State private var cursorVisible: Bool = true
     
     let sampleText = "Tutorial Placeholder Item"
@@ -1529,6 +1530,20 @@ struct InteractivePasteSimulatorView: View {
                         Text("Pasted!")
                             .font(.system(size: 10, weight: .bold))
                             .foregroundColor(.green)
+                    }
+                    .transition(.scale.combined(with: .opacity))
+                } else if phase == 1 {
+                    HStack(spacing: 3) {
+                        Text("⌘V")
+                            .font(.system(size: 9, weight: .bold, design: .monospaced))
+                            .padding(.horizontal, 4)
+                            .padding(.vertical, 1.5)
+                            .background(Color.blue)
+                            .foregroundColor(.white)
+                            .cornerRadius(3)
+                        Text("Pasting...")
+                            .font(.system(size: 9.5, weight: .semibold))
+                            .foregroundColor(.blue)
                     }
                     .transition(.scale.combined(with: .opacity))
                 } else {
@@ -1569,20 +1584,30 @@ struct InteractivePasteSimulatorView: View {
                         .foregroundColor(.secondary.opacity(0.5))
                         .frame(width: 12, alignment: .trailing)
                     
-                    HStack(spacing: 0) {
-                        Text(String(sampleText.prefix(typedLength)))
-                            .font(.system(size: 11.5, weight: .semibold, design: .monospaced))
-                            .foregroundColor(phase >= 2 ? .primary : Color.accentColor)
-                        
+                    if isPasted {
+                        HStack(spacing: 0) {
+                            Text(sampleText)
+                                .font(.system(size: 11.5, weight: .semibold, design: .monospaced))
+                                .foregroundColor(.primary)
+                            
+                            Rectangle()
+                                .fill(Color.accentColor)
+                                .frame(width: 2, height: 13)
+                                .opacity(cursorVisible ? 1.0 : 0.0)
+                        }
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 2)
+                        .background(showPasteGlow ? Color.accentColor.opacity(0.28) : Color.clear)
+                        .cornerRadius(3)
+                        .scaleEffect(showPasteGlow ? 1.03 : 1.0)
+                        .transition(.opacity.combined(with: .scale(scale: 0.98)))
+                    } else {
                         Rectangle()
                             .fill(Color.accentColor)
                             .frame(width: 2, height: 13)
                             .opacity(cursorVisible ? 1.0 : 0.0)
+                            .padding(.leading, 4)
                     }
-                    .padding(.horizontal, 4)
-                    .padding(.vertical, 2)
-                    .background(phase == 1 ? Color.accentColor.opacity(0.12) : Color.clear)
-                    .cornerRadius(3)
                 }
             }
             .padding(.horizontal, 10)
@@ -1592,18 +1617,19 @@ struct InteractivePasteSimulatorView: View {
         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(phase >= 2 ? Color.green.opacity(0.6) : Color.accentColor.opacity(0.4), lineWidth: 1.5)
+                .stroke(phase >= 2 ? Color.green.opacity(0.6) : (showPasteGlow ? Color.blue.opacity(0.7) : Color.accentColor.opacity(0.4)), lineWidth: 1.5)
         )
         .shadow(color: Color.black.opacity(0.1), radius: 4, y: 2)
         .onAppear {
-            runAnimationSequence()
+            runPasteAnimation()
         }
     }
     
-    private func runAnimationSequence() {
+    private func runPasteAnimation() {
         cursorVisible = true
         phase = 0
-        typedLength = 0
+        isPasted = false
+        showPasteGlow = false
         
         Timer.scheduledTimer(withTimeInterval: 0.35, repeats: true) { timer in
             if !manager.isSimulatingPaste {
@@ -1613,20 +1639,20 @@ struct InteractivePasteSimulatorView: View {
             cursorVisible.toggle()
         }
         
-        // Phase 1: ⌘V triggers typing (after 150ms)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-            withAnimation { phase = 1 }
-            let totalChars = sampleText.count
-            for i in 1...totalChars {
-                DispatchQueue.main.asyncAfter(deadline: .now() + Double(i) * 0.035) {
-                    typedLength = i
-                    if i == totalChars {
-                        // Phase 2: Completed paste confirmation
-                        withAnimation(.spring(response: 0.35, dampingFraction: 0.7)) {
-                            phase = 2
-                        }
-                        NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .default)
-                    }
+        // Instant Paste Impact (after 200ms)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+            withAnimation(.spring(response: 0.25, dampingFraction: 0.6)) {
+                phase = 1
+                isPasted = true
+                showPasteGlow = true
+            }
+            NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .default)
+            
+            // Fade selection highlight (after 450ms)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    showPasteGlow = false
+                    phase = 2
                 }
             }
         }
@@ -2161,7 +2187,7 @@ struct ClipItemRowView: View {
                 withAnimation(.spring(response: 0.35, dampingFraction: 0.7)) {
                     manager.isSimulatingPaste = true
                 }
-                DispatchQueue.main.asyncAfter(deadline: .now() + 2.2) {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.8) {
                     withAnimation(.spring(response: 0.35, dampingFraction: 0.7)) {
                         manager.isSimulatingPaste = false
                         manager.tutorialStep = .step6_delete
