@@ -2522,6 +2522,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
         checkAndPromptAccessibilityPermission()
         checkForUpdates(silentIfCurrent: true)
+
+        NotificationCenter.default.addObserver(forName: NSApplication.didResignActiveNotification, object: nil, queue: .main) { [weak self] _ in
+            self?.closePopover()
+        }
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
@@ -2585,6 +2589,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
                 if let root = window.contentView?.superview ?? window.contentView {
                     forceActiveStateAndResetScroll(in: root)
                 }
+
+                NotificationCenter.default.removeObserver(self, name: NSWindow.didResignKeyNotification, object: window)
+                NotificationCenter.default.addObserver(forName: NSWindow.didResignKeyNotification, object: window, queue: .main) { [weak self] _ in
+                    guard let self = self, self.popover.isShown else { return }
+                    if window.attachedSheet == nil {
+                        self.closePopover()
+                    }
+                }
             }
 
             if eventMonitor == nil {
@@ -2608,7 +2620,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     }
 
     func closePopover() {
-        popover.performClose(nil)
+        if popover.isShown {
+            popover.performClose(nil)
+            popover.close()
+        }
         if let monitor = eventMonitor {
             NSEvent.removeMonitor(monitor)
             eventMonitor = nil
@@ -2616,6 +2631,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     }
 
     func showSettingsMenu() {
+        closePopover()
         buildSettingsMenu() // Refresh states
         settingsMenu.popUp(positioning: nil, at: NSEvent.mouseLocation, in: nil)
     }
@@ -2817,7 +2833,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         }
     }
 
-    @objc func manualUpdateCheck() { checkForUpdates(silentIfCurrent: false) }
+    @objc func manualUpdateCheck() {
+        closePopover()
+        checkForUpdates(silentIfCurrent: false)
+    }
     @objc func quitApp() { NSApp.terminate(nil) }
 
 func getAppLogoImage() -> NSImage {
@@ -2848,6 +2867,7 @@ func getAppLogoImage() -> NSImage {
     }
 
     func showPermissionsGuide(isFirstLaunch: Bool) {
+        closePopover()
         if permissionsWindow != nil {
             permissionsWindow?.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
@@ -3072,6 +3092,7 @@ func getAppLogoImage() -> NSImage {
     @objc func showAboutMenu() { showAbout(onLaunch: false) }
 
     func showAbout(onLaunch: Bool = false) {
+        closePopover()
         if onLaunch && defaults.bool(forKey: "hideAbout") { return }
 
         if aboutWindow != nil {
@@ -3554,6 +3575,7 @@ func createChangelogView(changelog: String) -> NSView {
 }
 
     func showUpdateResult(_ remote: String?, changelog: String, newer: Bool, downloadURL: String = downloadPageURL) {
+        closePopover()
         let alert = NSAlert()
         NSApp.activate(ignoringOtherApps: true)
         if newer, let remote = remote {

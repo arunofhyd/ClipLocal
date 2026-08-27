@@ -1,16 +1,14 @@
 {
-  "version": "1.3.16",
+  "version": "1.3.17",
   "downloadURL": "https://cliplocal.vercel.app/#install",
   "changelog": [
     {
-      "version": "1.3.16",
+      "version": "1.3.17",
       "date": "2026-08-27",
       "changes": [
-        "Interactive 6-Step Onboarding Guide: Added a fluid step-by-step interactive tutorial covering pin gestures, filter tabs, mass actions, clip editing, direct paste, and clip deletion.",
-        "Active App Simulator HUD: Double-clicking during onboarding displays a realistic macOS editor window with instant paste impact, selection highlight flash, blinking cursor, and haptic feedback.",
-        "Dynamic Step Progress & Clean Typography: Added animated 6-segment progress pills, Next ➔ step skipping, streamlined banner action titles, and full row context menus (Copy, Pin/Unpin, Edit, Delete).",
-        "Device-Agnostic Gesture Instructions: Removed finger-count specifics and trackpad references for a universal desktop experience across MacBook, iMac, and external mice.",
-        "Skip Sensitive Copies & UX Polish: Refined settings menu with 'Skip sensitive copies', fixed menu dismissals on internal item clicks, and refined row highlight margins."
+        "Rock-Solid Popover Dismissal & Zero Inactive Hangs: Added didResignKey and didResignActive lifecycle observers to immediately dismiss the popover when switching apps, clicking outside, or opening modal dialogs, eliminating desaturated bright-white backdrop states.",
+        "Auto-Dismiss on Modals & Settings: Popover now closes cleanly before presenting update checks, permissions setup, or about dialogs.",
+        "Streamlined Onboarding Typography: Cleaned banner titles to action-focused prompts, synchronized dynamic step capsules, and ensured device-agnostic gestures."
       ]
     },
     {
