@@ -710,6 +710,7 @@ class ClipboardManager: ObservableObject {
     @Published var tutorialStep: TutorialStep
     @Published var tutorialItem: ClipItem
     @Published var isSimulatingPaste: Bool = false
+    @Published var showPillHighlight: Bool = false
 
     let key = KeyStore.loadOrCreateKey()
     let defaults = UserDefaults.standard
@@ -767,6 +768,7 @@ class ClipboardManager: ObservableObject {
         withAnimation(.spring(response: 0.35, dampingFraction: 0.7)) {
             isTutorialActive = false
             tutorialStep = .completed
+            showPillHighlight = false
             history.removeAll { $0.id == "__cliplocal_tutorial_item__" }
             activeFilters.remove("pinned")
         }
@@ -780,6 +782,7 @@ class ClipboardManager: ObservableObject {
                 tutorialStep = .step2_goToPinned
             case .step2_goToPinned:
                 tutorialStep = .step3_rightClickPill
+                startStep3PillHighlightDelay()
             case .step3_rightClickPill:
                 tutorialStep = .step4_editClip
             case .step4_editClip:
@@ -810,9 +813,20 @@ class ClipboardManager: ObservableObject {
         tutorialStep = .step1_pin
         isTutorialActive = true
         isSimulatingPaste = false
+        showPillHighlight = false
         UserDefaults.standard.set(false, forKey: "hasCompletedInteractiveTutorial_v1")
         activeFilters.remove("pinned")
         history.insert(tutorialItem, at: 0)
+    }
+
+    func startStep3PillHighlightDelay() {
+        showPillHighlight = false
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+            guard let self = self, self.isTutorialActive, self.tutorialStep == .step3_rightClickPill else { return }
+            withAnimation(.spring(response: 0.45, dampingFraction: 0.65)) {
+                self.showPillHighlight = true
+            }
+        }
     }
 
     // MARK: - Tutorial Action Handlers
@@ -840,6 +854,7 @@ class ClipboardManager: ObservableObject {
             withAnimation(.spring(response: 0.35, dampingFraction: 0.7)) {
                 tutorialStep = .step3_rightClickPill
             }
+            startStep3PillHighlightDelay()
         }
     }
 
@@ -1098,7 +1113,7 @@ struct ContentView: View {
             // Filters
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack {
-                    let isAllTutorialTarget = manager.isTutorialActive && manager.tutorialStep == .step3_rightClickPill
+                    let isAllTutorialTarget = manager.isTutorialActive && manager.tutorialStep == .step3_rightClickPill && manager.showPillHighlight
                     Button(action: {
                         manager.activeFilters.removeAll()
                     }) {
@@ -2189,7 +2204,7 @@ struct FilterButton: View {
 
     var isTutorialTarget: Bool {
         (filterType == "pinned" && manager.isTutorialActive && manager.tutorialStep == .step2_goToPinned) ||
-        (manager.isTutorialActive && manager.tutorialStep == .step3_rightClickPill)
+        (manager.isTutorialActive && manager.tutorialStep == .step3_rightClickPill && manager.showPillHighlight)
     }
 
     var tutorialColor: Color {
@@ -2207,6 +2222,7 @@ struct FilterButton: View {
                 withAnimation(.spring(response: 0.35, dampingFraction: 0.7)) {
                     manager.tutorialStep = .step3_rightClickPill
                 }
+                manager.startStep3PillHighlightDelay()
             }
         }) {
             HStack(spacing: 4) {
