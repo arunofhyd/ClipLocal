@@ -3402,12 +3402,69 @@ func getAppLogoImage() -> NSImage {
         }
     }
 
+struct VisualEffectHUDView: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSVisualEffectView {
+        let view = NSVisualEffectView()
+        view.material = .hudWindow
+        view.state = .active
+        view.blendingMode = .withinWindow
+        return view
+    }
+    func updateNSView(_ nsView: NSVisualEffectView, context: Context) {}
+}
+
+struct ToastHUDView: View {
+    let snippet: String
+    let color: NSColor?
+    
+    var body: some View {
+        HStack(alignment: .center, spacing: 10) {
+            if let color = color {
+                RoundedRectangle(cornerRadius: 5, style: .continuous)
+                    .fill(Color(nsColor: color))
+                    .frame(width: 22, height: 22)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 5, style: .continuous)
+                            .strokeBorder(Color.white.opacity(0.4), lineWidth: 1)
+                    )
+            }
+            
+            VStack(alignment: .leading, spacing: 2) {
+                Text("✓ Copied")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundColor(.secondary)
+                
+                Text(snippet)
+                    .font(.system(size: 12.5, weight: .medium))
+                    .foregroundColor(.primary)
+                    .lineLimit(2)
+                    .truncationMode(.tail)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
+        .frame(width: 320)
+        .background(VisualEffectHUDView())
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .stroke(Color(NSColor.separatorColor).opacity(0.35), lineWidth: 1)
+        )
+    }
+}
+
     func showPreview(_ text: String) {
         previewWindow?.close()
         let snippet = String(text.prefix(90)).replacingOccurrences(of: "\n", with: " ")
-        let width: CGFloat = 320, height: CGFloat = 66
+        let width: CGFloat = 320
         guard let screen = NSScreen.main else { return }
         let frame = screen.visibleFrame
+        let parsedColor = ColorParser.parse(text)
+
+        let hostingView = NSHostingView(rootView: ToastHUDView(snippet: snippet, color: parsedColor))
+        let height = max(44, hostingView.fittingSize.height)
         let x = frame.maxX - width - 20
         let y = frame.minY + 20
 
@@ -3419,47 +3476,7 @@ func getAppLogoImage() -> NSImage {
         win.level = .floating
         win.ignoresMouseEvents = true
         win.hasShadow = true
-
-        let container = NSVisualEffectView(frame: NSRect(x: 0, y: 0, width: width, height: height))
-        container.material = .hudWindow
-        container.state = .active
-        container.wantsLayer = true
-
-        let mask = NSImage(size: container.bounds.size, flipped: false) { rect in
-            NSColor.black.set()
-            NSBezierPath(roundedRect: rect, xRadius: 12, yRadius: 12).fill()
-            return true
-        }
-        container.maskImage = mask
-
-        let title = NSTextField(labelWithString: "✓ Copied")
-        let parsedColor = ColorParser.parse(text)
-        let bodyX: CGFloat = parsedColor != nil ? 44 : 14
-        let bodyWidth: CGFloat = parsedColor != nil ? width - 58 : width - 28
-
-        if let color = parsedColor {
-            let swatch = NSView(frame: NSRect(x: 14, y: 12, width: 22, height: 22))
-            swatch.wantsLayer = true
-            swatch.layer?.backgroundColor = color.cgColor
-            swatch.layer?.cornerRadius = 5
-            swatch.layer?.borderColor = NSColor.white.withAlphaComponent(0.4).cgColor
-            swatch.layer?.borderWidth = 1
-            container.addSubview(swatch)
-        }
-
-        title.frame = NSRect(x: bodyX, y: height - 26, width: bodyWidth, height: 18)
-        title.font = NSFont.boldSystemFont(ofSize: 12)
-        title.textColor = .secondaryLabelColor
-
-        let body = NSTextField(labelWithString: snippet)
-        body.frame = NSRect(x: bodyX, y: 8, width: bodyWidth, height: 30)
-        body.font = NSFont.systemFont(ofSize: 13)
-        body.lineBreakMode = .byTruncatingTail
-        body.maximumNumberOfLines = 2
-
-        container.addSubview(title)
-        container.addSubview(body)
-        win.contentView = container
+        win.contentView = hostingView
         win.alphaValue = 0
         win.orderFront(nil)
         previewWindow = win
