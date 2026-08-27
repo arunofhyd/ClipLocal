@@ -1156,6 +1156,20 @@ struct ContentView: View {
                                 Label("Pin All Items (\(c.unpinned))", systemImage: "pin")
                             }
                             
+                            Button(action: {
+                                if isAllTutorialTarget {
+                                    withAnimation(.spring(response: 0.35, dampingFraction: 0.7)) {
+                                        manager.tutorialStep = .step4_editClip
+                                    }
+                                }
+                                for i in 0..<manager.history.count {
+                                    manager.history[i].pinned = false
+                                }
+                                manager.saveHistory()
+                            }) {
+                                Label("Unpin All Items (\(c.pinned))", systemImage: "pin.slash")
+                            }
+                            
                             Divider()
                             
                             Button(role: .destructive, action: {
@@ -2414,9 +2428,22 @@ struct FilterButton: View {
                     }) {
                         Label("Pin All \(label) (\(c.unpinned))", systemImage: "pin")
                     }
-                    
-                    Divider()
                 }
+                
+                Button(action: {
+                    for i in 0..<manager.history.count {
+                        if filterType == "pinned" {
+                            manager.history[i].pinned = false
+                        } else if clipItemType(for: manager.history[i]) == filterType {
+                            manager.history[i].pinned = false
+                        }
+                    }
+                    manager.saveHistory()
+                }) {
+                    Label(filterType == "pinned" ? "Unpin All" : "Unpin All \(label) (\(c.pinned))", systemImage: "pin.slash")
+                }
+                
+                Divider()
                 
                 Button(role: .destructive, action: {
                     var kept: [ClipItem] = []
@@ -2643,12 +2670,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         clear.image = icon("trash")
         clear.target = self
         menu.addItem(clear)
-        
-        let pinnedCount = clipboardManager.filterCounts["pinned"]?.total ?? 0
-        let unpin = NSMenuItem(title: "Unpin All (\(pinnedCount))", action: #selector(unpinAll), keyEquivalent: "")
-        unpin.image = icon("pin.slash")
-        unpin.target = self
-        menu.addItem(unpin)
 
         menu.addItem(.separator())
 
