@@ -743,7 +743,7 @@ class ClipboardManager: ObservableObject {
         self.tutorialStep = .step1_pin
         self.tutorialItem = ClipItem(
             id: "__cliplocal_tutorial_item__",
-            text: "Tutorial Placeholder: Swipe right (2 fingers) to Pin 📌, Double-click to Paste 📋, Swipe left (2 fingers) to Delete 🗑️",
+            text: "Tutorial Placeholder: Swipe right to Pin 📌, Double-click to Paste 📋, Swipe left to Delete 🗑️",
             date: Date(),
             isEdited: false,
             pinned: false,
@@ -803,7 +803,7 @@ class ClipboardManager: ObservableObject {
         history.removeAll { $0.id == "__cliplocal_tutorial_item__" }
         tutorialItem = ClipItem(
             id: "__cliplocal_tutorial_item__",
-            text: "Tutorial Placeholder: Swipe right (2 fingers) to Pin 📌, Double-click to Paste 📋, Swipe left (2 fingers) to Delete 🗑️",
+            text: "Tutorial Placeholder: Swipe right to Pin 📌, Double-click to Paste 📋, Swipe left to Delete 🗑️",
             date: Date(),
             isEdited: false,
             pinned: false,
@@ -1328,17 +1328,17 @@ struct TutorialGuidanceBanner: View {
         }
         switch manager.tutorialStep {
         case .step1_pin:
-            return "Step 1/6: Swipe right (2 fingers) to Pin 📌"
+            return "Swipe right to Pin 📌"
         case .step2_goToPinned:
-            return "Step 2/6: Click 📌 Pinned tab above"
+            return "Click 📌 Pinned tab above"
         case .step3_rightClickPill:
-            return "Step 3/6: Right-click pills for batch actions"
+            return "Right-click pills for batch actions"
         case .step4_editClip:
-            return "Step 4/6: Right-click row to Edit ✏️"
+            return "Right-click row to Edit ✏️"
         case .step5_doubleClickPaste:
-            return "Step 5/6: Double-click row to Paste 📋"
+            return "Double-click row to Paste 📋"
         case .step6_delete:
-            return "Step 6/6: Swipe left (2 fingers) to Delete 🗑️"
+            return "Swipe left to Delete 🗑️"
         case .completed:
             return "All set! ClipLocal is ready 🎉"
         }
@@ -1877,7 +1877,7 @@ struct ClipItemRowView: View {
 
                             if isTutorialItem {
                                 if manager.tutorialStep == .step1_pin {
-                                    Text("Swipe right (2 fingers) across row to Pin 📌")
+                                    Text("Swipe right across row to Pin 📌")
                                         .font(.system(size: 11.5, weight: .medium))
                                         .foregroundColor(.orange)
                                 } else if manager.tutorialStep == .step2_goToPinned {
@@ -1897,7 +1897,7 @@ struct ClipItemRowView: View {
                                         .font(.system(size: 11.5, weight: .medium))
                                         .foregroundColor(.purple)
                                 } else if manager.tutorialStep == .step6_delete {
-                                    Text("Swipe left (2 fingers) across row to Delete 🗑️")
+                                    Text("Swipe left across row to Delete 🗑️")
                                         .font(.system(size: 11.5, weight: .medium))
                                         .foregroundColor(.red)
                                 } else {
