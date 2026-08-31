@@ -197,7 +197,11 @@ private let sharedDateFormatter: DateFormatter = {
 /// once per bundle identifier during a session.
 final class AppIconCache {
     static let shared = AppIconCache()
-    private let cache = NSCache<NSString, NSImage>()
+    private let cache: NSCache<NSString, NSImage> = {
+        let c = NSCache<NSString, NSImage>()
+        c.countLimit = 50
+        return c
+    }()
     private static let finderIcon: NSImage = {
         NSWorkspace.shared.icon(forFile: "/System/Library/CoreServices/Finder.app")
     }()
@@ -374,7 +378,11 @@ struct ColorParser {
 
 class ItemTypeCache {
     static let shared = ItemTypeCache()
-    private var cache = NSCache<NSString, NSString>()
+    private var cache: NSCache<NSString, NSString> = {
+        let c = NSCache<NSString, NSString>()
+        c.countLimit = 500
+        return c
+    }()
     
     func invalidate(for id: String) {
         cache.removeObject(forKey: id as NSString)
@@ -724,8 +732,18 @@ enum PrivacyMode: String {
 // MARK: - Image Preview & Hardware-Accelerated Downsampled Thumbnail Cache
 class ImagePreviewCache {
     static let shared = ImagePreviewCache()
-    private let thumbnailCache = NSCache<NSString, NSImage>()
-    private let fullImageCache = NSCache<NSString, NSImage>()
+    private let thumbnailCache: NSCache<NSString, NSImage> = {
+        let cache = NSCache<NSString, NSImage>()
+        cache.countLimit = 300 // Cap memory footprint (64KB per thumb * 300 = ~19MB max)
+        return cache
+    }()
+    
+    private let fullImageCache: NSCache<NSString, NSImage> = {
+        let cache = NSCache<NSString, NSImage>()
+        cache.countLimit = 10 // Prevent massive memory balloons from multiple expanded full-res images
+        return cache
+    }()
+    
     private var inFlight = Set<String>()
     private var failedIds = Set<String>()
     private let lock = NSLock()
@@ -1319,6 +1337,7 @@ struct TableViewConfigurator: NSViewRepresentable {
         tv.style = .plain
         tv.intercellSpacing = NSSize(width: 0, height: 0)
         tv.selectionHighlightStyle = .none
+        tv.gridStyleMask = []
         tv.wantsLayer = true
         tv.canDrawSubviewsIntoLayer = true
         if let sv = tv.enclosingScrollView {
