@@ -3571,89 +3571,96 @@ func getAppLogoImage() -> NSImage {
 
     func checkClipboard() {
         let pb = NSPasteboard.general
-        if pb.changeCount == clipboardManager.lastChangeCount { return }
-        clipboardManager.lastChangeCount = pb.changeCount
+        let currentChangeCount = pb.changeCount
+        if currentChangeCount == clipboardManager.lastChangeCount { return }
+        clipboardManager.lastChangeCount = currentChangeCount
 
-        if clipboardManager.skipConcealed {
-            if let types = pb.types, types.contains(NSPasteboard.PasteboardType("org.nspasteboard.ConcealedType")) {
-                return
-            }
-        }
-
-        var newText: String?
-        var newImageData: Data?
-        var newPayloadFileName: String?
         let sourceApp = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
 
-        if let urls = pb.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL], let first = urls.first {
-            newText = "file://" + first.path
-        } else if let images = pb.readObjects(forClasses: [NSImage.self], options: nil) as? [NSImage], let img = images.first {
-            if let tiff = img.tiffRepresentation, let rep = NSBitmapImageRep(data: tiff), let png = rep.representation(using: .png, properties: [:]) {
-                newImageData = png
-                var extractedName = "[Image]"
-                if let html = pb.string(forType: NSPasteboard.PasteboardType("public.html")) {
-                    if let range = html.range(of: "alt=\"([^\"]+)\"", options: .regularExpression) {
-                        let alt = String(html[range]).replacingOccurrences(of: "alt=\"", with: "").replacingOccurrences(of: "\"", with: "")
-                        if !alt.isEmpty { extractedName = alt }
-                    } else if let range = html.range(of: "src=\"([^\"]+)\"", options: .regularExpression) {
-                        let src = String(html[range]).replacingOccurrences(of: "src=\"", with: "").replacingOccurrences(of: "\"", with: "")
-                        if let url = URL(string: src) {
-                            let filename = url.lastPathComponent.removingPercentEncoding ?? url.lastPathComponent
-                            if !filename.isEmpty { extractedName = filename }
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self = self else { return }
+            let pb = NSPasteboard.general
+            
+            if self.clipboardManager.skipConcealed {
+                if let types = pb.types, types.contains(NSPasteboard.PasteboardType("org.nspasteboard.ConcealedType")) {
+                    return
+                }
+            }
+
+            var newText: String?
+            var newImageData: Data?
+            var newPayloadFileName: String?
+
+            if let urls = pb.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL], let first = urls.first {
+                newText = "file://" + first.path
+            } else if let images = pb.readObjects(forClasses: [NSImage.self], options: nil) as? [NSImage], let img = images.first {
+                if let tiff = img.tiffRepresentation, let rep = NSBitmapImageRep(data: tiff), let png = rep.representation(using: .png, properties: [:]) {
+                    newImageData = png
+                    var extractedName = "[Image]"
+                    if let html = pb.string(forType: NSPasteboard.PasteboardType("public.html")) {
+                        if let range = html.range(of: "alt=\"([^\"]+)\"", options: .regularExpression) {
+                            let alt = String(html[range]).replacingOccurrences(of: "alt=\"", with: "").replacingOccurrences(of: "\"", with: "")
+                            if !alt.isEmpty { extractedName = alt }
+                        } else if let range = html.range(of: "src=\"([^\"]+)\"", options: .regularExpression) {
+                            let src = String(html[range]).replacingOccurrences(of: "src=\"", with: "").replacingOccurrences(of: "\"", with: "")
+                            if let url = URL(string: src) {
+                                let filename = url.lastPathComponent.removingPercentEncoding ?? url.lastPathComponent
+                                if !filename.isEmpty { extractedName = filename }
+                            }
                         }
                     }
+                    
+                    if extractedName == "[Image]" {
+                        let possibleName = pb.string(forType: .string)?.trimmingCharacters(in: .whitespacesAndNewlines)
+                        if let name = possibleName, !name.isEmpty { extractedName = name }
+                    }
+                    newText = extractedName
+                }
+            } else if let str = pb.string(forType: .string) {
+                let t = str.trimmingCharacters(in: .whitespacesAndNewlines)
+                if t.isEmpty { return }
+                
+                // Large Payload Storage: If text > 15,000 chars, offload full text to encrypted payload file
+                if str.utf8.count > 15000 && str.count > 15000 {
+                    let itemId = UUID().uuidString
+                    let pf = LargePayloadStore.savePayload(id: itemId, text: str, key: self.clipboardManager.key)
+                    newPayloadFileName = pf
+                    newText = String(str.prefix(1500)) + "\n… [Large Clip: 100% full \(str.count) characters saved in background storage]"
+                } else {
+                    newText = str
+                }
+            }
+
+            guard let text = newText else { return }
+
+            let isRemote = pb.types?.contains(NSPasteboard.PasteboardType("com.apple.is-remote-clipboard")) ?? false
+
+            // Needs to be run on main thread since it updates @Published history
+            DispatchQueue.main.async {
+                // Fast duplicate detection: check O(1) byte length before full string equality check
+                if let idx = self.clipboardManager.history.firstIndex(where: {
+                    $0.imageData == newImageData && $0.text.utf8.count == text.utf8.count && $0.text == text
+                }) {
+                    let pinned = self.clipboardManager.history[idx].pinned
+                    let oldPayload = self.clipboardManager.history[idx].payloadFileName
+                    self.clipboardManager.history.remove(at: idx)
+                    let newItem = ClipItem(text: text, date: Date(), pinned: pinned, imageData: newImageData, sourceAppBundleIdentifier: sourceApp, isRemote: isRemote, payloadFileName: newPayloadFileName ?? oldPayload)
+                    self.clipboardManager.history.insert(newItem, at: 0)
+                } else {
+                    let newItem = ClipItem(text: text, date: Date(), pinned: false, imageData: newImageData, sourceAppBundleIdentifier: sourceApp, isRemote: isRemote, payloadFileName: newPayloadFileName)
+                    self.clipboardManager.history.insert(newItem, at: 0)
+                    self.showPreview(text)
                 }
                 
-                if extractedName == "[Image]" {
-                    let possibleName = pb.string(forType: .string)?.trimmingCharacters(in: .whitespacesAndNewlines)
-                    if let name = possibleName, !name.isEmpty { extractedName = name }
+                // Auto-cleanup: Apple Universal Clipboard destroys old Handoff file promises when a new item is copied.
+                // Remove any old remote files so they don't clutter the UI with dead links.
+                self.clipboardManager.history.removeAll {
+                    ($0.isRemote == true) && $0.text.hasPrefix("file://") && $0.id != self.clipboardManager.history.first?.id
                 }
-                newText = extractedName
+                
+                self.clipboardManager.trimHistory()
+                self.clipboardManager.persistIfNeeded()
             }
-        } else if let str = pb.string(forType: .string) {
-            let t = str.trimmingCharacters(in: .whitespacesAndNewlines)
-            if t.isEmpty { return }
-            
-            // Large Payload Storage: If text > 15,000 chars, offload full text to encrypted payload file
-            if str.utf8.count > 15000 && str.count > 15000 {
-                let itemId = UUID().uuidString
-                let pf = LargePayloadStore.savePayload(id: itemId, text: str, key: self.clipboardManager.key)
-                newPayloadFileName = pf
-                newText = String(str.prefix(1500)) + "\n… [Large Clip: 100% full \(str.count) characters saved in background storage]"
-            } else {
-                newText = str
-            }
-        }
-
-        guard let text = newText else { return }
-
-        let isRemote = pb.types?.contains(NSPasteboard.PasteboardType("com.apple.is-remote-clipboard")) ?? false
-
-        // Needs to be run on main thread since it updates @Published history
-        DispatchQueue.main.async {
-            // Fast duplicate detection: check O(1) byte length before full string equality check
-            if let idx = self.clipboardManager.history.firstIndex(where: {
-                $0.imageData == newImageData && $0.text.utf8.count == text.utf8.count && $0.text == text
-            }) {
-                let pinned = self.clipboardManager.history[idx].pinned
-                let oldPayload = self.clipboardManager.history[idx].payloadFileName
-                self.clipboardManager.history.remove(at: idx)
-                let newItem = ClipItem(text: text, date: Date(), pinned: pinned, imageData: newImageData, sourceAppBundleIdentifier: sourceApp, isRemote: isRemote, payloadFileName: newPayloadFileName ?? oldPayload)
-                self.clipboardManager.history.insert(newItem, at: 0)
-            } else {
-                let newItem = ClipItem(text: text, date: Date(), pinned: false, imageData: newImageData, sourceAppBundleIdentifier: sourceApp, isRemote: isRemote, payloadFileName: newPayloadFileName)
-                self.clipboardManager.history.insert(newItem, at: 0)
-                self.showPreview(text)
-            }
-            
-            // Auto-cleanup: Apple Universal Clipboard destroys old Handoff file promises when a new item is copied.
-            // Remove any old remote files so they don't clutter the UI with dead links.
-            self.clipboardManager.history.removeAll {
-                ($0.isRemote == true) && $0.text.hasPrefix("file://") && $0.id != self.clipboardManager.history.first?.id
-            }
-            
-            self.clipboardManager.trimHistory()
-            self.clipboardManager.persistIfNeeded()
         }
     }
 
