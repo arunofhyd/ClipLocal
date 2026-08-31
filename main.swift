@@ -1320,44 +1320,6 @@ class ClipboardManager: ObservableObject {
 }
 
 // MARK: - SwiftUI Views
-struct TableViewConfigurator: NSViewRepresentable {
-    func makeNSView(context: Context) -> NSView {
-        let v = NSView()
-        DispatchQueue.main.async {
-            if let tv = findTableView(in: v.window?.contentView) {
-                configureTableView(tv)
-            }
-        }
-        return v
-    }
-
-    func updateNSView(_ nsView: NSView, context: Context) {}
-
-    private func configureTableView(_ tv: NSTableView) {
-        tv.style = .plain
-        tv.intercellSpacing = NSSize(width: 0, height: 0)
-        tv.selectionHighlightStyle = .none
-        tv.gridStyleMask = []
-        tv.gridColor = .clear
-        tv.wantsLayer = true
-        tv.canDrawSubviewsIntoLayer = true
-        if let sv = tv.enclosingScrollView {
-            sv.wantsLayer = true
-            sv.verticalScrollElasticity = .allowed
-            sv.drawsBackground = false
-        }
-    }
-
-    private func findTableView(in view: NSView?) -> NSTableView? {
-        guard let view = view else { return nil }
-        if let tv = view as? NSTableView { return tv }
-        for sub in view.subviews {
-            if let tv = findTableView(in: sub) { return tv }
-        }
-        return nil
-    }
-}
-
 struct ContentView: View {
     @ObservedObject var manager: ClipboardManager
     @State private var copiedItemId: String? = nil
@@ -1576,7 +1538,6 @@ struct ContentView: View {
                     }
                 }
                 .listStyle(.plain)
-                .background(TableViewConfigurator())
                 .scrollContentBackground(.hidden)
                 .onAppear {
                     if let firstId = manager.filteredHistory.first?.id {
