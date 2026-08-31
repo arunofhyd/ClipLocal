@@ -1338,6 +1338,7 @@ struct TableViewConfigurator: NSViewRepresentable {
         tv.intercellSpacing = NSSize(width: 0, height: 0)
         tv.selectionHighlightStyle = .none
         tv.gridStyleMask = []
+        tv.gridColor = .clear
         tv.wantsLayer = true
         tv.canDrawSubviewsIntoLayer = true
         if let sv = tv.enclosingScrollView {
@@ -1524,6 +1525,8 @@ struct ContentView: View {
                             )
                             .equatable()
                             .id(item.id)
+                            .listRowSeparator(.hidden)
+                            .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
                         }
                         ForEach(manager.filteredHistory.dropFirst(topCount), id: \.id) { item in
                             ClipItemRowView(
@@ -1544,6 +1547,8 @@ struct ContentView: View {
                             )
                             .equatable()
                             .id(item.id)
+                            .listRowSeparator(.hidden)
+                            .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
                         }
                     } else {
                         ForEach(manager.filteredHistory, id: \.id) { item in
@@ -1565,6 +1570,8 @@ struct ContentView: View {
                             )
                             .equatable()
                             .id(item.id)
+                            .listRowSeparator(.hidden)
+                            .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
                         }
                     }
                 }
@@ -2589,6 +2596,7 @@ struct ClipItemRowView: View, Equatable {
         }
         .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
         .listRowSeparator(.hidden)
+        .listRowSeparatorTint(.clear)
     }
 
     // MARK: - Row animations
