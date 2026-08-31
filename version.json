@@ -1,7 +1,14 @@
 {
-  "version": "1.3.19",
+  "version": "1.3.20",
   "downloadURL": "https://cliplocal.vercel.app/#install",
   "changelog": [
+    {
+      "version": "1.3.20",
+      "date": "2026-08-31",
+      "changes": [
+        "120Hz ProMotion UI Fluidity: Rewrote list architecture with O(1) Equatable rows, hardware-accelerated downsampled thumbnails, and bounded memory caches to guarantee 120 FPS scrolling across massive histories with zero memory leaks."
+      ]
+    },
     {
       "version": "1.3.19",
       "date": "2026-08-27",
