@@ -1,7 +1,14 @@
 {
-  "version": "1.3.20",
+  "version": "1.3.21",
   "downloadURL": "https://cliplocal.vercel.app/#install",
   "changelog": [
+    {
+      "version": "1.3.21",
+      "date": "2026-09-02",
+      "changes": [
+        "Recent Updates Modal Preview: Upgraded update checker so the 'You're Up to Date!' modal previews recent changelog release notes in a hardware-accelerated scroll view."
+      ]
+    },
     {
       "version": "1.3.20",
       "date": "2026-08-31",
