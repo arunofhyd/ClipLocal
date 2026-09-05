@@ -12,7 +12,7 @@ import Security
 
 let appVersion: String = {
     if let v = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String, !v.isEmpty { return v }
-    return "1.3.20"
+    return "1.3.22"
 }()
 let updateCheckURL = "https://raw.githubusercontent.com/arunofhyd/ClipLocal/main/version.json"
 let downloadPageURL = "https://cliplocal.vercel.app/#install"
@@ -3655,9 +3655,13 @@ func getAppLogoImage() -> NSImage {
 struct VisualEffectHUDView: NSViewRepresentable {
     func makeNSView(context: Context) -> NSVisualEffectView {
         let view = NSVisualEffectView()
-        view.material = .hudWindow
+        view.material = .popover
         view.state = .active
-        view.blendingMode = .withinWindow
+        view.blendingMode = .behindWindow
+        view.wantsLayer = true
+        view.layer?.cornerRadius = 16
+        view.layer?.cornerCurve = .continuous
+        view.layer?.masksToBounds = true
         return view
     }
     func updateNSView(_ nsView: NSVisualEffectView, context: Context) {}
@@ -3668,39 +3672,41 @@ struct ToastHUDView: View {
     let color: NSColor?
     
     var body: some View {
-        HStack(alignment: .center, spacing: 10) {
+        HStack(alignment: .center, spacing: 12) {
             if let color = color {
-                RoundedRectangle(cornerRadius: 5, style: .continuous)
+                Circle()
                     .fill(Color(nsColor: color))
-                    .frame(width: 22, height: 22)
+                    .frame(width: 20, height: 20)
                     .overlay(
-                        RoundedRectangle(cornerRadius: 5, style: .continuous)
-                            .strokeBorder(Color.white.opacity(0.4), lineWidth: 1)
+                        Circle().strokeBorder(Color.white.opacity(0.3), lineWidth: 1)
                     )
+            } else {
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundColor(Color(NSColor.systemGreen))
+                    .font(.system(size: 18))
             }
             
             VStack(alignment: .leading, spacing: 2) {
-                Text("✓ Copied")
-                    .font(.system(size: 11, weight: .bold))
+                Text("Copied to Clipboard")
+                    .font(.system(size: 11, weight: .semibold))
                     .foregroundColor(.secondary)
                 
                 Text(snippet)
-                    .font(.system(size: 12.5, weight: .medium))
+                    .font(.system(size: 13, weight: .medium))
                     .foregroundColor(.primary)
-                    .lineLimit(2)
+                    .lineLimit(1)
                     .truncationMode(.tail)
-                    .fixedSize(horizontal: false, vertical: true)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 8)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
         .frame(width: 320)
         .background(VisualEffectHUDView())
-        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .stroke(Color(NSColor.separatorColor).opacity(0.35), lineWidth: 1)
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(Color.primary.opacity(0.1), lineWidth: 1)
         )
     }
 }
@@ -3714,6 +3720,10 @@ struct ToastHUDView: View {
         let parsedColor = ColorParser.parse(text)
 
         let hostingView = NSHostingView(rootView: ToastHUDView(snippet: snippet, color: parsedColor))
+        hostingView.wantsLayer = true
+        hostingView.layer?.cornerRadius = 16
+        hostingView.layer?.cornerCurve = .continuous
+        hostingView.layer?.masksToBounds = true
         let height = max(44, hostingView.fittingSize.height)
         let x = frame.maxX - width - 20
         let y = frame.minY + 20
@@ -3727,6 +3737,7 @@ struct ToastHUDView: View {
         win.ignoresMouseEvents = true
         win.hasShadow = true
         win.contentView = hostingView
+        win.invalidateShadow()
         win.alphaValue = 0
         win.orderFront(nil)
         previewWindow = win
