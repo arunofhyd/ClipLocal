@@ -12,7 +12,7 @@ import Security
 
 let appVersion: String = {
     if let v = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String, !v.isEmpty { return v }
-    return "1.4.0"
+    return "1.3.22"
 }()
 let updateCheckURL = "https://raw.githubusercontent.com/arunofhyd/ClipLocal/main/version.json"
 let downloadPageURL = "https://cliplocal.vercel.app/#install"
@@ -390,143 +390,31 @@ class ItemTypeCache {
     
     private static let interpreterRegex: NSRegularExpression? = {
         try? NSRegularExpression(
-            pattern: "^/(bin|sbin|usr/bin|usr/sbin|usr/local/bin|opt/homebrew/bin)/(bash|sh|zsh|csh|tcsh|dash|python[0-9.]*|node|deno|bun|perl|ruby|env|osascript|pwsh)(\\s+.*|$)"
+            pattern: "^/(bin|sbin|usr/bin|usr/sbin|usr/local/bin|opt/homebrew/bin)/(bash|sh|zsh|csh|tcsh|dash|python[0-9.]*|node|deno|bun|perl|ruby|env|osascript|pwsh)(\\s+.*|$)",
+            options: [.caseInsensitive]
         )
     }()
 
-    private static let unambiguousCliRegex: NSRegularExpression? = {
-        let tools = [
-            "curl", "wget", "git", "brew", "npm", "npx", "pnpm", "yarn", "bun", "docker", "docker-compose",
-            "podman", "kubectl", "helm", "terraform", "pip", "pip3", "pipx", "cargo",
-            "rustc", "swiftc", "pkill", "killall", "systemctl", "launchctl", "xcrun",
-            "xcode-select", "cmake", "ssh-keygen", "apt", "apt-get", "pacman", "zypper", "apk",
-            "chmod", "chown", "chgrp", "grep", "egrep", "fgrep"
-        ].joined(separator: "|")
-        return try? NSRegularExpression(
-            pattern: "^(sudo\\s+)?(" + tools + ")(\\s+.*|$)"
-        )
-    }()
-
-    private static let ambiguousCliRegex: NSRegularExpression? = {
-        let cmd = [
-            "cat", "tail", "head", "awk", "sed", "find", "ssh", "scp", "rsync",
+    private static let cliCommandRegex: NSRegularExpression? = {
+        let commands = [
+            "sudo", "sh", "bash", "zsh", "fish", "curl", "wget", "brew", "npm", "npx", "pnpm", "yarn", "bun", "pip", "pip3", "pipx",
+            "git", "docker", "docker-compose", "podman", "kubectl", "helm", "terraform",
+            "chmod", "chown", "chgrp", "mkdir", "pkill", "kill", "killall", "cat", "tail",
+            "head", "grep", "egrep", "fgrep", "awk", "sed", "find", "ssh", "scp", "rsync",
             "tar", "zip", "unzip", "touch", "rm", "cp", "mv", "ln", "echo", "printf",
-            "which", "whereis", "uname", "ps", "top", "htop", "df", "du", "lsof", "netstat",
-            "ping", "traceroute", "dig", "nslookup", "open", "man", "clear"
+            "export", "alias", "source", "which", "whereis", "uname", "ps", "top", "htop",
+            "df", "du", "lsof", "netstat", "ping", "traceroute", "dig", "nslookup",
+            "systemctl", "launchctl", "defaults", "xcode-select", "xcrun", "swift", "swiftc",
+            "cargo", "rustc", "go", "python", "python3", "node", "deno", "ruby", "perl",
+            "php", "java", "javac", "mvn", "gradle", "make", "cmake", "gcc", "g\\+\\+",
+            "clang", "clang\\+\\+", "apt", "apt-get", "yum", "dnf", "pacman", "zypper", "apk",
+            "open", "man", "history", "clear", "env", "printenv", "set", "unset", "ssh-keygen"
         ].joined(separator: "|")
         return try? NSRegularExpression(
-            pattern: "^(sudo\\s+)?(" + cmd + ")\\s+([-+][a-zA-Z0-9_-]+|--[a-zA-Z0-9_-]+|[/~.]|[0-9a-zA-Z_./-]+\\.[a-zA-Z0-9]+|\\*|\"[^\"]+\"|'[^']+')(\\s+.*|$)"
+            pattern: "^(sudo\\s+)?(" + commands + ")(\\s+.*|$)",
+            options: [.caseInsensitive]
         )
     }()
-
-    private static let promptRegex: NSRegularExpression? = {
-        try? NSRegularExpression(
-            pattern: "^(\\$|➜)\\s+[a-z][a-z0-9_-]+(\\s+.*|$)|^>>>\\s+.*"
-        )
-    }()
-
-    private static let dotSlashRegex: NSRegularExpression? = {
-        try? NSRegularExpression(pattern: "^(\\./|\\.\\./)[a-zA-Z0-9_.-]+(\\s+.*|$)")
-    }()
-
-    private static let codeDeclarationRegex: NSRegularExpression? = {
-        let decl = [
-            "(public\\s+|private\\s+|protected\\s+|static\\s+|final\\s+|override\\s+|async\\s+)*(func|function|def|fn)\\s+[a-zA-Z0-9_]+(\\s*<[^>]+>)?\\s*\\(",
-            "(public\\s+|private\\s+|protected\\s+|static\\s+|final\\s+|const\\s+)*(class|struct|interface|protocol|enum|extension|trait|type)\\s+[a-zA-Z0-9_]+",
-            "(let|var|const|val)\\s+([a-zA-Z0-9_]+|\\{[^}]+\\}|\\[[^\\]]+\\])\\s*(=|:)",
-            "import\\s+([a-zA-Z0-9_{}*]+|(\"[^\"]+\")|('[^']+'))",
-            "from\\s+[a-zA-Z0-9_.]+\\s+import\\s+",
-            "export\\s+(default\\s+)?(func|function|class|const|let|var|interface|type|default)",
-            "#include\\s+[<\"][a-zA-Z0-9_./\\\\]+[>\"]",
-            "#import\\s+[<\"][a-zA-Z0-9_./\\\\]+[>\"]",
-            "#define\\s+[a-zA-Z0-9_]+",
-            "package\\s+[a-zA-Z0-9_.]+(\\s*;)?",
-            "namespace\\s+[a-zA-Z0-9_.]+(\\s*\\{)?",
-            "(console\\.log|print|println!|System\\.out\\.println|fmt\\.Println)\\s*\\("
-        ].joined(separator: "|")
-        return try? NSRegularExpression(pattern: "(?m)^[ \\t]*(" + decl + ")")
-    }()
-
-    private static let controlFlowRegex: NSRegularExpression? = {
-        let patterns = [
-            "(?m)^[ \\t]*(if\\s*\\(|if\\s+let\\s+[a-zA-Z0-9_]+|guard\\s+let\\s+[a-zA-Z0-9_]+|if\\s+err\\s*!=|while\\s*\\(|for\\s*\\(|for\\s+[a-zA-Z0-9_]+\\s+in\\s+)",
-            "(?m)^[ \\t]*(switch\\s*\\(|match\\s+[a-zA-Z0-9_]+)",
-            "(?m)^[ \\t]*(return\\s+[^;\\n]+;|return\\s*;|yield\\s+[^;\\n]+;|throw\\s+new\\s+[a-zA-Z0-9_]+)",
-            "(?m)^[ \\t]*(try\\s*\\{|try\\s*:\\s*$|do\\s*\\{|catch\\s*(\\([a-zA-Z0-9_\\s:]*\\))?\\s*\\{)",
-            "\\b(try\\?|try!|try\\s+await)\\s+[a-zA-Z0-9_.]+\\("
-        ].joined(separator: "|")
-        return try? NSRegularExpression(pattern: patterns)
-    }()
-
-    private static let sqlRegex: NSRegularExpression? = {
-        let patterns = [
-            "^\\s*SELECT\\s+.+\\s+FROM\\s+[a-zA-Z0-9_.]+",
-            "^\\s*INSERT\\s+INTO\\s+[a-zA-Z0-9_.]+\\s*(\\(.+?\\))?\\s*(VALUES|SELECT)",
-            "^\\s*UPDATE\\s+[a-zA-Z0-9_.]+\\s+SET\\s+.+",
-            "^\\s*DELETE\\s+FROM\\s+[a-zA-Z0-9_.]+(\\s+WHERE\\s+.+)?",
-            "^\\s*(CREATE|DROP|ALTER)\\s+TABLE\\s+[a-zA-Z0-9_.]+"
-        ].joined(separator: "|")
-        return try? NSRegularExpression(pattern: patterns, options: [.caseInsensitive, .dotMatchesLineSeparators])
-    }()
-
-    private static let markupRegex: NSRegularExpression? = {
-        try? NSRegularExpression(
-            pattern: "^\\s*(<!DOCTYPE\\s+html|<html|<head|<body|<script|<style|<[a-zA-Z][a-zA-Z0-9_-]*(\\s+[^>]+)?>.*</[a-zA-Z][a-zA-Z0-9_-]*>|<[a-zA-Z][a-zA-Z0-9_-]*\\s+[^>]*/>)",
-            options: [.caseInsensitive, .dotMatchesLineSeparators]
-        )
-    }()
-
-    private static let cssRegex: NSRegularExpression? = {
-        try? NSRegularExpression(
-            pattern: "(?m)^\\s*([.#]?[a-zA-Z0-9_-]+|@[a-zA-Z-]+[^\\{]+)\\s*\\{\\s*[a-zA-Z-]+:[^;]+;\\s*\\}"
-        )
-    }()
-
-    private static let codeFenceRegex: NSRegularExpression? = {
-        try? NSRegularExpression(pattern: "^```[a-zA-Z0-9_-]*\\n[\\s\\S]*?\\n```$")
-    }()
-
-    private static let proseContractions: Set<String> = [
-        "don't", "it's", "can't", "won't", "didn't", "you're", "we're", "they're",
-        "shouldn't", "haven't", "hasn't", "isn't", "aren't", "wasn't", "weren't",
-        "couldn't", "wouldn't", "let's", "that's", "there's", "what's", "here's",
-        "i'm", "i've", "i'll", "i'd", "you've", "you'll", "we've", "we'll"
-    ]
-
-    private static let commonProseWords: Set<String> = [
-        "the", "this", "that", "these", "those", "with", "from", "have", "has",
-        "had", "been", "being", "were", "would", "could", "should", "please",
-        "thanks", "thank", "because", "between", "through", "before", "after",
-        "above", "below", "under", "which", "their", "there", "about", "other",
-        "some", "such", "only", "very", "just", "also", "into", "your", "my",
-        "our", "any", "now", "matching", "clean", "free", "completely", "artifacts"
-    ]
-
-    static func isProse(_ txt: String) -> Bool {
-        let trimmed = txt.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed.isEmpty { return false }
-
-        let endsWithSentencePunct = trimmed.hasSuffix(".") || trimmed.hasSuffix("!") || trimmed.hasSuffix("?")
-        
-        let words = trimmed.lowercased()
-            .components(separatedBy: CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "'’")).inverted)
-            .filter { !$0.isEmpty }
-
-        if words.count < 3 { return false }
-
-        let proseWordCount = words.filter { commonProseWords.contains($0) || proseContractions.contains($0) }.count
-        let proseRatio = Double(proseWordCount) / Double(words.count)
-
-        if endsWithSentencePunct && proseRatio >= 0.15 && words.count >= 5 {
-            return true
-        }
-
-        if proseRatio >= 0.35 && words.count >= 6 {
-            return true
-        }
-
-        return false
-    }
 
     private static let numberRegex: NSRegularExpression? = {
         try? NSRegularExpression(pattern: "^[0-9 +().,-]{3,}$")
@@ -536,98 +424,91 @@ class ItemTypeCache {
         try? NSRegularExpression(pattern: "^(/|~/)[^\\s\"'`$|&><;:*?]+$")
     }()
 
+    private static let codeKeywords: [String] = [
+        "func ", "function ", "def ", "var ", "let ", "const ", "class ", "struct ",
+        "enum ", "interface ", "protocol ", "extension ", "import ", "export ", "package ",
+        "namespace ", "public ", "private ", "protected ", "static ", "final ", "override ",
+        "async ", "await ", "return ", "yield ", "throw ", "throws ", "try ", "catch ",
+        "finally ", "if let ", "guard let ", "console.log", "print(", "println!",
+        "System.out.println", "std::", "#include ", "#define ", "#import "
+    ]
+
+    private static let codeOperators: [String] = ["=>", "->", "===", "!==", "==", "!=", "+=", "-=", "*=", "/=", "++", "--"]
+
+    private static let markupPrefixes: [String] = ["<!DOCTYPE", "<html", "<head", "<body", "<div", "<span", "<p>", "<a href", "<script", "<style", "<?xml"]
+
+    private static let sqlKeywords: [String] = ["SELECT ", "INSERT INTO ", "UPDATE ", "DELETE FROM ", "CREATE TABLE ", "DROP TABLE ", "ALTER TABLE "]
+
     static func isCode(_ txt: String) -> Bool {
         let trimmed = txt.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.isEmpty { return false }
 
-        // 1. Shebang is 100% code
+        // 1. Shebang
         if trimmed.hasPrefix("#!") { return true }
 
         let range = NSRange(location: 0, length: (trimmed as NSString).length)
 
-        // 2. Markdown code fences ```code```
-        if let regex = codeFenceRegex, regex.firstMatch(in: trimmed, options: [], range: range) != nil {
-            return true
-        }
-
-        // 3. Direct interpreter invocation
+        // 2. Direct binary / interpreter invocation with args (e.g. /bin/bash -c "...", /usr/bin/env python3)
         if let regex = interpreterRegex, regex.firstMatch(in: trimmed, options: [], range: range) != nil {
             return true
         }
 
-        // 4. Dot-slash script execution
-        if let regex = dotSlashRegex, regex.firstMatch(in: trimmed, options: [], range: range) != nil {
+        // 3. Leading prompt symbols (e.g. "$ brew install ...", ">>> print(x)")
+        if trimmed.hasPrefix("$ ") || trimmed.hasPrefix("# ") || trimmed.hasPrefix(">>> ") || trimmed.hasPrefix("➜ ") {
             return true
         }
 
-        // 5. JSON object or array
+        // 4. CLI commands at start of string (e.g. "brew install ...", "git push ...", "sudo rm ...", "curl ...")
+        if let regex = cliCommandRegex, regex.firstMatch(in: trimmed, options: [], range: range) != nil {
+            return true
+        }
+
+        // 5. Shell syntax constructs (subshells, pipes, redirects, logical chaining)
+        if trimmed.contains("$(") || trimmed.contains("${") || trimmed.contains("`") ||
+           trimmed.contains(" | ") || trimmed.contains(" > ") || trimmed.contains(" >> ") ||
+           trimmed.contains(" < ") || trimmed.contains(" 2>&1") || trimmed.contains(" &> ") ||
+           trimmed.contains(" && ") || trimmed.contains(" || ") {
+            return true
+        }
+
+        // 6. Dot-slash script execution (e.g. ./install.sh, ./scripts/update.mjs)
+        if trimmed.hasPrefix("./") || trimmed.hasPrefix("../") {
+            return true
+        }
+
+        // 7. Common programming keywords
+        if codeKeywords.contains(where: { trimmed.contains($0) }) {
+            return true
+        }
+
+        // 8. Programming operators & syntax markers
+        if codeOperators.contains(where: { trimmed.contains($0) }) {
+            return true
+        }
+
+        // 9. Markup, config, SQL, JSON structures
+        if markupPrefixes.contains(where: { trimmed.lowercased().hasPrefix($0) }) || trimmed.contains("</") || trimmed.contains("/>") {
+            return true
+        }
+
+        if sqlKeywords.contains(where: { trimmed.uppercased().hasPrefix($0) || trimmed.uppercased().contains(" " + $0) }) {
+            return true
+        }
+
+        // JSON object or array structure
         if (trimmed.hasPrefix("{") && trimmed.hasSuffix("}") && trimmed.contains("\":")) ||
-           (trimmed.hasPrefix("[") && trimmed.hasSuffix("]") && trimmed.contains("{\"")) {
+           (trimmed.hasPrefix("[") && trimmed.hasSuffix("]") && (trimmed.contains("{\"") || trimmed.contains("\",\""))) {
             return true
         }
 
-        // 6. Markup / HTML / XML
-        if let regex = markupRegex, regex.firstMatch(in: trimmed, options: [], range: range) != nil {
-            return true
-        }
-
-        // 7. Check if strong prose disqualifies before checking looser heuristics
-        let prose = isProse(trimmed)
-
-        // 8. Unambiguous CLI commands (git, npm, brew, docker, curl...)
-        if let regex = unambiguousCliRegex, regex.firstMatch(in: trimmed, options: [], range: range) != nil {
-            return true
-        }
-
-        // 9. Ambiguous CLI commands (cat, rm, open, grep...)
-        if !prose, let regex = ambiguousCliRegex, regex.firstMatch(in: trimmed, options: [], range: range) != nil {
-            return true
-        }
-
-        // 10. Terminal prompts ($ git status, >>> print(x))
-        if let regex = promptRegex, regex.firstMatch(in: trimmed, options: [], range: range) != nil {
-            return true
-        }
-
-        // 11. Code declarations (func, class, struct, let x =, import ...)
-        if let regex = codeDeclarationRegex, regex.firstMatch(in: trimmed, options: [], range: range) != nil {
-            return true
-        }
-
-        // 12. Control flow (if let, while, return ...;, try?)
-        if let regex = controlFlowRegex, regex.firstMatch(in: trimmed, options: [], range: range) != nil {
-            return true
-        }
-
-        // 13. SQL queries
-        if let regex = sqlRegex, regex.firstMatch(in: trimmed, options: [], range: range) != nil {
-            return true
-        }
-
-        // 14. CSS rules
-        if let regex = cssRegex, regex.firstMatch(in: trimmed, options: [], range: range) != nil {
-            return true
-        }
-
-        // If classified as prose, do not apply multi-line symbol density
-        if prose { return false }
-
-        // 15. Multi-line code block detection (lines ending in ; or { or }, or indentation)
-        let lines = trimmed.components(separatedBy: .newlines).map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
-        if lines.count >= 2 {
-            let semiOrBraceLines = lines.filter { $0.hasSuffix(";") || $0.hasSuffix("{") || $0.hasSuffix("}") || $0.hasPrefix("//") }
-            if Double(semiOrBraceLines.count) / Double(lines.count) >= 0.5 {
-                return true
-            }
-        }
-
-        // Single-line semicolon statement e.g. "let x = 10;" or "return false;" or "x += 1;"
-        if trimmed.hasSuffix(";") && (trimmed.contains("=") || trimmed.contains("(") || trimmed.contains("return")) {
+        // Semicolon terminated lines or code blocks with { and }
+        if (trimmed.contains("{") && trimmed.contains("}")) ||
+           (trimmed.contains(";\n") || (trimmed.hasSuffix(";") && trimmed.contains("="))) {
             return true
         }
 
         // Comments
-        if trimmed.hasPrefix("//") || (trimmed.hasPrefix("/*") && trimmed.contains("*/")) {
+        if trimmed.hasPrefix("//") || trimmed.hasPrefix("/*") || (trimmed.contains("/*") && trimmed.contains("*/")) {
             return true
         }
 
@@ -2465,9 +2346,7 @@ struct ClipItemRowView: View, Equatable {
                                 }
                             } else {
                                 if let thumb = thumbnail {
-                                    let w = Int(thumb.size.width * 2)
-                                    let h = Int(thumb.size.height * 2)
-                                    Text("\(presentation.typeLabel) · \(w) × \(h)")
+                                    Text("\(presentation.typeLabel) · \(Int(thumb.size.width * 2)) × \(Int(thumb.size.height * 2))")
                                         .font(.system(size: 11))
                                         .foregroundColor(.secondary)
                                 } else {
