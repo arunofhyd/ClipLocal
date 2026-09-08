@@ -11,6 +11,16 @@
 APP_NAME="ClipLocal"
 REPO_RAW="https://raw.githubusercontent.com/arunofhyd/ClipLocal/main"
 
+# ---- Self-Update Mechanism ------------------------------------------------
+if [ "$1" != "--no-update" ]; then
+    LATEST_SCRIPT=$(curl -fsSL "$REPO_RAW/install-cliplocal.command?v=$(date +%s)" 2>/dev/null)
+    if [ -n "$LATEST_SCRIPT" ] && [ "$LATEST_SCRIPT" != "$(cat "$0")" ]; then
+        echo "$LATEST_SCRIPT" > "$0"
+        chmod +x "$0"
+        exec "$0" "--no-update" "$@"
+    fi
+fi
+
 # ---- Clean, tasteful terminal styling ------------------------------------
 BOLD='\033[1m'; DIM='\033[2m'; NC='\033[0m'
 BLUE='\033[38;5;39m'; GREEN='\033[38;5;35m'; YELLOW='\033[38;5;220m'; RED='\033[38;5;196m'; GREY='\033[38;5;245m'
@@ -305,13 +315,24 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 PLIST
 
 if ! xcrun swiftc -O -swift-version 5 ${SWIFT_SDK:+-sdk "$SWIFT_SDK"} -module-cache-path "$SWIFT_CACHE" -o "$APP/Contents/MacOS/$APP_NAME" main.swift -framework Cocoa 2>build_errors.txt; then
-    fail "Compilation failed."
-    printf "${GREY}"; cat build_errors.txt; printf "${NC}\n"
-    exit 1
+    warn "Local compilation failed (likely due to Apple Command Line Tools bug)."
+    printf "  ${GREY}Falling back to downloading pre-built release...${NC}\n"
+    
+    ZIP_URL="https://github.com/arunofhyd/ClipLocal/releases/download/v${APP_VERSION}/ClipLocal.zip"
+    if ! curl -fsSL "$ZIP_URL" -o ClipLocal.zip; then
+        ZIP_URL="https://github.com/arunofhyd/ClipLocal/releases/latest/download/ClipLocal.zip"
+        curl -fsSL "$ZIP_URL" -o ClipLocal.zip || { fail "Download failed."; exit 1; }
+    fi
+    
+    unzip -q ClipLocal.zip
+    rm -rf "$APP"
+    mv "ClipLocal.app" "$APP"
+    ok "Pre-built app downloaded successfully."
+else
+    chmod +x "$APP/Contents/MacOS/$APP_NAME"
+    codesign --force --deep --sign - --requirements '=designated => identifier "com.aoh.cliplocal"' "$APP" >/dev/null 2>&1 || true
+    ok "App built."
 fi
-chmod +x "$APP/Contents/MacOS/$APP_NAME"
-codesign --force --deep --sign - --requirements '=designated => identifier "com.aoh.cliplocal"' "$APP" >/dev/null 2>&1 || true
-ok "App built."
 printf "\n"
 
 if [ "$CI" = "true" ]; then
