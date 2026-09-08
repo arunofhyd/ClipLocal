@@ -1,12 +1,20 @@
 {
-  "version": "1.3.23",
+  "version": "1.4.0",
   "downloadURL": "https://cliplocal.vercel.app/#install",
   "changelog": [
+    {
+      "version": "1.4.0",
+      "date": "2026-09-08",
+      "changes": [
+        "High-Precision Code Classification: Overhauled the code vs. text detection engine with natural language prose filtering, syntactic statement matching, and multi-clause SQL validation, eliminating false positive code badges on conversational English messages.",
+        "Universal CLI Compiler Compatibility: Enforced stable Swift 5 language mode in the build and installer scripts and simplified ViewBuilder layout expressions, ensuring reliable compilation across all Command Line Tools and Xcode versions."
+      ]
+    },
     {
       "version": "1.3.23",
       "date": "2026-09-08",
       "changes": [
-        "High-Precision Code Classification: Overhauled the code vs. text detection engine with natural language prose filtering, syntactic statement matching, and multi-clause SQL validation, eliminating false positive code badges on conversational English messages."
+        "High-Precision Code Classification: Overhauled code vs. text detection engine with natural language prose filtering."
       ]
     },
     {
