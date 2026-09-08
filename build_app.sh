@@ -65,7 +65,7 @@ echo "🔨 Compiling main.swift with swiftc..."
 SWIFT_SDK=$(xcrun --show-sdk-path 2>/dev/null || true)
 SWIFT_CACHE="/tmp/.swiftcache_cliplocal"
 mkdir -p "$SWIFT_CACHE"
-xcrun swiftc -O ${SWIFT_SDK:+-sdk "$SWIFT_SDK"} -module-cache-path "$SWIFT_CACHE" -o "$APP_DIR/Contents/MacOS/$APP_NAME" "$DIR/main.swift" -framework Cocoa
+xcrun swiftc -O -swift-version 5 ${SWIFT_SDK:+-sdk "$SWIFT_SDK"} -module-cache-path "$SWIFT_CACHE" -o "$APP_DIR/Contents/MacOS/$APP_NAME" "$DIR/main.swift" -framework Cocoa
 
 chmod +x "$APP_DIR/Contents/MacOS/$APP_NAME"
 

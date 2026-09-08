@@ -2465,7 +2465,9 @@ struct ClipItemRowView: View, Equatable {
                                 }
                             } else {
                                 if let thumb = thumbnail {
-                                    Text("\(presentation.typeLabel) · \(Int(thumb.size.width * 2)) × \(Int(thumb.size.height * 2))")
+                                    let w = Int(thumb.size.width * 2)
+                                    let h = Int(thumb.size.height * 2)
+                                    Text("\(presentation.typeLabel) · \(w) × \(h)")
                                         .font(.system(size: 11))
                                         .foregroundColor(.secondary)
                                 } else {

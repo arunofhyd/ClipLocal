@@ -245,7 +245,8 @@ ICONEOF
 
 SWIFT_SDK=$(xcrun --show-sdk-path 2>/dev/null)
 SWIFT_CACHE="$BUILD_DIR/.swiftcache"
-xcrun swiftc ${SWIFT_SDK:+-sdk "$SWIFT_SDK"} -module-cache-path "$SWIFT_CACHE" MakeIcon.swift -o MakeIcon > /dev/null 2>&1 && ./MakeIcon
+mkdir -p "$SWIFT_CACHE"
+xcrun swiftc -swift-version 5 ${SWIFT_SDK:+-sdk "$SWIFT_SDK"} -module-cache-path "$SWIFT_CACHE" MakeIcon.swift -o MakeIcon > /dev/null 2>&1 && ./MakeIcon
 if [ -f AppIcon.png ]; then
     mkdir -p AppIcon.iconset
     sips -z 16 16     AppIcon.png --out AppIcon.iconset/icon_16x16.png >/dev/null 2>&1
@@ -303,7 +304,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 </plist>
 PLIST
 
-if ! xcrun swiftc -O ${SWIFT_SDK:+-sdk "$SWIFT_SDK"} -module-cache-path "$SWIFT_CACHE" -o "$APP/Contents/MacOS/$APP_NAME" main.swift -framework Cocoa 2>build_errors.txt; then
+if ! xcrun swiftc -O -swift-version 5 ${SWIFT_SDK:+-sdk "$SWIFT_SDK"} -module-cache-path "$SWIFT_CACHE" -o "$APP/Contents/MacOS/$APP_NAME" main.swift -framework Cocoa 2>build_errors.txt; then
     fail "Compilation failed."
     printf "${GREY}"; cat build_errors.txt; printf "${NC}\n"
     exit 1
