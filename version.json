@@ -1,7 +1,14 @@
 {
-  "version": "1.3.22",
+  "version": "1.3.23",
   "downloadURL": "https://cliplocal.vercel.app/#install",
   "changelog": [
+    {
+      "version": "1.3.23",
+      "date": "2026-09-08",
+      "changes": [
+        "High-Precision Code Classification: Overhauled the code vs. text detection engine with natural language prose filtering, syntactic statement matching, and multi-clause SQL validation, eliminating false positive code badges on conversational English messages."
+      ]
+    },
     {
       "version": "1.3.22",
       "date": "2026-09-05",
