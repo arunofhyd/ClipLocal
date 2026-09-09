@@ -11,15 +11,6 @@
 APP_NAME="ClipLocal"
 REPO_RAW="https://raw.githubusercontent.com/arunofhyd/ClipLocal/main"
 
-# ---- Self-Update Mechanism ------------------------------------------------
-if [ "$1" != "--no-update" ]; then
-    LATEST_SCRIPT=$(curl -fsSL "$REPO_RAW/install-cliplocal.command?v=$(date +%s)" 2>/dev/null)
-    if [ -n "$LATEST_SCRIPT" ] && [ "$LATEST_SCRIPT" != "$(cat "$0")" ]; then
-        echo "$LATEST_SCRIPT" > "$0"
-        chmod +x "$0"
-        exec "$0" "--no-update" "$@"
-    fi
-fi
 
 # ---- Clean, tasteful terminal styling ------------------------------------
 BOLD='\033[1m'; DIM='\033[2m'; NC='\033[0m'
