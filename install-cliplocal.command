@@ -324,9 +324,8 @@ if ! xcrun swiftc -O ${SWIFT_SDK:+-sdk "$SWIFT_SDK"} -module-cache-path "$SWIFT_
         curl -fsSL "$ZIP_URL" -o ClipLocal.zip || { fail "Download failed."; exit 1; }
     fi
     
-    unzip -q ClipLocal.zip
     rm -rf "$APP"
-    mv "ClipLocal.app" "$APP"
+    unzip -o -q ClipLocal.zip
     ok "Pre-built app downloaded successfully."
 else
     chmod +x "$APP/Contents/MacOS/$APP_NAME"
