@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ClipLocal — Launch Brag Video (Hyperframes Composition)</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;600&family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #07090c;
+            --card-bg: rgba(17, 21, 28, 0.88);
+            --accent-cyan: #64d2ff;
+            --accent-blue: #2997ff;
+            --accent-purple: #bf5af2;
+            --accent-gradient: linear-gradient(135deg, #64d2ff, #2997ff);
+            --text-main: #ffffff;
+            --text-sub: #9ca3af;
+            --border-glass: rgba(255, 255, 255, 0.12);
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
+
+        body {
+            background-color: #030406;
+            color: var(--text-main);
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            padding: 20px;
+            overflow-x: hidden;
+        }
+
+        .stage-wrapper {
+            position: relative;
+            width: 100%;
+            max-width: 1280px;
+            aspect-ratio: 16 / 9;
+            background: var(--bg-color);
+            border-radius: 20px;
+            overflow: hidden;
+            box-shadow: 0 25px 80px rgba(0, 0, 0, 0.9), 0 0 0 1px rgba(255, 255, 255, 0.1);
+        }
+
+        #stage {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            background: radial-gradient(circle at 50% 20%, rgba(100, 210, 255, 0.12) 0%, transparent 60%),
+                        radial-gradient(circle at 80% 80%, rgba(41, 151, 255, 0.08) 0%, transparent 50%),
+                        var(--bg-color);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+
+        .ambient-glow {
+            position: absolute;
+            width: 600px;
+            height: 600px;
+            border-radius: 50%;
+            filter: blur(140px);
+            opacity: 0.2;
+            pointer-events: none;
+        }
+        .glow-cyan { background: var(--accent-cyan); top: -120px; left: 30%; }
+        .glow-blue { background: var(--accent-blue); bottom: -120px; right: 25%; }
+
+        .macos-menubar {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 38px;
+            background: rgba(14, 18, 24, 0.7);
+            backdrop-filter: blur(24px);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 20px;
+            font-size: 13px;
+            font-weight: 500;
+            color: #d1d5db;
+            z-index: 50;
+        }
+        .menubar-left { display: flex; align-items: center; gap: 16px; }
+        .apple-logo { font-size: 15px; color: #fff; }
+        .menubar-right { display: flex; align-items: center; gap: 16px; font-size: 12px; color: #86868b; }
+        
+        .clip-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 3px 10px;
+            background: rgba(100, 210, 255, 0.15);
+            border: 1px solid rgba(100, 210, 255, 0.35);
+            border-radius: 20px;
+            color: #64d2ff;
+            font-size: 11px;
+            font-family: 'Fira Code', monospace;
+            font-weight: 600;
+        }
+
+        .scene {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 60px 40px;
+            text-align: center;
+            opacity: 0;
+            pointer-events: none;
+            transform: scale(0.96) translateY(12px);
+            transition: opacity 0.5s cubic-bezier(0.16, 1, 0.3, 1), transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+            z-index: 10;
+        }
+        .scene.active {
+            opacity: 1;
+            pointer-events: auto;
+            transform: scale(1) translateY(0);
+        }
+
+        .gradient-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 16px;
+            border-radius: 999px;
+            background: rgba(100, 210, 255, 0.12);
+            border: 1px solid rgba(100, 210, 255, 0.35);
+            color: #64d2ff;
+            font-size: 13px;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+            margin-bottom: 22px;
+        }
+
+        .scene-title {
+            font-size: clamp(32px, 4.6vw, 58px);
+            font-weight: 800;
+            line-height: 1.15;
+            letter-spacing: -1.5px;
+            max-width: 950px;
+            margin-bottom: 18px;
+        }
+        .scene-sub {
+            font-size: clamp(16px, 2vw, 22px);
+            color: var(--text-sub);
+            max-width: 740px;
+            line-height: 1.5;
+        }
+
+        /* Clipboard HUD Mockup */
+        .clip-hud-mock {
+            margin-top: 26px;
+            background: rgba(18, 22, 30, 0.92);
+            backdrop-filter: blur(30px);
+            border: 1px solid rgba(100, 210, 255, 0.35);
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.8), 0 0 35px rgba(100, 210, 255, 0.2);
+            border-radius: 20px;
+            padding: 20px 36px;
+            display: inline-flex;
+            align-items: center;
+            gap: 24px;
+            max-width: 720px;
+            width: 100%;
+            text-align: left;
+        }
+
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 20px;
+            max-width: 1060px;
+            width: 100%;
+            margin-top: 26px;
+        }
+        .feat-card {
+            background: rgba(17, 21, 28, 0.75);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 18px;
+            padding: 26px 22px;
+            text-align: left;
+            transition: all 0.3s;
+        }
+        .feat-card:hover {
+            border-color: rgba(100, 210, 255, 0.4);
+            transform: translateY(-4px);
+        }
+        .feat-icon-badge {
+            width: 44px;
+            height: 44px;
+            border-radius: 12px;
+            background: rgba(100, 210, 255, 0.12);
+            color: #64d2ff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            margin-bottom: 16px;
+        }
+        .feat-card:nth-child(2) .feat-icon-badge {
+            background: rgba(41, 151, 255, 0.12);
+            color: #2997ff;
+        }
+        .feat-card:nth-child(3) .feat-icon-badge {
+            background: rgba(191, 90, 242, 0.12);
+            color: #bf5af2;
+        }
+        .feat-title {
+            font-size: 18px;
+            font-weight: 700;
+            margin-bottom: 8px;
+            color: #fff;
+        }
+        .feat-desc {
+            font-size: 13.5px;
+            color: var(--text-sub);
+            line-height: 1.5;
+        }
+
+        .workflow-box {
+            position: relative;
+            width: 100%;
+            max-width: 840px;
+            background: rgba(15, 18, 25, 0.9);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            border-radius: 20px;
+            padding: 36px;
+            box-shadow: 0 30px 70px rgba(0, 0, 0, 0.85);
+        }
+
+        .terminal-block {
+            background: #000;
+            border: 1px solid rgba(100, 210, 255, 0.3);
+            border-radius: 14px;
+            padding: 18px 24px;
+            max-width: 880px;
+            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-family: 'Fira Code', monospace;
+            font-size: 13.5px;
+            color: #64d2ff;
+            margin-top: 24px;
+            box-shadow: 0 15px 40px rgba(0, 0, 0, 0.7);
+            word-break: break-all;
+            text-align: left;
+            gap: 16px;
+        }
+        .copy-chip {
+            background: rgba(100, 210, 255, 0.2);
+            border: 1px solid rgba(100, 210, 255, 0.5);
+            color: #fff;
+            padding: 6px 14px;
+            border-radius: 8px;
+            font-size: 12px;
+            font-weight: 600;
+            font-family: 'Inter', sans-serif;
+            flex-shrink: 0;
+        }
+
+        .controls-dock {
+            margin-top: 18px;
+            width: 100%;
+            max-width: 1280px;
+            background: rgba(18, 20, 25, 0.85);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 16px;
+            padding: 12px 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 20px;
+        }
+        .dock-left { display: flex; align-items: center; gap: 14px; }
+        .play-btn {
+            width: 42px;
+            height: 42px;
+            border-radius: 50%;
+            background: var(--accent-cyan);
+            border: none;
+            color: #000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            box-shadow: 0 0 15px rgba(100, 210, 255, 0.4);
+            transition: all 0.2s;
+        }
+        .play-btn:hover { transform: scale(1.05); background: #82dcff; }
+        .timecode { font-family: 'Fira Code', monospace; font-size: 13px; color: #d1d5db; font-weight: 600; }
+        .timeline-bar-wrapper { flex: 1; position: relative; height: 8px; background: rgba(255, 255, 255, 0.1); border-radius: 4px; cursor: pointer; }
+        .timeline-bar-fill { position: absolute; left: 0; top: 0; bottom: 0; width: 0%; background: var(--accent-gradient); border-radius: 4px; }
+        .dock-right { display: flex; align-items: center; gap: 10px; }
+        .scene-chip {
+            background: rgba(255, 255, 255, 0.06);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: #86868b;
+            padding: 5px 12px;
+            border-radius: 8px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .scene-chip.active { background: rgba(100, 210, 255, 0.15); border-color: rgba(100, 210, 255, 0.4); color: #64d2ff; }
+    </style>
+</head>
+<body>
+
+    <div class="stage-wrapper">
+        <div id="stage">
+            <div class="macos-menubar">
+                <div class="menubar-left">
+                    <span class="apple-logo"></span>
+                    <span style="font-weight: 700; color: #fff;">ClipLocal</span>
+                    <span>History</span>
+                    <span>Encrypted</span>
+                    <span>Privacy</span>
+                    <span>Help</span>
+                </div>
+                <div class="menubar-right">
+                    <div class="clip-badge">
+                        <span>🔒 100% On-Device</span>
+                    </div>
+                    <span>Native Swift SQLite</span>
+                    <span>macOS 13+</span>
+                </div>
+            </div>
+
+            <div class="ambient-glow glow-cyan"></div>
+            <div class="ambient-glow glow-blue"></div>
+
+            <!-- SCENE 1: The Cloud Risk (0.0s – 3.0s) -->
+            <div id="scene-1" class="scene active">
+                <div class="gradient-pill" style="border-color: rgba(255, 55, 95, 0.4); color: #ff375f; background: rgba(255, 55, 95, 0.1);">
+                    <span>⚠️ The Clipboard Privacy Problem</span>
+                </div>
+                <h1 class="scene-title">
+                    Did you know your clipboard app is syncing passwords to the cloud?
+                </h1>
+                <p class="scene-sub">
+                    Subscription clipboard tools upload your API tokens, personal keys, and private messages to remote servers.
+                </p>
+                <div style="margin-top: 24px; display: inline-flex; gap: 14px;">
+                    <span style="background: rgba(255, 55, 95, 0.15); border: 1px solid rgba(255, 55, 95, 0.35); color: #ff375f; padding: 8px 18px; border-radius: 12px; font-family: 'Fira Code', monospace; font-size: 14px;">✕ Cloud Syncing Passwords</span>
+                    <span style="background: rgba(255, 55, 95, 0.15); border: 1px solid rgba(255, 55, 95, 0.35); color: #ff375f; padding: 8px 18px; border-radius: 12px; font-family: 'Fira Code', monospace; font-size: 14px;">✕ $29/Year Subscriptions</span>
+                </div>
+            </div>
+
+            <!-- SCENE 2: Meet ClipLocal (3.0s – 7.5s) -->
+            <div id="scene-2" class="scene">
+                <div class="gradient-pill">
+                    <span>🔒 Local & Encrypted</span>
+                </div>
+                <h2 class="scene-title" style="background: linear-gradient(135deg, #ffffff 40%, #64d2ff 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">
+                    Your clipboard belongs to you.
+                </h2>
+                <p class="scene-sub">
+                    100% on-device, encrypted clipboard history manager for macOS with instant fuzzy search.
+                </p>
+
+                <div class="clip-hud-mock">
+                    <span style="font-size: 28px;">📋</span>
+                    <div style="flex: 1;">
+                        <div style="font-family: 'Fira Code', monospace; font-size: 15px; color: #fff;">⌘ ⇧ V ➔ Search 10,000 clips in &lt; 5ms</div>
+                        <div style="font-size: 12px; color: #9ca3af; margin-top: 3px;">Encrypted SQLite · Zero Network Permissions</div>
+                    </div>
+                    <span style="background: rgba(100, 210, 255, 0.15); border: 1px solid rgba(100, 210, 255, 0.4); color: #64d2ff; padding: 6px 14px; border-radius: 8px; font-size: 12px; font-weight: 700;">Direct Paste ⏎</span>
+                </div>
+            </div>
+
+            <!-- SCENE 3: Superpowers (7.5s – 12.5s) -->
+            <div id="scene-3" class="scene">
+                <div class="gradient-pill" style="border-color: rgba(41, 151, 255, 0.4); color: #2997ff; background: rgba(41, 151, 255, 0.1);">
+                    <span>⚡ Engineered for Privacy & Speed</span>
+                </div>
+                <h2 class="scene-title" style="font-size: clamp(28px, 3.8vw, 46px); margin-bottom: 8px;">
+                    Zero Cloud. Zero Subscriptions. Pure Speed.
+                </h2>
+                <div class="features-grid">
+                    <div class="feat-card">
+                        <div class="feat-icon-badge">🔒</div>
+                        <h3 class="feat-title">Encrypted On-Device</h3>
+                        <p class="feat-desc">AES encrypted local database. Never sends a single byte across the internet.</p>
+                    </div>
+                    <div class="feat-card">
+                        <div class="feat-icon-badge">⚡</div>
+                        <h3 class="feat-title">Instant Fuzzy Search</h3>
+                        <p class="feat-desc">Find any copied snippet, code block, hex color, or link in microseconds from anywhere.</p>
+                    </div>
+                    <div class="feat-card">
+                        <div class="feat-icon-badge">🎯</div>
+                        <h3 class="feat-title">Smart Format Clean</h3>
+                        <p class="feat-desc">Paste plain text or rich formatting automatically without weird paste artifacts.</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SCENE 4: The Speed Flow (12.5s – 17.0s) -->
+            <div id="scene-4" class="scene">
+                <div class="workflow-box">
+                    <div style="font-size: 20px; font-weight: 700; color: #64d2ff; margin-bottom: 12px;">Paste charges $19.99/year. ClipLocal is Free.</div>
+                    <h2 style="font-size: 32px; font-weight: 800; margin-bottom: 12px;">Lightweight Menu Bar & Global Hotkeys</h2>
+                    <p style="color: var(--text-sub); font-size: 16px; margin-bottom: 20px;">
+                        Designed to stay out of your way and respect your Mac's battery life.
+                    </p>
+                    <div style="display: flex; gap: 14px; justify-content: center;">
+                        <span style="background: rgba(100, 210, 255, 0.15); border: 1px solid rgba(100, 210, 255, 0.3); padding: 8px 16px; border-radius: 10px; font-size: 13px; color: #64d2ff;">✓ 100% On-Device</span>
+                        <span style="background: rgba(41, 151, 255, 0.15); border: 1px solid rgba(41, 151, 255, 0.3); padding: 8px 16px; border-radius: 10px; font-size: 13px; color: #2997ff;">✓ Zero Cloud Sync</span>
+                        <span style="background: rgba(191, 90, 242, 0.15); border: 1px solid rgba(191, 90, 242, 0.3); padding: 8px 16px; border-radius: 10px; font-size: 13px; color: #bf5af2;">✓ MIT Licensed</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SCENE 5: Outro & 1-Command Install (17.0s – 20.0s) -->
+            <div id="scene-5" class="scene">
+                <span style="font-size: 64px; margin-bottom: 16px;">📋</span>
+                <h2 class="scene-title" style="font-size: clamp(34px, 4.2vw, 54px); margin-bottom: 6px;">
+                    Your clipboard belongs to you.
+                </h2>
+                <p style="color: #d1d5db; font-size: 18px; font-weight: 500;">
+                    Free & Open Source for macOS (Ventura, Sonoma, Sequoia)
+                </p>
+
+                <div class="terminal-block">
+                    <span>curl -fsSL https://raw.githubusercontent.com/arunofhyd/ClipLocal/main/install-cliplocal.command | bash</span>
+                    <span class="copy-chip">⌘ 1-Command Install</span>
+                </div>
+                <div style="margin-top: 18px; display: flex; gap: 16px; font-size: 13px; color: #6b7280;">
+                    <span>Built with Swift & AppKit</span>
+                    <span>•</span>
+                    <span>By Arun Thomas</span>
+                    <span>•</span>
+                    <span>MIT Licensed</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Playback Controls Dock -->
+    <div class="controls-dock">
+        <div class="dock-left">
+            <button id="play-btn" class="play-btn" title="Play/Pause">▶</button>
+            <div id="timecode" class="timecode">00:00.0 / 00:20.0</div>
+        </div>
+
+        <div id="timeline" class="timeline-bar-wrapper">
+            <div id="timeline-fill" class="timeline-bar-fill"></div>
+        </div>
+
+        <div class="dock-right">
+            <div class="scene-chip active" onclick="seekTo(0)">1. Risk</div>
+            <div class="scene-chip" onclick="seekTo(3.0)">2. Reveal</div>
+            <div class="scene-chip" onclick="seekTo(7.5)">3. Engine</div>
+            <div class="scene-chip" onclick="seekTo(12.5)">4. Free</div>
+            <div class="scene-chip" onclick="seekTo(17.0)">5. Install</div>
+            <button id="audio-toggle-btn" class="scene-chip" style="color: #64d2ff;" onclick="toggleAudio()">🔊 BGM</button>
+        </div>
+    </div>
+
+    <audio id="bgm" src="assets/music/happy-beats-business-moves-vol-10-by-ende-dot-app.mp3" preload="auto"></audio>
+
+    <script>
+        const DURATION = 20.0;
+        let currentTime = 0;
+        let isPlaying = false;
+        let lastTimestamp = null;
+        let audioEnabled = true;
+
+        const scenes = [
+            { id: 'scene-1', start: 0.0, end: 3.0 },
+            { id: 'scene-2', start: 3.0, end: 7.5 },
+            { id: 'scene-3', start: 7.5, end: 12.5 },
+            { id: 'scene-4', start: 12.5, end: 17.0 },
+            { id: 'scene-5', start: 17.0, end: 20.0 }
+        ];
+
+        const playBtn = document.getElementById('play-btn');
+        const timecode = document.getElementById('timecode');
+        const timelineFill = document.getElementById('timeline-fill');
+        const timeline = document.getElementById('timeline');
+        const bgm = document.getElementById('bgm');
+        const sceneChips = document.querySelectorAll('.scene-chip');
+
+        function updateFrame(time) {
+            currentTime = Math.min(Math.max(time, 0), DURATION);
+            const secs = Math.floor(currentTime);
+            const tenths = Math.floor((currentTime % 1) * 10);
+            timecode.textContent = `00:${secs.toString().padStart(2, '0')}.${tenths} / 00:20.0`;
+
+            const progress = (currentTime / DURATION) * 100;
+            timelineFill.style.width = `${progress}%`;
+
+            scenes.forEach((sc, idx) => {
+                const el = document.getElementById(sc.id);
+                const isActive = (currentTime >= sc.start && currentTime < sc.end) || (idx === scenes.length - 1 && currentTime >= sc.start);
+                if (isActive) {
+                    el.classList.add('active');
+                    if (sceneChips[idx]) sceneChips[idx].classList.add('active');
+                } else {
+                    el.classList.remove('active');
+                    if (sceneChips[idx]) sceneChips[idx].classList.remove('active');
+                }
+            });
+
+            if (audioEnabled && !bgm.paused) {
+                if (currentTime > 18.0) {
+                    bgm.volume = Math.max(0, 0.7 * (1 - (currentTime - 18.0) / 2.0));
+                } else {
+                    bgm.volume = 0.7;
+                }
+            }
+        }
+
+        function step(timestamp) {
+            if (!isPlaying) return;
+            if (!lastTimestamp) lastTimestamp = timestamp;
+            const delta = (timestamp - lastTimestamp) / 1000;
+            lastTimestamp = timestamp;
+
+            currentTime += delta;
+            if (currentTime >= DURATION) {
+                currentTime = DURATION;
+                updateFrame(currentTime);
+                pauseVideo();
+                return;
+            }
+
+            updateFrame(currentTime);
+            requestAnimationFrame(step);
+        }
+
+        function playVideo() {
+            isPlaying = true;
+            playBtn.textContent = '❚❚';
+            lastTimestamp = null;
+            if (audioEnabled) {
+                bgm.currentTime = currentTime;
+                bgm.play().catch(() => {});
+            }
+            requestAnimationFrame(step);
+        }
+
+        function pauseVideo() {
+            isPlaying = false;
+            playBtn.textContent = '▶';
+            bgm.pause();
+        }
+
+        playBtn.addEventListener('click', () => {
+            if (currentTime >= DURATION) currentTime = 0;
+            if (isPlaying) pauseVideo(); else playVideo();
+        });
+
+        function seekTo(time) {
+            currentTime = time;
+            updateFrame(currentTime);
+            if (isPlaying && audioEnabled) bgm.currentTime = time;
+        }
+
+        timeline.addEventListener('click', (e) => {
+            const rect = timeline.getBoundingClientRect();
+            const clickX = e.clientX - rect.left;
+            seekTo((clickX / rect.width) * DURATION);
+        });
+
+        function toggleAudio() {
+            audioEnabled = !audioEnabled;
+            const btn = document.getElementById('audio-toggle-btn');
+            if (audioEnabled) {
+                btn.textContent = '🔊 BGM';
+                btn.style.color = '#64d2ff';
+                if (isPlaying) {
+                    bgm.currentTime = currentTime;
+                    bgm.play().catch(() => {});
+                }
+            } else {
+                btn.textContent = '🔇 Mute';
+                btn.style.color = '#86868b';
+                bgm.pause();
+            }
+        }
+
+        updateFrame(0);
+    </script>
+</body>
+</html>

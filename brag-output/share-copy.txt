@@ -1,0 +1,6 @@
+Stop paying annual subscriptions for clipboard apps that upload your data to the cloud.
+
+ClipLocal gives you encrypted, lightning-fast clipboard history on your Mac with instant fuzzy search and zero cloud tracking. 100% on-device & free. 📋🔒
+
+Install with one command:
+curl -fsSL https://raw.githubusercontent.com/arunofhyd/ClipLocal/main/install-cliplocal.command | bash
