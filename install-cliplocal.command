@@ -16,17 +16,17 @@ REPO_RAW="https://raw.githubusercontent.com/arunofhyd/ClipLocal/main"
 BOLD='\033[1m'; DIM='\033[2m'; NC='\033[0m'
 BLUE='\033[38;5;39m'; GREEN='\033[38;5;35m'; YELLOW='\033[38;5;220m'; RED='\033[38;5;196m'; GREY='\033[38;5;245m'
 
-line() { printf "${DIM}────────────────────────────────────────────────────────────${NC}\n"; }
-step() { printf "${BLUE}${BOLD}▸${NC} ${BOLD}%s${NC}\n" "$1"; }
-ok()   { printf "  ${GREEN}✓${NC} %s\n" "$1"; }
-warn() { printf "  ${YELLOW}!${NC} %s\n" "$1"; }
-fail() { printf "  ${RED}✗ %s${NC}\n" "$1"; }
+line() { printf '%b\n' "${DIM}────────────────────────────────────────────────────────────${NC}"; }
+step() { printf '%b▸%b %b%s%b\n' "${BLUE}${BOLD}" "${NC}" "${BOLD}" "$1" "${NC}"; }
+ok()   { printf '  %b✓%b %s\n' "${GREEN}" "${NC}" "$1"; }
+warn() { printf '  %b!%b %s\n' "${YELLOW}" "${NC}" "$1"; }
+fail() { printf '  %b✗ %s%b\n' "${RED}" "$1" "${NC}"; }
 
 clear
 printf "\n"
-printf "${BLUE}${BOLD}   ClipLocal${NC}\n"
-printf "${GREY}   Your clipboard. Yours alone.${NC}\n"
-printf "${GREY}   Built by Arun Thomas${NC}\n\n"
+printf '%b\n' "${BLUE}${BOLD}   ClipLocal${NC}"
+printf '%b\n' "${GREY}   Your clipboard. Yours alone.${NC}"
+printf '%b\n\n' "${GREY}   Built by Arun Thomas${NC}"
 line
 printf "\n"
 
@@ -34,12 +34,12 @@ printf "\n"
 step "Checking for build tools…"
 if ! xcode-select -p >/dev/null 2>&1; then
     warn "Apple's Command Line Tools are needed to build the app."
-    printf "  ${GREY}A small official Apple installer will pop up. Please click ${BOLD}Install${NC}${GREY} and wait for it to finish.${NC}\n\n"
+    printf '%b\n\n' "  ${GREY}A small official Apple installer will pop up. Please click ${BOLD}Install${NC}${GREY} and wait for it to finish.${NC}"
     xcode-select --install >/dev/null 2>&1
-    printf "  ${YELLOW}When the installation is COMPLETE, press [Enter] here to continue…${NC}"
+    printf '%b' "  ${YELLOW}When the installation is COMPLETE, press [Enter] here to continue…${NC}"
     read -r
     while ! xcode-select -p >/dev/null 2>&1; do
-        printf "  ${GREY}Waiting for Command Line Tools installation to finish…${NC}\n"
+        printf '%b\n' "  ${GREY}Waiting for Command Line Tools installation to finish…${NC}"
         sleep 5
     done
 fi
@@ -82,15 +82,15 @@ if [ "$_NEED_BRIDGING_FIX" = true ]; then
     done
 
     if [ -n "$_XCODE_DEV" ]; then
-        printf "  ${GREY}Using Xcode toolchain at ${_XCODE_DEV}${NC}\n"
+        printf '  %bUsing Xcode toolchain at %s%b\n' "$GREY" "$_XCODE_DEV" "$NC"
         export DEVELOPER_DIR="$_XCODE_DEV"
     else
         # Strategy 2: No Xcode — surgically remove ONLY the duplicate SwiftBridging
         #             block from module.modulemap. We do NOT rename the whole file
         #             because it may contain other module definitions we must keep.
         #             bridging.modulemap already has the correct definition.
-        printf "  ${GREY}No Xcode installation found. Attempting one-time compiler repair…${NC}\n"
-        printf "  ${YELLOW}Your admin password may be required:${NC}\n"
+        printf '%b\n' "  ${GREY}No Xcode installation found. Attempting one-time compiler repair…${NC}"
+        printf '%b\n' "  ${YELLOW}Your admin password may be required:${NC}"
 
         # Build a patched copy with only the SwiftBridging block removed.
         _PATCHED="/tmp/module.modulemap.patched"
@@ -115,17 +115,17 @@ except Exception as e:
             else
                 fail "Could not auto-repair (sudo required). Please run this manually, then re-run this installer:"
                 printf "\n"
-                printf "  ${BOLD}  sudo cp '$_CLT_MODMAP' '${_CLT_MODMAP}.bak'${NC}\n"
-                printf "  ${BOLD}  sudo cp '$_PATCHED' '$_CLT_MODMAP'${NC}\n\n"
-                printf "  ${GREY}Or reinstall Command Line Tools cleanly:${NC}\n"
-                printf "  ${BOLD}  sudo rm -rf /Library/Developer/CommandLineTools${NC}\n"
-                printf "  ${BOLD}  xcode-select --install${NC}\n\n"
+                printf '  %b  sudo cp '''%s''' '''%s.bak'''%b\n' "$BOLD" "$_CLT_MODMAP" "$_CLT_MODMAP" "$NC"
+                printf '  %b  sudo cp '''%s''' '''%s'''%b\n\n' "$BOLD" "$_PATCHED" "$_CLT_MODMAP" "$NC"
+                printf '%b\n' "  ${GREY}Or reinstall Command Line Tools cleanly:${NC}"
+                printf '%b\n' "  ${BOLD}  sudo rm -rf /Library/Developer/CommandLineTools${NC}"
+                printf '%b\n\n' "  ${BOLD}  xcode-select --install${NC}"
                 exit 1
             fi
         else
             fail "Could not prepare patch. Please reinstall Command Line Tools:"
-            printf "  ${BOLD}  sudo rm -rf /Library/Developer/CommandLineTools${NC}\n"
-            printf "  ${BOLD}  xcode-select --install${NC}\n\n"
+            printf '%b\n' "  ${BOLD}  sudo rm -rf /Library/Developer/CommandLineTools${NC}"
+            printf '%b\n\n' "  ${BOLD}  xcode-select --install${NC}"
             exit 1
         fi
     fi
@@ -146,7 +146,7 @@ printf "\n"
 step "Downloading ClipLocal source…"
 if ! curl -fsSL "$REPO_RAW/main.swift?v=$(date +%s)" -o main.swift; then
     fail "Could not download the app source."
-    printf "  ${GREY}Check your internet connection and try again.${NC}\n\n"
+    printf '%b\n\n' "  ${GREY}Check your internet connection and try again.${NC}"
     exit 1
 fi
 curl -fsSL "$REPO_RAW/version.json?v=$(date +%s)" -o version.json 2>/dev/null || true
@@ -307,7 +307,7 @@ PLIST
 
 if ! xcrun swiftc -O ${SWIFT_SDK:+-sdk "$SWIFT_SDK"} -module-cache-path "$SWIFT_CACHE" -o "$APP/Contents/MacOS/$APP_NAME" main.swift -framework Cocoa 2>build_errors.txt; then
     warn "Local compilation failed (likely due to Apple Command Line Tools bug)."
-    printf "  ${GREY}Falling back to downloading pre-built release...${NC}\n"
+    printf '%b\n' "  ${GREY}Falling back to downloading pre-built release...${NC}"
     
     ZIP_URL="https://github.com/arunofhyd/ClipLocal/releases/download/v${APP_VERSION}/ClipLocal.zip"
     if ! curl -fsSL "$ZIP_URL" -o ClipLocal.zip; then
@@ -353,8 +353,8 @@ if [ "$INSTALLED" = "true" ]; then
     ok "ClipLocal installed to /Applications."
     printf "\n"
     line
-    printf "\n  ${GREEN}${BOLD}✓ ClipLocal is installed and running!${NC}\n\n"
-    printf "  ${GREY}Look for the paperclip icon in your menu bar (top-right).${NC}\n\n"
+    printf '\n%b\n\n' "  ${GREEN}${BOLD}✓ ClipLocal is installed and running!${NC}"
+    printf '%b\n\n' "  ${GREY}Look for the paperclip icon in your menu bar (top-right).${NC}"
     open "$DEST"
     exit 0
 fi
