@@ -1,7 +1,14 @@
 {
-  "version": "1.4.0",
+  "version": "1.4.1",
   "downloadURL": "https://cliplocal.vercel.app/#install",
   "changelog": [
+    {
+      "version": "1.4.1",
+      "date": "2026-11-16",
+      "changes": [
+        "Protected Pinned Clips: Clear History now strictly preserves pinned clips, preventing accidental deletion of important saved items. Pinned clips can now only be cleared directly via the Pinned pill context menu."
+      ]
+    },
     {
       "version": "1.4.0",
       "date": "2026-09-08",

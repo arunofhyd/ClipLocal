@@ -245,6 +245,9 @@ if let tiff = img.tiffRepresentation,
 ICONEOF
 
 SWIFT_SDK=$(xcrun --show-sdk-path 2>/dev/null)
+if [ -d "/Library/Developer/CommandLineTools/SDKs/MacOSX15.2.sdk" ]; then
+    SWIFT_SDK="/Library/Developer/CommandLineTools/SDKs/MacOSX15.2.sdk"
+fi
 SWIFT_CACHE="$BUILD_DIR/.swiftcache"
 mkdir -p "$SWIFT_CACHE"
 xcrun swiftc ${SWIFT_SDK:+-sdk "$SWIFT_SDK"} -module-cache-path "$SWIFT_CACHE" MakeIcon.swift -o MakeIcon > /dev/null 2>&1 && ./MakeIcon

@@ -12,7 +12,7 @@ import Security
 
 let appVersion: String = {
     if let v = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String, !v.isEmpty { return v }
-    return "1.3.22"
+    return "1.4.1"
 }()
 let updateCheckURL = "https://raw.githubusercontent.com/arunofhyd/ClipLocal/main/version.json"
 let downloadPageURL = "https://cliplocal.vercel.app/#install"
@@ -1200,6 +1200,20 @@ class ClipboardManager: ObservableObject {
         try? FileManager.default.removeItem(at: historyFile)
     }
 
+    /// Clear general clipboard history while strictly protecting pinned items.
+    /// Pinned items can only be cleared from the Pinned pill context menu.
+    func clearHistory() {
+        let unpinned = history.filter { !$0.pinned }
+        for item in unpinned {
+            LargePayloadStore.deletePayload(fileName: item.payloadFileName)
+            ItemTypeCache.shared.invalidate(for: item.id)
+            RowPresentationCache.shared.invalidate(for: item.id)
+            ImagePreviewCache.shared.invalidate(for: item.id)
+        }
+        history.removeAll { !$0.pinned }
+        persistIfNeeded()
+    }
+
     func persistIfNeeded() {
         if mode == .persistent { saveHistory() }
     }
@@ -1417,10 +1431,9 @@ struct ContentView: View {
                             Divider()
                             
                             Button(role: .destructive, action: {
-                                manager.history.removeAll()
-                                manager.saveHistory()
+                                manager.clearHistory()
                             }) {
-                                Label("Delete All Items (\(c.total))", systemImage: "trash")
+                                Label("Clear History (\(c.unpinned))", systemImage: "trash")
                             }
                         }
                         .onAppear {
@@ -2693,16 +2706,26 @@ struct FilterButton: View {
                     for item in manager.history {
                         if filterType == "pinned" {
                             if !item.pinned { kept.append(item) }
-                            else { LargePayloadStore.deletePayload(fileName: item.payloadFileName) }
+                            else {
+                                LargePayloadStore.deletePayload(fileName: item.payloadFileName)
+                                ItemTypeCache.shared.invalidate(for: item.id)
+                                RowPresentationCache.shared.invalidate(for: item.id)
+                                ImagePreviewCache.shared.invalidate(for: item.id)
+                            }
                         } else {
-                            if clipItemType(for: item) != filterType { kept.append(item) }
-                            else { LargePayloadStore.deletePayload(fileName: item.payloadFileName) }
+                            if item.pinned || clipItemType(for: item) != filterType { kept.append(item) }
+                            else {
+                                LargePayloadStore.deletePayload(fileName: item.payloadFileName)
+                                ItemTypeCache.shared.invalidate(for: item.id)
+                                RowPresentationCache.shared.invalidate(for: item.id)
+                                ImagePreviewCache.shared.invalidate(for: item.id)
+                            }
                         }
                     }
                     manager.history = kept
-                    manager.saveHistory()
+                    manager.persistIfNeeded()
                 }) {
-                    Label("Delete All \(label) (\(c.total))", systemImage: "trash")
+                    Label(filterType == "pinned" ? "Delete All Pinned (\(c.pinned))" : "Delete Unpinned \(label) (\(c.unpinned))", systemImage: "trash")
                 }
             }
             .onAppear {
@@ -2915,8 +2938,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             return i
         }
 
-        let totalCount = clipboardManager.history.count
-        let clear = NSMenuItem(title: "Clear History (\(totalCount))", action: #selector(clearHistory), keyEquivalent: "")
+        let unpinnedCount = clipboardManager.history.filter { !$0.pinned }.count
+        let clear = NSMenuItem(title: "Clear History (\(unpinnedCount))", action: #selector(clearHistory), keyEquivalent: "")
         clear.image = icon("trash")
         clear.target = self
         menu.addItem(clear)
@@ -3011,8 +3034,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
     @objc func clearHistory() {
         NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .default)
-        clipboardManager.history.removeAll()
-        clipboardManager.clearHistoryFile()
+        clipboardManager.clearHistory()
     }
     
     @objc func unpinAll() {
