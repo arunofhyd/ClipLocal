@@ -119,7 +119,7 @@
         }
 
         function copyTerminalCommand(btn) {
-            const cmd = 'brew install cliplocal';
+            const cmd = 'curl -fsSL https://raw.githubusercontent.com/arunofhyd/ClipLocal/main/install-cliplocal.command | bash';
             const label = btn.querySelector('.copy-label') || btn;
             const original = label.innerText;
 
@@ -254,12 +254,12 @@
                     <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 p-3 font-mono text-xs">
                         <div class="flex items-center space-x-2 overflow-x-auto py-1 text-ink-strongLight dark:text-ink-strongDark scrollbar-none">
                             <span class="text-brand-blue font-bold select-none">$</span>
-                            <span class="select-all">brew install cliplocal</span>
+                            <span class="select-all">curl -fsSL https://raw.githubusercontent.com/arunofhyd/ClipLocal/main/install-cliplocal.command | bash</span>
                         </div>
                         <button onclick="copyTerminalCommand(this)" 
                                 class="shrink-0 px-4 py-2 rounded bg-neutral-900 dark:bg-neutral-100 hover:bg-brand-blue dark:hover:bg-brand-blue text-white dark:text-neutral-900 dark:hover:text-white font-mono font-medium text-xs tracking-wider transition-all flex items-center justify-center space-x-1.5 border border-transparent">
                             <svg class="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>
-                            <span class="copy-label">COPY BREW</span>
+                            <span class="copy-label">COPY COMMAND</span>
                         </button>
                     </div>
                 </div>
